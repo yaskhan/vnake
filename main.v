@@ -175,11 +175,11 @@ pub fn run_v_code(v_file string) bool {
 pub fn print_banner() {
 	banner := '
 =================================================================
-                    Py2V Transpiler
+                    Vnake Transpiler
               Python to V Language Compiler
 =================================================================
 
-Usage: py2v <path> [options]
+Usage: vnake <path> [options]
 
 Arguments:
   path                  Path to Python file (.py/.pyi) or directory
@@ -197,13 +197,13 @@ Options:
   -h, --help            Show this help message
 
 Examples:
-  py2v script.py                    # Transpile a single file
-  py2v script.py --run              # Transpile and run V code
-  py2v src/ -r                      # Transpile all files in directory
-  py2v project/ --helpers-only      # Generate only helpers file
+  vnake script.py                    # Transpile a single file
+  vnake script.py --run              # Transpile and run V code
+  vnake src/ -r                      # Transpile all files in directory
+  vnake project/ --helpers-only      # Generate only helpers file
 
 Quick Start:
-  py2v your_script.py --run
+  vnake your_script.py --run
 =================================================================
 '
 	println(banner)
@@ -317,7 +317,7 @@ fn main() {
 		if target_dir.len == 0 {
 			target_dir = '.'
 		}
-		output_path := os.join_path(target_dir, 'py2v_helpers.v')
+		output_path := os.join_path(target_dir, 'vnake_helpers.v')
 		if !generate_all_helpers(output_path) {
 			exit(1)
 		}
