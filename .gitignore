@@ -1,0 +1,56 @@
+# V language gitignore
+
+# Compiled binaries
+*.exe
+*.out
+*.vbin
+
+# Compiled objects
+*.o
+*.so
+*.dll
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.*~
+
+# Build directories
+build/
+dist/
+out/
+.vpkg/
+
+# V cache
+.cache/
+v_cache/
+__v/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Log files
+*.log
+logs/
+
+# Test artifacts
+*.test
+coverage/
+.coverage
+
+# Backup files
+*.bak
+*.backup
