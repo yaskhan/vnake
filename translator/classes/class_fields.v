@@ -81,7 +81,7 @@ fn (h ClassFieldsHandler) collect_init_fields(node ast.ClassDef, mut added_field
 			mut arg_type_map := map[string]string{}
 			for arg in stmt.args.args[1..] {
 				if ann := arg.annotation {
-					arg_type_map[arg.arg] = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
+					arg_type_map[arg.arg] = env.map_annotation_fn(ann)
 				}
 			}
 			h.walk_init_body(stmt.body, self_name, mut fields, mut added_fields, struct_name, arg_type_map, mut env)
@@ -169,8 +169,8 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 				if is_dataclass && dataclass_m.len > 0 { continue }
 				
 				added_fields[field_name] = true
+				field_type := env.map_annotation_fn(stmt.annotation)
 				raw_type := env.visit_expr_fn(stmt.annotation)
-				field_type := map_python_type(raw_type, struct_name, false, mut env)
 				
 				if is_dataclass || is_typed_dict { d_field_order << field_name }
 	
