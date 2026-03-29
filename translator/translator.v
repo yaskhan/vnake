@@ -126,7 +126,7 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 					self_res
 				}
 				'dict', 'Dict' { 'map[string]Any' }
-				'set', 'Set' { '[]Any' }
+				'set', 'Set' { 'datatypes.Set[Any]' }
 				else { t.state.imported_symbols[node.id] or { node.id } }
 			}
 			if node.id == 'list' || node.id == 'OrderedCollection' {
@@ -181,9 +181,9 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 					}
 					res_type := res_parts.join(' | ')
 					if contains_none {
-						return if res_type.len > 0 { '?${res_type}' } else { 'none' }
+						return if res_type.len > 0 { t.map_annotation_str('?${res_type}', '', false, true, false) } else { 'none' }
 					}
-					return res_type
+					return t.map_annotation_str(res_type, '', false, true, false)
 				}
 				return t.map_annotation(node.slice)
 			}
@@ -213,7 +213,7 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				return 'map[string]Any'
 			}
 			if base_raw in ['Set', 'typing.Set', 'set'] {
-				return 'map[${t.map_annotation(node.slice)}]bool'
+				return 'datatypes.Set[${t.map_annotation(node.slice)}]'
 			}
 			if base_raw in ['Required', 'typing.Required'] {
 				return t.map_annotation(node.slice)
@@ -225,6 +225,9 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				return t.map_annotation(node.slice)
 			}
 			if base_raw in ['ReadOnly', 'typing.ReadOnly'] {
+				return t.map_annotation(node.slice)
+			}
+			if base_raw in ['ClassVar', 'typing.ClassVar'] {
 				return t.map_annotation(node.slice)
 			}
 			if base_raw in ['Literal', 'typing.Literal'] {
@@ -246,7 +249,7 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				r := t.map_annotation(node.right)
 				if l == '' { return if r == '' { 'none' } else { '?${r}' } }
 				if r == '' { return '?${l}' }
-				return '${l} | ${r}'
+				return t.map_annotation_str('${l} | ${r}', '', false, true, false)
 			}
 			return ''
 		}
