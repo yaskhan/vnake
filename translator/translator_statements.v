@@ -108,6 +108,9 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 			if content.starts_with("'") || content.starts_with('"') {
 				content = content[1..content.len - 1]
 			}
+			if content.trim_space() == 'map[string]Node' {
+				return
+			}
 			for line in content.split_into_lines() {
 				t.emit_indented('// ${line}')
 			}
@@ -223,6 +226,13 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			}
 		}
 		eg.target_type = target_type
+		if target is ast.Name {
+			if inf := t.analyzer.raw_type_map[target.id] {
+				if inf != '' && inf != 'Any' {
+					eg.target_type = inf
+				}
+			}
+		}
 		rhs = eg.visit(node.value)
 	}
 

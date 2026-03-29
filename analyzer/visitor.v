@@ -66,6 +66,18 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 			return t.guess_expr_type(node.operand)
 		}
 		ast.Name { return t.get_type(node.id) }
+		ast.Call {
+			if node.func is ast.Name {
+				fid := node.func.id
+				if fid.len > 0 && fid[0].is_capital() {
+					return fid
+				}
+				if fid.starts_with('new_') {
+					return fid[4..]
+				}
+			}
+			return 'Any'
+		}
 		else {}
 	}
 	return 'Any'
@@ -75,7 +87,7 @@ fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 	if name.len == 0 || typ.len == 0 {
 		return
 	}
-	if !t.has_type(name) {
+	if !t.has_type(name) || (t.raw_type_map[name] == 'map[string]Any' && typ.starts_with('map[')) || (t.raw_type_map[name] == '[]Any' && typ.starts_with('[]')) {
 		t.raw_type_map[name] = typ
 	}
 	t.type_map[name] = typ
