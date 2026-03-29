@@ -326,7 +326,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 	if cache_wrapper_needed {
 		cache_name := if is_method { '${struct_name.to_lower()}_${func_name}_cache' } else { '${func_name}_cache' }
-		env.emit_constant_fn('mut ${cache_name} := map[string]${if ret_type == "void" { "int" } else { ret_type }}{ }')
+		env.emit_constant_fn('mut ${cache_name} := map[string]${if ret_type == "void" { "int" } else { ret_type }}{}')
 		
 		mut key_parts := []string{}
 		if receiver_name.len > 0 { key_parts << '\${${receiver_name}}' }
