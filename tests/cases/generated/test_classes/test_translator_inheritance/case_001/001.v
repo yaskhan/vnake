@@ -18,7 +18,6 @@ fn (mut self Base_Impl) init(x int) {
 pub const base_impl_init_annotations = { 'x': 'int' }
 @[heap]
 struct Derived {
-pub:
     Base_Impl
 pub mut:
     y int

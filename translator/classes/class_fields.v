@@ -312,6 +312,7 @@ fn (h ClassFieldsHandler) process_namedtuple_fields(struct_name string, nt_metad
 }
 
 fn (h ClassFieldsHandler) build_visibility_blocks(fields []FieldDefInfo, mut output []string, is_typed_dict bool) {
+	mut embed_fields := []string{}
 	mut pub_fields := []string{}
 	mut pub_mut_fields := []string{}
 	mut priv_fields := []string{}
@@ -323,7 +324,7 @@ fn (h ClassFieldsHandler) build_visibility_blocks(fields []FieldDefInfo, mut out
 		if is_typed_dict {
 			if f.is_readonly { pub_fields << f.def } else { pub_mut_fields << f.def }
 		} else if is_impl {
-			pub_fields << f.def
+			embed_fields << f.def
 		} else if is_private {
 			if f.is_mutated { priv_mut_fields << f.def } else { priv_fields << f.def }
 		} else {
@@ -331,6 +332,7 @@ fn (h ClassFieldsHandler) build_visibility_blocks(fields []FieldDefInfo, mut out
 		}
 	}
 
+	if embed_fields.len > 0 { for f in embed_fields { output << f } }
 	if priv_fields.len > 0 { for f in priv_fields { output << f } }
 	if pub_fields.len > 0 { output << 'pub:'; for f in pub_fields { output << f } }
 	if pub_mut_fields.len > 0 { output << 'pub mut:'; for f in pub_mut_fields { output << f } }
