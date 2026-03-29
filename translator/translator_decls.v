@@ -68,6 +68,9 @@ fn (mut t Translator) visit_class_def(node &ast.ClassDef) {
 		fn [mut t] (s string) {
 			t.emit_constant_code(s)
 		},
+		fn [mut t] (type_str string, struct_name string, allow_union bool, register bool, is_return bool) string {
+			return t.map_annotation_str(type_str, struct_name, allow_union, register, is_return)
+		},
 		false,
 	)
 	t.classes_module.visit_class_def(node, mut env)

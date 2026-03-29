@@ -269,25 +269,84 @@ fn (eg &ExprGen) bytes_literal_to_v(content string) string {
 }
 
 pub fn (mut eg ExprGen) visit_list(node ast.List) string {
+	mut has_starred := false
+	for elt in node.elements {
+		if elt is ast.Starred {
+			has_starred = true
+			break
+		}
+	}
+	
 	mut values := []string{}
 	for elt in node.elements {
 		values << eg.visit(elt)
 	}
+	
+	if has_starred {
+		eg.state.used_list_concat = true
+		mut args := []string{}
+		for elt in node.elements {
+			val := eg.visit(elt)
+			if elt is ast.Starred {
+				// Remove '...' if it was added by visit_starred
+				if val.starts_with('...') {
+					args << val[3..]
+				} else {
+					args << val
+				}
+			} else {
+				args << '[${val}]'
+			}
+		}
+		return 'py_list_concat([${args.join(', ')}])'
+	}
+	
 	if values.len == 0 {
-		list_type := if eg.target_type.starts_with('[]') { eg.target_type } else { eg.guess_type(node) }
+		mut list_type := if eg.target_type.starts_with('[]') { eg.target_type } else { eg.guess_type(node) }
+		if eg.target_type == 'Any' { list_type = '[]Any' }
 		if list_type.starts_with('[]') {
 			return '${list_type}{}'
 		}
 		return '[]'
 	}
+	if eg.target_type == 'Any' {
+		return '[]Any{${values.join(', ')}}'
+	}
 	return '[${values.join(', ')}]'
 }
 
 pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
+	mut has_starred := false
+	for elt in node.elements {
+		if elt is ast.Starred {
+			has_starred = true
+			break
+		}
+	}
+	
 	mut values := []string{}
 	for elt in node.elements {
 		values << eg.visit(elt)
 	}
+	
+	if has_starred {
+		eg.state.used_list_concat = true
+		mut args := []string{}
+		for elt in node.elements {
+			val := eg.visit(elt)
+			if elt is ast.Starred {
+				if val.starts_with('...') {
+					args << val[3..]
+				} else {
+					args << val
+				}
+			} else {
+				args << '[${val}]'
+			}
+		}
+		return 'py_list_concat([${args.join(', ')}])'
+	}
+	
 	return '[${values.join(', ')}]'
 }
 
@@ -406,7 +465,14 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 		params << '${va.arg} []Any'
 	}
 	ret_type := eg.lambda_return_type(node.body)
-	return 'fn (${params.join(', ')}) ${ret_type} { return ${eg.visit(node.body)} }'
+	mut val := eg.visit(node.body)
+	args_str := params
+	if ret_type in ['none', 'void', 'None'] {
+		if val == "none" { val = "" }
+		body_s := if val.len > 0 { " ${val} " } else { "" }
+		return 'fn (${args_str.join(", ")}) {${body_s}}'
+	}
+	return 'fn (${args_str.join(", ")}) ${ret_type} { return ${val} }'
 }
 
 fn (mut eg ExprGen) lambda_param_type(annotation ?ast.Expression) string {
@@ -457,11 +523,15 @@ pub fn (mut eg ExprGen) visit_named_expr(node ast.NamedExpr) string {
 	value := eg.visit(node.value)
 	return '(${target} = ${value})'
 }
-fn (eg &ExprGen) map_python_type(type_str string, is_return bool) string {
+pub fn (mut eg ExprGen) map_python_type(type_str string, is_return bool) string {
+	return eg.map_type_ext(type_str, false, true, is_return)
+}
+
+pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register bool, is_return bool) string {
 	opts := base.TypeMapOptions{
 		struct_name:        eg.state.current_class
-		allow_union:        false
-		register_sum_types: false
+		allow_union:        allow_union
+		register_sum_types: register
 		is_return:          is_return
 		generic_map:        eg.state.current_class_generic_map
 	}
@@ -472,8 +542,24 @@ fn (eg &ExprGen) map_python_type(type_str string, is_return bool) string {
 		warnings:         eg.state.warnings
 		config:           eg.state.config
 	}
-	return base.map_type(type_str, opts, mut ctx, noop_sum_type_registrar, noop_literal_registrar,
-		noop_tuple_registrar)
+	mut actual_struct := if opts.struct_name.len > 0 && opts.struct_name != 'Self' { opts.struct_name } else { eg.state.current_class }
+	if actual_struct == '' { actual_struct = 'Self' }
+
+	return base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string) string {
+		if name == 'Self' || name == 'typing.Self' {
+			mut v_gens := []string{}
+			for gn in eg.state.current_class_generics {
+				v_gens << eg.state.current_class_generic_map[gn] or { gn }
+			}
+			gen_s := if v_gens.len > 0 { "[${v_gens.join(', ')}]" } else { "" }
+			return "&" + actual_struct + gen_s
+		}
+		if name.contains("|") {
+			eg.state.generated_sum_types[name] = ''
+			return name
+		}
+		return ""
+	}, noop_literal_registrar, noop_tuple_registrar)
 }
 
 fn noop_sum_type_registrar(_ string) string {

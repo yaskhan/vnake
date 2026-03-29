@@ -20,10 +20,12 @@ pub struct FunctionsOverloadHandler {}
 pub fn (h FunctionsOverloadHandler) handle_overloads(node &ast.FunctionDef, struct_name string, dec_info DecoratorInfo, mut env FunctionVisitEnv, mut m FunctionsModule) {
 	generate_overload_variants(
 		node, struct_name, struct_name.len > 0, dec_info,
-		false, mut env.state, &env.analyzer, env.visit_expr_fn,
+		false, mut env.state, env.analyzer, env.visit_expr_fn,
 		env.indent_fn, env.emit_fn, base.sanitize_name_helper, env.map_type_fn,
 		get_full_self_type_fn, get_factory_name_fn, mangle_name_fn,
-		is_exported_fn, get_source_info_fn, extract_implicit_generics_fn,
+		fn [env] (name string) bool { return env.state.is_exported(name) },
+		get_source_info_fn,
+		extract_implicit_generics_fn,
 		get_generic_map_fn, get_all_active_v_generics_fn, get_generics_with_variance_str_fn,
 		mut m,
 		mut env
@@ -60,7 +62,7 @@ pub fn new_functions_module() FunctionsModule {
 pub struct FunctionVisitEnv {
 pub mut:
 	state             &base.TranslatorState
-	analyzer          analyzer.Analyzer
+	analyzer          &analyzer.Analyzer
 	visit_stmt_fn     fn (ast.Statement) = unsafe { nil }
 	visit_expr_fn     fn (ast.Expression) string = unsafe { nil }
 	emit_fn           fn (string) = unsafe { nil }
@@ -76,7 +78,7 @@ pub mut:
 
 pub fn new_function_visit_env(
 	state &base.TranslatorState,
-	analyzer_ref analyzer.Analyzer,
+	analyzer_ref &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 	visit_expr_fn fn (ast.Expression) string,
 	emit_fn fn (string),

@@ -111,10 +111,16 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				'str', 'string' { 'string' }
 				'list', 'List' { '[]Any' }
 				'Self' {
-					gen_s := if t.state.current_class_generics.len > 0 {
-						'[${t.state.current_class_generics.join(", ")}]'
-					} else { '' }
-					'&${t.state.current_class}${gen_s}'
+					struct_name := t.state.current_class
+					mut self_res := '&${struct_name}'
+					if t.state.current_class_generics.len > 0 {
+						mut v_gens := []string{}
+						for gn in t.state.current_class_generics {
+							v_gens << t.state.current_class_generic_map[gn] or { gn }
+						}
+						self_res += '[${v_gens.join(", ")}]'
+					}
+					self_res
 				}
 				'dict', 'Dict' { 'map[string]Any' }
 				'set', 'Set' { '[]Any' }
@@ -267,25 +273,26 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		config:           t.state.config
 	}
 	mut st := t.state
-	res := base.map_type(type_str, opts, mut ctx, fn [mut st, t, actual_struct] (name string) string {
+	res := base.map_type(type_str, opts, mut ctx, fn [mut t, actual_struct] (name string) string {
 		if name == 'Self' || name == 'typing.Self' {
-			gen_s := if t.state.current_class_generics.len > 0 {
-				"[${t.state.current_class_generics.join(', ')}]"
-			} else { "" }
-			return "&${actual_struct}${gen_s}"
+			mut v_gens := []string{}
+			for gn in t.state.current_class_generics {
+				v_gens << t.state.current_class_generic_map[gn] or { gn }
+			}
+			gen_s := if v_gens.len > 0 { "[${v_gens.join(', ')}]" } else { "" }
+			return "&" + actual_struct + gen_s
 		}
-		if name == 'NoReturn' || name == 'typing.NoReturn' {
-			return 'noreturn'
-		}
-		if name in st.generated_sum_types {
+		if name.contains("|") {
+			t.state.generated_sum_types[name] = ''
 			return name
 		}
-		return '' // Fallthrough to basic mapping
+		return ""
 	}, fn (_ []string) string { return '' }, fn (_ string) string { return '' })
 	
-	if !allow_union && res.contains(' | ') {
+	if !allow_union && res.contains('|') {
 		// Convert "A | B" to "SumType_AB"
-		parts := res.split(' | ')
+		mut parts := res.split('|').map(it.trim_space())
+		parts.sort()
 		mut name_parts := []string{}
 		for p in parts { 
 			mut part_name := p.capitalize()
@@ -293,8 +300,11 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 			name_parts << part_name 
 		}
 		st_name := 'SumType_${name_parts.join("")}'
-		st.generated_sum_types[st_name] = ''
+		st.generated_sum_types[st_name] = res
 		return st_name
+	}
+	if res.len == 0 {
+		return type_str
 	}
 	return res
 }
@@ -349,6 +359,12 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	for k, v in t.analyzer.overloaded_signatures {
 		t.state.overloaded_signatures[k] = v.clone()
 	}
+	for k, _ in t.analyzer.type_vars {
+		t.state.type_vars[k] = true
+	}
+	for k, _ in t.analyzer.typed_dicts {
+		t.state.typed_dicts[k] = true
+	}
 	for k, v in t.analyzer.call_signatures {
 		if narrowed := v.narrowed_type {
 			t.state.type_guards[k] = base.TypeGuardInfo{
@@ -398,6 +414,5 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	if uses_binary {
 		t.state.output.insert(0, 'import binary')
 	}
-	t.state.output.insert(0, '// ENTRY_POINT_HIT')
 	return t.state.output.join('\n')
 }

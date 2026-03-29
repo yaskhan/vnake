@@ -161,187 +161,137 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			args_str = py_type[bracket_idx + 1..py_type.len - 1].trim_space()
 		}
 	} else {
-		base_type = py_type
+		base_type = py_type.trim_space()
 	}
 
-	// Normalize base_type by removing 'typing.' or 'typing_extensions.' prefix
-	if base_type.contains('.') {
-		base_type = base_type.all_after('.')
+	// Handle generic types
+	if base_type in ['List', 'list', 'typing.List', 'typing.Sequence', 'typing.Iterable', 'Sequence', 'Iterable'] {
+		inner_type := if args_str.len > 0 { map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar) } else { 'Any' }
+		return '[]${inner_type}'
 	}
-	// eprintln('DEBUG map_complex_type: base_type=${base_type} py_type=${py_type}')
 
-	// Parse arguments
-	mut args := []string{}
+	if base_type in ['Dict', 'dict', 'typing.Dict', 'typing.Mapping', 'Mapping'] {
+		mut key_type := 'string'
+		mut val_type := 'Any'
+		if args_str.len > 0 {
+			parts := args_str.split(',')
+			if parts.len >= 2 {
+				key_type = map_python_type_to_v(parts[0].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+				val_type = map_python_type_to_v(parts[1].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+			} else if parts.len == 1 {
+				val_type = map_python_type_to_v(parts[0].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+			}
+		}
+		if key_type == 'Any' { key_type = 'string' }
+		return 'map[${key_type}]${val_type}'
+	}
+
+	if base_type in ['Set', 'set', 'typing.Set'] {
+		inner_type := if args_str.len > 0 { map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar) } else { 'Any' }
+		return 'map[${inner_type}]bool'
+	}
+
+	if base_type in ['Tuple', 'tuple', 'typing.Tuple'] {
+		if args_str.len == 0 { return '[]Any' }
+		// Split by comma BUT keep nested brackets intact
+		parts := split_generic_args(args_str)
+		if parts.len > 0 && parts.len <= 4 {
+			mut v_parts := []string{}
+			for p in parts {
+				v_parts << map_python_type_to_v(p, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+			}
+			tuple_name := tuple_registrar(v_parts.join(', '))
+			if tuple_name.len > 0 { return tuple_name }
+		}
+		return '[]Any'
+	}
+
+	if base_type in ['Optional', 'typing.Optional'] {
+		inner_type := if args_str.len > 0 { map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar) } else { 'Any' }
+		if inner_type.starts_with('?') { return inner_type }
+		return '?${inner_type}'
+	}
+
+	if base_type in ['Union', 'typing.Union'] {
+		if args_str.len == 0 { return 'Any' }
+		parts := split_generic_args(args_str)
+		mut v_parts := []string{}
+		for p in parts {
+			v_parts << map_python_type_to_v(p, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+		}
+		
+		// Deduplicate
+		mut unique_v_parts := []string{}
+		for p in v_parts { if p !in unique_v_parts { unique_v_parts << p } }
+		
+		if 'Any' in unique_v_parts { return 'Any' }
+		
+		mut non_none := []string{}
+		for t in unique_v_parts { if t != 'none' { non_none << t } }
+		if non_none.len == 1 && unique_v_parts.len > 1 {
+			return '?${non_none[0]}'
+		}
+		
+		union_str := unique_v_parts.join(' | ')
+		if !allow_union {
+			reg_res := sum_type_registrar(union_str)
+			if reg_res.len > 0 { return reg_res }
+		}
+		return union_str
+	}
+
+	if base_type in ['Literal', 'typing.Literal'] {
+		parts := split_generic_args(args_str)
+		res := literal_registrar(parts)
+		if res.len > 0 { return res }
+		return 'Any'
+	}
+
+	if base_type in ['Callable', 'typing.Callable', 'collections.abc.Callable'] {
+		return 'fn (...Any) Any'
+	}
+
+	if base_type in ['TypeGuard', 'TypeIs', 'typing.TypeGuard', 'typing.TypeIs'] {
+		return 'bool'
+	}
+
+	if base_type in ['Final', 'ClassVar', 'Annotated', 'Required', 'NotRequired', 'ReadOnly',
+		'typing.Final', 'typing.ClassVar', 'typing.Annotated', 'typing.Required', 'typing.NotRequired', 'typing.ReadOnly'] {
+		if args_str.len > 0 {
+			parts := split_generic_args(args_str)
+			inner := map_python_type_to_v(parts[0], self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+			if base_type in ['NotRequired', 'typing.NotRequired'] && !inner.starts_with('?') {
+				return '?${inner}'
+			}
+			return inner
+		}
+		return 'Any'
+	}
+
+	// Default fallback
+	res := map_basic_type(base_type)
 	if args_str.len > 0 {
-		args = split_args(args_str)
+		mut v_args := []string{}
+		parts := split_generic_args(args_str)
+		for p in parts {
+			v_args << map_python_type_to_v(p, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+		}
+		return '${res}[${v_args.join(", ")}]'
 	}
-
-	// Map arguments
-	mut mapped_args := []string{}
-	for arg in args {
-		mapped_args << map_python_type_to_v(arg.trim_space(), self_name, allow_union,
-			generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
-	}
-
-	// Handle specific base types
-	match base_type {
-		'List', 'list', 'Sequence', 'MutableSequence', 'Iterable', 'Iterator' {
-			if mapped_args.len > 0 {
-				return '[]${mapped_args[0]}'
-			}
-			return '[]int'
-		}
-		'Set', 'set', 'FrozenSet', 'MutableSet', 'AbstractSet' {
-			if mapped_args.len > 0 {
-				return 'map[${mapped_args[0]}]bool'
-			}
-			return 'map[int]bool'
-		}
-		'Dict', 'dict', 'Mapping', 'MutableMapping' {
-			if mapped_args.len >= 2 {
-				return 'map[${mapped_args[0]}]${mapped_args[1]}'
-			} else if mapped_args.len == 1 {
-				return 'map[${mapped_args[0]}]Any'
-			}
-			return 'map[string]Any'
-		}
-		'IO', 'TextIO' {
-			if mapped_args.len >= 1 && mapped_args[0] == 'string' {
-				return '&strings.Builder'
-			}
-			return 'os.File'
-		}
-		'Tuple', 'tuple' {
-			if mapped_args.len == 2 && mapped_args[1] == '...' {
-				return '[]${mapped_args[0]}'
-			}
-			if tuple_registrar != unsafe { nil } {
-				return tuple_registrar(mapped_args.join(', '))
-			}
-			return get_tuple_struct_name(mapped_args.join(', '))
-		}
-		'Optional' {
-			if mapped_args.len > 0 {
-				return '?${mapped_args[0]}'
-			}
-			return '?int'
-		}
-		'Union' {
-			// Deduplicate
-			mut unique_args := []string{}
-			for arg in mapped_args {
-				if arg !in unique_args {
-					unique_args << arg
-				}
-			}
-
-			// If Any is present, return Any
-			if 'Any' in unique_args {
-				return 'Any'
-			}
-
-			// Check for None to map to Optional
-			mut non_none := []string{}
-			for t in unique_args {
-				if t != 'none' {
-					non_none << t
-				}
-			}
-			if non_none.len == 1 && unique_args.len > 1 {
-				return '?${non_none[0]}'
-			}
-
-			union_str := unique_args.join(' | ')
-			if sum_type_registrar != unsafe { nil } {
-				mut reg_res := ''
-				if non_none.len < unique_args.len {
-					reg_res = sum_type_registrar(non_none.join(' | '))
-					if reg_res != '' { return '?${reg_res}' }
-				} else {
-					reg_res = sum_type_registrar(union_str)
-					if reg_res != '' { return reg_res }
-				}
-			}
-
-			if allow_union {
-				return union_str
-			}
-			return 'Any'
-		}
-		'Callable', 'typing.Callable', 'callable', 'collections.abc.Callable' {
-			if args.len == 2 {
-				arg_types := if args[0].len > 0 {
-					split_args(args[0].trim_space())
-				} else {
-					[]string{}
-				}
-				ret_type := map_python_type_to_v(args[1].trim_space(), self_name, allow_union,
-					generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
-				if ret_type in ['none', 'void'] {
-					return 'fn (${arg_types.join(', ')})'
-				}
-				return 'fn (${arg_types.join(', ')}) ${ret_type}'
-			}
-			return 'fn (...Any) Any'
-		}
-		'Literal' {
-			if literal_registrar != unsafe { nil } {
-				return literal_registrar(args)
-			}
-			if args.len > 0 {
-				// Simplified: return type based on first literal
-				return 'string' // default
-			}
-			return 'string'
-		}
-		'Type', 'type', 'builtins.type' {
-			if mapped_args.len > 0 {
-				return mapped_args[0]
-			}
-			return 'Any'
-		}
-		'Final', 'ClassVar', 'Annotated', 'ReadOnly', 'ForwardRef' {
-			if mapped_args.len > 0 {
-				return mapped_args[0]
-			}
-			return 'Any'
-		}
-		'Required' {
-			if mapped_args.len > 0 {
-				return mapped_args[0]
-			}
-			return 'Any'
-		}
-		'NotRequired' {
-			if mapped_args.len > 0 {
-				return '?${mapped_args[0]}'
-			}
-			return '?Any'
-		}
-		'TypeGuard', 'TypeIs' {
-			return 'bool'
-		}
-		else {}
-	}
-
-	// Default generic mapping
-	return '${base_type}[${mapped_args.join(', ')}]'
+	return res
 }
 
-// split_args splits type arguments considering nesting
-fn split_args(args_str string) []string {
+// split_generic_args splits generic arguments correctly handling nested brackets
+fn split_generic_args(s string) []string {
 	mut result := []string{}
 	mut depth := 0
 	mut current := ''
 
-	for ch in args_str {
+	for i := 0; i < s.len; i++ {
+		ch := s[i]
 		match ch {
-			`[` {
-				depth++
-			}
-			`]` {
-				depth--
-			}
+			`[` { depth++ }
+			`]` { depth-- }
 			`,` {
 				if depth == 0 {
 					result << current.trim_space()
@@ -372,6 +322,10 @@ fn map_basic_type(name string) string {
 	if clean_name.starts_with('typing_extensions.') {
 		clean_name = clean_name[18..]
 	}
+	if clean_name.starts_with('builtins.') {
+		clean_name = clean_name[9..]
+	}
+	clean_name = clean_name.trim_space()
 
 	mapping := {
 		'int':                             'int'

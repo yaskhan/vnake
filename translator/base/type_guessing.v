@@ -98,7 +98,7 @@ fn guess_constant_type(node ast.Constant) string {
 			return 'bool'
 		}
 		if node.value == 'None' {
-			return 'Any'
+			return 'none'
 		}
 	}
 	return 'int'
@@ -184,6 +184,9 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 
 		if fid == 'py_complex' {
 			return 'PyComplex'
+		}
+		if fid == 'py_path_new' {
+			return 'PyPath'
 		}
 		if fid == 'cast' && node.args.len >= 2 {
 			return guess_type(node.args[0], ctx, true)

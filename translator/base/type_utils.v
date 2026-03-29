@@ -3,6 +3,28 @@ module base
 import ast
 import models
 
+pub const op_methods_to_symbols = {
+	'__add__':      '+'
+	'__sub__':      '-'
+	'__mul__':      '*'
+	'__truediv__':  '/'
+	'__mod__':      '%'
+	'__pow__':      '**'
+	'__matmul__':   '@'
+	'__and__':      '&'
+	'__or__':       '|'
+	'__xor__':      '^'
+	'__lshift__':   '<<'
+	'__rshift__':   '>>'
+	'__eq__':       '=='
+	'__ne__':       '!='
+	'__lt__':       '<'
+	'__ge__':       '>='
+	'__gt__':       '>'
+	'__le__':       '<='
+	'__contains__': 'in'
+}
+
 pub struct TypeUtilsContext {
 pub mut:
 	imported_symbols map[string]string

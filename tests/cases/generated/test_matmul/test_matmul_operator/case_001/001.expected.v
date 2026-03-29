@@ -1,1 +1,1 @@
-@@in# "c = a.matmul(b)"
+@@in# "C := A.matmul(B)"

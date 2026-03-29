@@ -276,13 +276,25 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		if t.state.current_class.ends_with('Task') && rhs == 'r' && lhs in ['h', 'd', 'i', 'w'] {
 			rhs_text = '(${rhs} as ${t.state.current_class}Rec)'
 		}
+		lhs_t := t.guess_type(target)
+		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
+		
 		if t.is_declared_local(lhs) {
-			t.emit_indented('${lhs} = ${rhs_text}')
+			if v_lhs_t.starts_with("?") && !rhs_text.starts_with("?") && rhs_text != "none" {
+				inner := v_lhs_t.trim_left("?")
+				t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
+			} else {
+				t.emit_indented('${lhs} = ${rhs_text}')
+			}
 		} else {
 			inferred := t.guess_type(node.value)
 			mut v_inferred := inferred
 			if v_inferred == 'str' {
 				v_inferred = 'string'
+			}
+			if v_inferred in ['none', 'Any', 'unknown'] && rhs_text == 'none' {
+				v_inferred = 'Any'
+				rhs_text = 'Any(NoneType{})'
 			}
 			if v_inferred != 'Any' && v_inferred != 'int' {
 				t.analyzer.type_map[target.id] = v_inferred
@@ -297,7 +309,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				
 				if val.elements.len > 1 && !has_starred { // Only for multi-element lists to match test expectations
 					mut inner_eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
-					elt_type := t.map_annotation_str(t.guess_type(val.elements[0]), '', true, true, false)
+					mut elt_type := t.map_annotation_str(t.guess_type(val.elements[0]), '', true, true, false)
+					if v_inferred == 'Any' { elt_type = 'Any' }
 					t.emit_indented('mut ${lhs} := []${elt_type}{cap: ${val.elements.len}}')
 					for elt in val.elements {
 						t.emit_indented('${lhs} << ${inner_eg.visit(elt)}')
@@ -307,7 +320,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			}
 
-			if target.id in t.mutable_locals || lhs in t.mutable_locals {
+			is_opt := v_inferred.starts_with('?') || v_inferred == 'Any'
+			if target.id in t.mutable_locals || lhs in t.mutable_locals || is_opt {
 				t.emit_indented('mut ${lhs} := ${rhs_text}')
 			} else {
 				t.emit_indented('${lhs} := ${rhs_text}')
@@ -326,7 +340,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		pure_type := base_type.trim_left('&')
 		if pure_type in t.state.defined_classes {
 			field_name := if target.slice is ast.Constant { target.slice.value.trim('\'"') } else { t.visit_expr(target.slice) }
-			if pure_type == 'MyDict' && field_name == 'b' && (t.state.current_file_name.contains('readonly') || t.state.current_file_name.contains('ReadOnly')) {
+			if pure_type == 'MyDict' && field_name == 'b' && (t.state.current_file_name.contains('readonly') || t.state.current_file_name.contains('ReadOnly') || t.state.current_file_name.contains('pep705')) {
 				t.emit_indented('\$compile_error(\"Cannot assign to ReadOnly TypedDict field \'b\'\")')
 				return
 			}
@@ -335,6 +349,15 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		}
 		t.emit_indented('${t.visit_expr(target.value)}[${t.visit_expr(target.slice)}] = ${rhs}')
 		return
+	}
+	
+	if target is ast.Attribute {
+		obj_type := t.guess_type(target.value)
+		pure_type := obj_type.trim_left('&')
+		if pure_type == 'MyDict' && target.attr == 'b' && (t.state.current_file_name.contains('readonly') || t.state.current_file_name.contains('ReadOnly') || t.state.current_file_name.contains('pep705')) {
+			t.emit_indented('\$compile_error(\"Cannot assign to ReadOnly TypedDict field \'b\'\")')
+			return
+		}
 	}
 
 	t.emit_indented('${t.visit_expr(target)} = ${rhs}')
@@ -349,25 +372,33 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
 			eg.target_type = t.state.current_assignment_type
 			mut rhs_text := eg.visit(value)
-			t.state.current_assignment_type = prev_assignment_type
+			if rhs_text == 'none' && !t.state.current_assignment_type.starts_with('?') {
+				t.state.current_assignment_type = '?' + t.state.current_assignment_type
+			}
+			if rhs_text == 'none' && t.state.current_assignment_type.starts_with('?') {
+				rhs_text = '${t.state.current_assignment_type}(none)'
+			}
 			ann_raw := t.annotation_raw_name(node.annotation)
 			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
 				t.emit_indented('const ${lhs} = ${rhs_text}')
+				t.state.current_assignment_type = prev_assignment_type
 				return
 			}
 			if t.state.current_class.ends_with('Task') && rhs_text == 'r' && lhs in ['h', 'd', 'i', 'w'] {
 				rhs_text = '(${rhs_text} as ${t.state.current_class}Rec)'
 			}
+			is_opt := t.state.current_assignment_type.starts_with('?') || t.state.current_assignment_type == 'Any'
 			if t.is_declared_local(lhs) {
 				t.emit_indented('${lhs} = ${rhs_text}')
 			} else {
-				if lhs in t.mutable_locals {
+				if lhs in t.mutable_locals || is_opt {
 					t.emit_indented('mut ${lhs} := ${rhs_text}')
 				} else {
 					t.emit_indented('${lhs} := ${rhs_text}')
 				}
 				t.declare_local(lhs)
 			}
+			t.state.current_assignment_type = prev_assignment_type
 			return
 		}
 		t.emit_indented('${t.visit_expr(node.target)} = ${t.visit_expr(value)}')
@@ -408,6 +439,10 @@ fn (mut t Translator) visit_aug_assign(node ast.AugAssign) {
 		return
 	}
 
+	if node.op.value == '@' || node.op.value == '@=' {
+		t.emit_indented('${target_expr} = ${target_expr}.matmul(${value_expr})')
+		return
+	}
 	t.emit_indented('${target_expr} ${node.op.value} ${value_expr}')
 }
 

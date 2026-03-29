@@ -830,6 +830,17 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 					f.mark_mutated(attr.value)
 				}
 			}
+			if node.func is ast.Name {
+				func_name := node.func.id
+				if func_name in f.func_param_mutability {
+					mutated_indices := f.func_param_mutability[func_name]
+					for idx in mutated_indices {
+						if idx < node.args.len {
+							f.mark_mutated(node.args[idx])
+						}
+					}
+				}
+			}
 			for arg in node.args {
 				f.visit_expr(arg)
 			}
@@ -1212,10 +1223,13 @@ fn (mut f FunctionMutabilityScanner) visit_pattern(node ast.Pattern) {
 	}
 }
 
-pub fn (mut f FunctionMutabilityScanner) analyze(tree ast.Module, mutability_map map[string]MutabilityInfo) map[string][]int {
+pub fn (mut f FunctionMutabilityScanner) analyze(tree ast.Module, mut mutability_map map[string]MutabilityInfo) map[string][]int {
 	f.mutability_map = mutability_map.clone()
 	for stmt in tree.body {
 		f.visit_stmt(stmt)
+	}
+	for k, v in f.mutability_map {
+		mutability_map[k] = v
 	}
 	return f.func_param_mutability
 }

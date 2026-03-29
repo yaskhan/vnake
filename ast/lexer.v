@@ -347,8 +347,12 @@ fn (mut l Lexer) scan_operator() Token {
 		}
 	}
 	l.advance_char()
+	mut res_typ := TokenType.operator
+	if ch == `@` {
+		res_typ = .at
+	}
 	return Token{
-		typ:      .operator
+		typ:      res_typ
 		value:    ch.ascii_str()
 		line:     l.line
 		column:   start_col
@@ -499,10 +503,6 @@ fn (mut l Lexer) next_token() Token {
 			`;` {
 				l.advance_char()
 				return l.make_token(.semicolon, ';')
-			}
-			`@` {
-				l.advance_char()
-				return l.make_token(.at, '@')
 			}
 			else {
 				return l.scan_operator()

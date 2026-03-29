@@ -182,6 +182,48 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 		}
 	} else {
 		env.state.defined_classes[struct_name]['has_init'] = true
+		
+		// Handle overloads for Pydantic
+		ov_key_init := '${struct_name}.__init__'
+		if ov_key_init in env.state.overloaded_signatures {
+			sigs := env.state.overloaded_signatures[ov_key_init]
+			generics := '' // TODO: handle generics for Pydantic overloads
+			
+			for sig in sigs {
+				mut type_suffix_parts := []string{}
+				mut factory_args := []string{}
+				mut call_args := []string{}
+				
+				for k, v in sig {
+					if k == 'return' || k in ['self', 'cls'] { continue }
+					mut clean_type := if v in env.state.type_vars { 'generic' } else { v }
+					clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[', '_').replace(']', '').replace('.', '_')
+					type_suffix_parts << clean_type
+					
+					arg_name := sanitize_name(k, false)
+					v_type := env.map_type_fn(v, struct_name, false, true, false)
+					factory_args << '${arg_name} ${v_type}'
+					call_args << arg_name
+				}
+				
+				mut mangled_factory := 'new_${base.to_snake_case(struct_name).to_lower()}'
+				if type_suffix_parts.len > 0 {
+					mangled_factory = '${mangled_factory}_${type_suffix_parts.join("_")}'
+				} else {
+					mangled_factory = '${mangled_factory}_noargs'
+				}
+				
+				mut f_code := []string{}
+				f_code << '${export}fn ${mangled_factory}${generics}(${factory_args.join(", ")}) !${struct_name}${generics} {'
+				f_code << '    mut self := ${struct_name}${generics}{}'
+				init_suffix := if type_suffix_parts.len > 0 { type_suffix_parts.join("_") } else { "noargs" }
+				f_code << '    self.init_${init_suffix}(${call_args.join(", ")})'
+				f_code << '    self.validate() or { return err }'
+				f_code << '    return self'
+				f_code << '}'
+				env.emit_function_fn(f_code.join('\n'))
+			}
+		}
 	}
 
 	validate_code := p.generate_validate_method(struct_name, fields, validators, config, export)

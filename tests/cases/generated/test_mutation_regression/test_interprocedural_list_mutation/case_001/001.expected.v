@@ -1,3 +1,3 @@
-@@in# "fn process(mut lst []int)"
-@@in# "fn wrapper(mut l []int)"
+@@in# "fn process(mut lst []Any)"
+@@in# "fn wrapper(mut l []Any)"
 @@in# "process(mut l)"

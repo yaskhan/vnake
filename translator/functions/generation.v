@@ -1,6 +1,7 @@
 module functions
 
 import ast
+import analyzer
 import base
 
 pub struct FunctionsGenerationHandler {}
@@ -98,6 +99,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 	mut receiver_str := ''
 	orig_name := node.name
+	is_operator := orig_name in base.op_methods_to_symbols
 	
 	// Name mangling for static/class methods
 	if is_method && is_static {
@@ -112,10 +114,12 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			if h.is_mutating_method(node, struct_name, &env) {
 				mut_pfx = 'mut '
 			}
-			gen_s := if env.state.current_class_generics.len > 0 {
-				'[${env.state.current_class_generics.join(", ")}]'
-			} else { '' }
-			receiver_name = args[0].arg
+			mut v_gens := []string{}
+			for py_name in env.state.current_class_generics {
+				v_gens << env.state.current_class_generic_map[py_name] or { py_name }
+			}
+			gen_s := if v_gens.len > 0 { '[${v_gens.join(", ")}]' } else { '' }
+			receiver_name = 'self' // ALWAYS use self in V methods
 			receiver_str = '(${mut_pfx}${receiver_name} ${struct_name}${gen_s}) '
 		}
 		args = args[1..].clone()
@@ -152,7 +156,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		args_names << name
 		mut a_type := if node.args.vararg == none && node.args.kwarg == none { 'int' } else { 'Any' }
 		if ann := arg.annotation {
-			a_type = env.map_annotation_fn(ann)
+			if is_setter {
+				a_type = env.map_type_fn(env.visit_expr_fn(ann), struct_name, false, true, false)
+			} else {
+				a_type = env.map_annotation_fn(ann)
+			}
 		} else if is_setter {
 			// In V, setters must match the getter's return type.
 			mut prop_name := node.name
@@ -166,15 +174,46 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			}
 			
 			lookup_name := if struct_name.len > 0 { '${struct_name}.${prop_name}' } else { prop_name }
-			if inferred := env.analyzer.get_type(lookup_name) {
-				if inferred != 'Any' && inferred != 'unknown' {
-					can_use_union := false
-					a_type = env.map_type_fn(inferred, struct_name, can_use_union, true, false)
+			mut final_inferred := ''
+			if inf1 := env.analyzer.get_type(lookup_name) {
+				if inf1 != 'Any' && inf1 != 'unknown' && !inf1.contains('Callable') {
+					final_inferred = inf1
 				}
 			}
+			if final_inferred == '' {
+				if inf2 := env.analyzer.get_type('${lookup_name}@return') {
+					if inf2 != 'Any' && inf2 != 'unknown' {
+						final_inferred = inf2
+					}
+				}
+			}
+			
+			if final_inferred != '' {
+				can_use_union := false
+				a_type = env.map_type_fn(final_inferred, struct_name, can_use_union, true, false)
+			}
+			if a_type.contains('fn (') {
+				a_type = 'int'
+			}
 		}
-		args_str_list << '${name} ${a_type}'
-		annotations_data[name] = a_type
+		
+		mut final_a_type := a_type
+		if (final_a_type in env.state.defined_classes || (final_a_type.len > 0 && final_a_type[0].is_capital() && final_a_type !in ['Any', 'LiteralString', 'NoneType', 'LiteralEnum_'] && !final_a_type.starts_with('SumType_') && final_a_type.len > 1)) && !final_a_type.starts_with('&') {
+			final_a_type = '&' + final_a_type
+		}
+		
+		mut mut_prefix := ''
+		p_key := if struct_name.len > 0 { '${struct_name}.${orig_name}.${arg.arg}' } else { '${orig_name}.${arg.arg}' }
+		if (env.analyzer.get_mutability(p_key) or { analyzer.MutabilityInfo{} }).is_mutated {
+			// In V, basic types like int/f64/bool can't be mut parameters normally,
+			// but we add it anyway for consistency if the analyzer says so (usually for pointer structs, arrays, maps)
+			if final_a_type != 'int' && final_a_type != 'f64' && final_a_type != 'bool' {
+				mut_prefix = 'mut '
+			}
+		}
+
+		args_str_list << '${mut_prefix}${name} ${final_a_type}'
+		annotations_data[name] = final_a_type
 	}
 
 	if vararg := node.args.vararg {
@@ -200,7 +239,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	if func_name in ['str', 'repr'] {
 		ret_type = 'string'
 	}
+	if ret_type == 'void' && func_name == 'iter' {
+		ret_type = struct_name
+	}
 	if ret_type != 'void' { annotations_data['return'] = ret_type }
+	env.state.current_function_return_type = ret_type
 
 	if ret_type == 'noreturn' {
 		// Handled via attr_pfx below
@@ -220,11 +263,19 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		ret_type = 'void'
 	}
 
+	real_func_name := base.op_methods_to_symbols[orig_name] or {
+		if cache_wrapper_needed { '${func_name}__impl' } else { func_name }
+	}
+	mut final_ret_type := ret_type
+	if is_operator && final_ret_type.len > 0 && final_ret_type[0].is_capital() && final_ret_type !in ['Any', 'LiteralString', 'bool', 'int', 'f64'] {
+		if !final_ret_type.starts_with('&') {
+			final_ret_type = '&' + final_ret_type
+		}
+	}
+
 	pub_pfx := if env.state.is_exported(node.name) { 'pub ' } else { '' }
-	ret_suffix := if ret_type != 'void' && !is_noreturn { ' ${ret_type}' } else { '' }
+	ret_suffix := if final_ret_type != 'void' && !is_noreturn { ' ${final_ret_type}' } else { '' }
 	attr_pfx := if is_noreturn { '[noreturn]\n' } else { '' }
-	
-	real_func_name := if cache_wrapper_needed { '${func_name}__impl' } else { func_name }
 	
 	mut func_generics := extract_implicit_generics(node, env.analyzer.type_vars, map[string]bool{},
 		env.state.current_class_generics, base.sanitize_name_helper)
@@ -246,7 +297,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	
 	gen_s := base.get_generics_with_variance_str(v_gens_to_declare, combined_gen_map, env.state.generic_variance, env.state.generic_defaults)
 	
-	output << '${attr_pfx}${pub_pfx}fn ${receiver_str}${real_func_name}${gen_s}(${args_str_list.join(", ")})${ret_suffix} {'
+	op_space := if is_operator { ' ' } else { '' }
+	output << '${attr_pfx}${pub_pfx}fn ${receiver_str}${real_func_name}${op_space}${gen_s}(${args_str_list.join(", ")})${ret_suffix} {'
 	for start_stmt in injected_start {
 		output << '    ${start_stmt}'
 	}

@@ -72,6 +72,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			env.emit_struct_fn,
 			env.emit_function_fn,
 			env.emit_constant_fn,
+			env.map_type_fn,
 			env.source_mapping,
 		)
 		processor := pydantic_support.new_pydantic_model_processor()
@@ -288,43 +289,103 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			env.emit_constant_fn('pub const ${meta_const_name} = &${meta_struct_name}{}')
 		}
 
-		// Generate factory function new_X for simple struct if it has __init__
+		// Generate factory function new_X for simple struct if it has __init__ or __new__
 		if struct_name_for_body == struct_name && !is_enum && !is_flag {
-			mut init_method_opt := ?ast.FunctionDef(none)
-			for m in methods {
-				if m.name == '__init__' {
-					init_method_opt = m
-					break
-				}
-			}
-			if init_method := init_method_opt {
+			ov_key_init := '${struct_name}.__init__'
+			ov_key_new := '${struct_name}.__new__'
+			
+			has_init_ov := ov_key_init in env.state.overloaded_signatures
+			has_new_ov := ov_key_new in env.state.overloaded_signatures
+			
+			if has_init_ov || has_new_ov {
+				ov_key := if has_init_ov { ov_key_init } else { ov_key_new }
+				sigs := env.state.overloaded_signatures[ov_key]
 				prefix := if env.state.is_exported(struct_name) { 'pub ' } else { '' }
-				factory_name := get_factory_name(struct_name, &env)
 				generics := get_generics_with_variance_str(&env)
-				mut factory_args := []string{}
-				mut struct_init := []string{}
-				mut call_args := []string{}
 				
-				start_idx := if init_method.args.args.len > 0 && init_method.args.args[0].arg in ['self', 'cls'] { 1 } else { 0 }
-				for i := start_idx; i < init_method.args.args.len; i++ {
-					arg := init_method.args.args[i]
-					name := sanitize_name(arg.arg, false)
-					mut a_type := 'Any'
-					if ann := arg.annotation {
-						a_type = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
+				is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
+				for sig in sigs {
+					mut type_suffix_parts := []string{}
+					mut factory_args := []string{}
+					mut call_args := []string{}
+					for k, v in sig {
+						if k == 'return' || k in ['self', 'cls'] { continue }
+						arg_name := base.sanitize_name(k, false, map[string]bool{}, "", map[string]bool{})
+						v_type := env.map_type_fn(v, struct_name, false, true, false)
+						
+						mut clean_type := v_type
+						for tv, _ in env.state.type_vars {
+							clean_type = clean_type.replace(tv, 'generic')
+						}
+						clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[', '_').replace(']', '').replace('.', '_')
+						type_suffix_parts << clean_type
+
+						factory_args << '${arg_name} ${v_type}'
+						call_args << arg_name
 					}
-					factory_args << '${name} ${a_type}'
-					struct_init << '${name}: ${name}'
-					call_args << name
+					
+					mut mangled_factory := 'new_${base.to_snake_case(struct_name).to_lower()}'
+					if type_suffix_parts.len > 0 {
+						mangled_factory = '${mangled_factory}_${type_suffix_parts.join("_")}'
+					} else {
+						mangled_factory = '${mangled_factory}_noargs'
+					}
+					
+					mut f_code := []string{}
+					factory_ret := if is_pydantic { '!${struct_name}${generics}' } else { '${struct_name}${generics}' }
+					f_code << '${prefix}fn ${mangled_factory}${generics}(${factory_args.join(", ")}) ${factory_ret} {'
+					f_code << '    mut self := ${struct_name}${generics}{}'
+					// Call the appropriate mangled init
+					init_suffix := if type_suffix_parts.len > 0 { type_suffix_parts.join("_") } else { "noargs" }
+					init_name := if has_init_ov { 'init_${init_suffix}' } else { 'new_${init_suffix}' }
+					f_code << '    self.${init_name}(${call_args.join(", ")})'
+					if is_pydantic {
+						f_code << '    self.validate() or { return err }'
+					}
+					f_code << '    return self'
+					f_code << '}'
+					env.emit_function_fn(f_code.join('\n'))
 				}
-				
-				mut f_code := []string{}
-				f_code << '${prefix}fn ${factory_name}${generics}(${factory_args.join(", ")}) &${struct_name}${generics} {'
-				f_code << '    mut self := &${struct_name}${generics}{}'
-				f_code << '    self.init(${call_args.join(", ")})'
-				f_code << '    return self'
-				f_code << '}'
-				env.emit_function_fn(f_code.join('\n'))
+			} else {
+				mut init_method_opt := ?ast.FunctionDef(none)
+				for m in methods {
+					if m.name == '__init__' {
+						init_method_opt = m
+						break
+					}
+				}
+				if init_method := init_method_opt {
+					prefix := if env.state.is_exported(struct_name) { 'pub ' } else { '' }
+					factory_name := get_factory_name(struct_name, &env)
+					generics := get_generics_with_variance_str(&env)
+					mut factory_args := []string{}
+					mut call_args := []string{}
+					
+					start_idx := if init_method.args.args.len > 0 && init_method.args.args[0].arg in ['self', 'cls'] { 1 } else { 0 }
+					for i := start_idx; i < init_method.args.args.len; i++ {
+						arg := init_method.args.args[i]
+						name := sanitize_name(arg.arg, false)
+						mut a_type := 'Any'
+						if ann := arg.annotation {
+							a_type = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
+						}
+						factory_args << '${name} ${a_type}'
+						call_args << name
+					}
+					
+					is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
+					mut f_code := []string{}
+					factory_ret := if is_pydantic { '!${struct_name}${generics}' } else { '${struct_name}${generics}' }
+					f_code << '${prefix}fn ${factory_name}${generics}(${factory_args.join(", ")}) ${factory_ret} {'
+					f_code << '    mut self := ${struct_name}${generics}{}'
+					f_code << '    self.init(${call_args.join(", ")})'
+					if is_pydantic {
+						f_code << '    self.validate() or { return err }'
+					}
+					f_code << '    return self'
+					f_code << '}'
+					env.emit_function_fn(f_code.join('\n'))
+				}
 			}
 		}
 

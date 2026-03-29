@@ -24,7 +24,10 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 		return '${subject_expr} == ${pattern.value.value.to_lower()}', bindings
 	}
 	if pattern is ast.MatchSequence {
-		array_types := ['[]int', '[]f64', '[]string', '[]bool', '[]Any']
+		mut array_types := ['[]int', '[]f64', '[]string', '[]bool', '[]Any']
+		if subject_expr.contains('any_') {
+			array_types = ['[]Any']
+		}
 		mut star_idx := -1
 		for i, p in pattern.patterns {
 			if p is ast.MatchStar {
@@ -48,32 +51,53 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 		for i, p in pattern.patterns {
 			if p is ast.MatchStar {
 				if name := p.name {
-					mut branches := []string{}
-					for t in array_types {
+					mut extract := ''
+					if array_types.len == 1 {
+						t := array_types[0]
 						num_trailing := pattern.patterns.len - 1 - i
 						end_expr := '((${subject_expr} as ${t}).len - ${num_trailing})'
 						slice_expr := if num_trailing == 0 { '[${i}..]' } else { '[${i}..${end_expr}]' }
-						branches << '${subject_expr} is ${t} { Any((${subject_expr} as ${t})${slice_expr}) }'
+						extract = 'Any((${subject_expr} as ${t})${slice_expr})'
+					} else {
+						mut branches := []string{}
+						for t in array_types {
+							num_trailing := pattern.patterns.len - 1 - i
+							end_expr := '((${subject_expr} as ${t}).len - ${num_trailing})'
+							slice_expr := if num_trailing == 0 { '[${i}..]' } else { '[${i}..${end_expr}]' }
+							branches << '${subject_expr} is ${t} { Any((${subject_expr} as ${t})${slice_expr}) }'
+						}
+						branches << 'else { Any(0) }'
+						extract = 'if ${branches.join(' else if ')}'
 					}
-					branches << 'else { Any(0) }'
-					extract := 'if ${branches.join(' else if ')}'
 					bindings << '${name} := ${extract}'
 				}
 				continue
 			}
 
-			mut sub_expr_branches := []string{}
-			for t in array_types {
+			mut sub_expr := ''
+			if array_types.len == 1 {
+				t := array_types[0]
 				idx := if star_idx != -1 && i > star_idx {
 					offset := pattern.patterns.len - i
 					'((${subject_expr} as ${t}).len - ${offset})'
 				} else {
 					'${i}'
 				}
-				sub_expr_branches << '${subject_expr} is ${t} { Any((${subject_expr} as ${t})[${idx}]) }'
+				sub_expr = 'Any((${subject_expr} as ${t})[${idx}])'
+			} else {
+				mut sub_expr_branches := []string{}
+				for t in array_types {
+					idx := if star_idx != -1 && i > star_idx {
+						offset := pattern.patterns.len - i
+						'((${subject_expr} as ${t}).len - ${offset})'
+					} else {
+						'${i}'
+					}
+					sub_expr_branches << '${subject_expr} is ${t} { Any((${subject_expr} as ${t})[${idx}]) }'
+				}
+				sub_expr_branches << 'else { Any(0) }'
+				sub_expr = 'if ${sub_expr_branches.join(' else if ')}'
 			}
-			sub_expr_branches << 'else { Any(0) }'
-			sub_expr := 'if ${sub_expr_branches.join(' else if ')}'
 
 			sub_cond, sub_binds := m.compile_pattern(p, sub_expr)
 			checks << '(${sub_cond})'

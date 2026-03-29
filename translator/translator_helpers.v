@@ -175,4 +175,7 @@ fn (mut t Translator) append_helpers() {
 	if 'py_sqlite_connect' in t.state.used_builtins {
 		t.state.output << 'struct PySqliteCursor {\n}\nfn (mut c PySqliteCursor) execute(sql string) { }\nstruct PySqliteConnection {\n}\nfn (mut c PySqliteConnection) cursor() &PySqliteCursor {\n    return &PySqliteCursor{}\n}\nfn (mut c PySqliteConnection) commit() { }\nfn (mut c PySqliteConnection) close() { }\nfn py_sqlite_connect(path string) &PySqliteConnection {\n    return &PySqliteConnection{}\n}'
 	}
+	if t.state.used_builtins['py_path_new'] || t.state.used_builtins['PyPath'] {
+		t.state.output << 'type PyPath = string\nfn py_path_new(p string) PyPath {\n    return PyPath(p)\n}\nfn (p PyPath) exists() bool {\n    return os.exists(string(p))\n}\nfn (p PyPath) is_file() bool {\n    return os.is_file(string(p))\n}\nfn (p PyPath) is_dir() bool {\n    return os.is_dir(string(p))\n}\nfn (p PyPath) joinpath(other string) PyPath {\n    return PyPath(os.join_path(string(p), other))\n}'
+	}
 }

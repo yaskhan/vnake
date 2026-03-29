@@ -48,19 +48,20 @@ pub fn generate_overload_variants(
 			args_str_list << '${sanitize_fn(arg_name, false)} ${arg_type}'
 		}
 		
-		mut func_name := sanitize_fn(node.name, false)
-		if is_method && (dec_info.is_staticmethod || dec_info.is_classmethod) {
-			func_name = '${struct_name}_${func_name}'
+		mut func_name := base.op_methods_to_symbols[node.name] or {
+			mut res := if node.name == '__init__' { 'init' } else if node.name == '__new__' { 'new' } else { sanitize_fn(node.name, false) }
+			if is_method && (dec_info.is_staticmethod || dec_info.is_classmethod) {
+				res = '${struct_name}_${res}'
+			}
+			
+			if type_suffix_parts.len > 0 {
+				res = '${res}_${type_suffix_parts.join("_")}'
+			} else {
+				res = '${res}_noargs'
+			}
+			res
 		}
 		
-		if type_suffix_parts.len > 0 {
-			func_name = '${func_name}_${type_suffix_parts.join("_")}'
-		} else {
-			func_name = '${func_name}_noargs'
-		}
-		
-		ret_type := sig['return'] or { 'void' }
-		ret_suffix := if ret_type != 'void' { ' ${ret_type}' } else { '' }
 		
 		// Extract implicit generics for this signature
 		mut func_generics := extract_implicit_generics(node, state.type_vars, map[string]bool{},
@@ -93,10 +94,20 @@ pub fn generate_overload_variants(
 			gen_s_class := if state.current_class_generics.len > 0 {
 				'[${state.current_class_generics.join(", ")}]'
 			} else { '' }
-			receiver_str = '(cls ${struct_name}${gen_s_class}) ' // simplified, usually takes node.args.args[0]
+			receiver_str = '(self ${struct_name}${gen_s_class}) ' // changed from cls to self
 		}
 
-		emit_fn('${indent_fn()}${deprecated_attr}${pub_pfx}${receiver_str}fn ${func_name}${gen_s}(${args_str_list.join(", ")})${ret_suffix} {')
+		is_operator := node.name in base.op_methods_to_symbols
+		pub_pfx_final := if is_operator { '' } else { pub_pfx }
+		mut ret_suffix := if sig['return'] != 'void' && sig['return'] != 'none' { ' ${sig["return"]}' } else { '' }
+		
+		mut receiver_parts := receiver_str.trim('() ').split(' ')
+		if receiver_parts.len == 2 && (node.name == '__init__' || node.name == '__setattr__') {
+			receiver_str = '(mut ${receiver_parts[0]} ${receiver_parts[1]}) '
+		}
+
+		spacing := if is_operator { ' ' } else { '' }
+		emit_fn('${indent_fn()}${deprecated_attr}${pub_pfx_final}fn ${receiver_str}${func_name}${gen_s}${spacing}(${args_str_list.join(", ")})${ret_suffix} {')
 		
 		// Visit implementation body
 		state.indent_level++

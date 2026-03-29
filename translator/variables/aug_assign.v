@@ -57,7 +57,7 @@ pub fn (mut m VariablesModule) visit_aug_assign(node ast.AugAssign) {
 		return
 	}
 
-	if node.op.value == '@' {
+	if node.op.value == '@' || node.op.value == '@=' {
 		m.emit('${target_expr} = ${target_expr}.matmul(${value_expr})')
 		return
 	}

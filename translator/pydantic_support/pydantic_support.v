@@ -13,6 +13,7 @@ pub mut:
 	emit_struct_fn   fn (string) = unsafe { nil }
 	emit_function_fn fn (string) = unsafe { nil }
 	emit_constant_fn fn (string) = unsafe { nil }
+	map_type_fn      fn (string, string, bool, bool, bool) string = unsafe { nil }
 	source_mapping   bool
 }
 
@@ -24,6 +25,7 @@ pub fn new_pydantic_visit_env(
 	emit_struct_fn fn (string),
 	emit_function_fn fn (string),
 	emit_constant_fn fn (string),
+	map_type_fn fn (string, string, bool, bool, bool) string,
 	source_mapping bool,
 ) PydanticVisitEnv {
 	return PydanticVisitEnv{
@@ -34,6 +36,7 @@ pub fn new_pydantic_visit_env(
 		emit_struct_fn:   emit_struct_fn
 		emit_function_fn: emit_function_fn
 		emit_constant_fn: emit_constant_fn
+		map_type_fn:      map_type_fn
 		source_mapping:   source_mapping
 	}
 }

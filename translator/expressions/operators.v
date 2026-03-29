@@ -91,6 +91,10 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 			return "py_repeat_list(${eg.visit(node.right)}, ${eg.visit(node.left)})"
 		}
 	}
+	
+	if op == '/' && (left_type == 'PyPath' || left_type == 'pathlib.Path') {
+		return '${eg.visit(node.left)}.joinpath(${eg.visit(node.right)})'
+	}
 
 	mut left := eg.visit(node.left)
 	mut right := eg.visit(node.right)

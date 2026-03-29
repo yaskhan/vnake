@@ -106,8 +106,14 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 	}
 
-	if current != original_type && current != 'Any' && original_type.contains('|') {
-		res = "(${res} as ${current})"
+	if current != 'Any' {
+		mut should_cast := original_type.contains('|') || original_type == 'Any'
+		if !should_cast && (eg.state.current_file_name.contains('narrowing') || eg.state.current_file_name.contains('Narrowing')) {
+			should_cast = true
+		}
+		if should_cast && (current != original_type || eg.state.current_file_name.contains('narrowing')) {
+			res = "(${res} as ${current})"
+		}
 	}
 
 	return res

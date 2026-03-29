@@ -24,6 +24,7 @@ pub fn new_analyzer(type_data map[string]string) &Analyzer {
 
 // analyze runs Python code analysis
 pub fn (mut a Analyzer) analyze(node ast.Module) {
+	a.overloaded_signatures.clear()
 	a.visit_module(node)
 	
 	mut ai := new_alias_inferer()
@@ -31,6 +32,10 @@ pub fn (mut a Analyzer) analyze(node ast.Module) {
 	for k, v in ai.alias_to_type {
 		a.type_map[k] = v
 	}
+	
+	mut fms := new_function_mutability_scanner()
+	fms.analyze(node, mut a.mutability_map)
+	a.func_param_mutability = fms.func_param_mutability.clone()
 }
 
 // get_type returns variable type

@@ -13,8 +13,8 @@ pub fn to_snake_case(name string) string {
 		return name
 	}
 
-	// Handle UPPER_CASE constants
-	if name.is_upper() {
+	// Handle UPPER_CASE constants and TypeVars
+	if name.len >= 1 && name.is_upper() {
 		return name
 	}
 
@@ -60,10 +60,10 @@ pub fn get_factory_name(struct_name string, hierarchy map[string][]string) strin
 	}
 
 	if is_split_base {
-		return 'new_${sanitized}_impl'
+		return 'new_${sanitized.to_lower()}_impl'
 	}
 
-	return 'new_${sanitized}'
+	return 'new_${sanitized.to_lower()}'
 }
 
 // sanitize_name sanitizes Python identifiers to comply with V

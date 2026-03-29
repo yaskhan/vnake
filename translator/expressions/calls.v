@@ -258,6 +258,25 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		return "''"
 	}
 	
+	if func_name_str in ['map', 'filter'] && args.len == 2 {
+		func := args[0]
+		iterable := args[1]
+		mut inner := func
+		// If it's a simple function name or builtin, inject (it) for V's functional methods
+		if !func.contains('fn (') && !func.contains('(') {
+			inner = '${func}(it)'
+		}
+		if func_name_str == 'map' {
+			return '${iterable}.map(${inner})'
+		} else {
+			// Special handling for filter(None, iterable)
+			if func == 'none' || func == 'None' {
+				return '${iterable}.filter(it)'
+			}
+			return '${iterable}.filter(${inner})'
+		}
+	}
+	
 	if func_name_str in ['any', 'all', 'sum'] || (module_name == 'builtins' && func_name in ['any', 'all', 'sum']) {
 		b_name := if func_name_str in ['any', 'all', 'sum'] { func_name_str } else { func_name }
 		eg.state.used_builtins['py_${b_name}'] = true
@@ -294,7 +313,75 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	}
 
 	if func_name_str in eg.state.defined_classes {
-		return 'new_${base.to_snake_case(func_name_str)}(${args.join(', ')})'
+		ov_init := '${func_name_str}.__init__'
+		ov_new := '${func_name_str}.__new__'
+		
+		has_init_ov := ov_init in eg.state.overloaded_signatures
+		has_new_ov := ov_new in eg.state.overloaded_signatures
+		
+		if has_init_ov || has_new_ov {
+			ov_key := if has_init_ov { ov_init } else { ov_new }
+			sigs := eg.state.overloaded_signatures[ov_key]
+			mut arg_types := []string{}
+			for arg_expr in node.args {
+				arg_types << eg.map_python_type(eg.guess_type(arg_expr), false)
+			}
+			
+			for sig in sigs {
+				mut sig_arg_types := []string{}
+				for k, v in sig {
+					if k !in ['return', 'self', 'cls'] {
+						sig_arg_types << eg.map_python_type(v, false)
+					}
+				}
+				
+				if sig_arg_types.len == arg_types.len {
+					mut matches := true
+					for i := 0; i < arg_types.len; i++ {
+						if !eg.types_match(arg_types[i], sig_arg_types[i]) {
+							matches = false
+							break
+						}
+					}
+					
+					if matches {
+						mut type_suffix_parts := []string{}
+						for k, v in sig {
+							if k == 'return' || k in ['self', 'cls'] { continue }
+							v_mapped := eg.map_type_ext(v, false, true, false)
+							mut clean_type := v_mapped
+							for tv, _ in eg.state.type_vars {
+								clean_type = clean_type.replace(tv, 'generic')
+							}
+							clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[', '_').replace(']', '').replace('.', '_')
+							type_suffix_parts << clean_type
+						}
+						
+						mut mangled_factory := 'new_${base.to_snake_case(func_name_str).to_lower()}'
+						if type_suffix_parts.len > 0 {
+							mangled_factory = '${mangled_factory}_${type_suffix_parts.join("_")}'
+						} else {
+							mangled_factory = '${mangled_factory}_noargs'
+						}
+						
+						final_args := eg.process_mutated_args(mangled_factory, args, call_sig)
+						return '${mangled_factory}(${final_args.join(", ")})'
+					}
+				}
+			}
+		}
+		if func_name_str in eg.state.dataclasses {
+			fields := eg.state.dataclasses[func_name_str]
+			if fields.len == args.len {
+				mut literal_parts := []string{}
+				for i, field in fields {
+					literal_parts << '${field}: ${args[i]}'
+				}
+				return '${func_name_str}{${literal_parts.join(", ")}}'
+			}
+		}
+
+		return 'new_${base.to_snake_case(func_name_str).to_lower()}(${args.join(', ')})'
 	}
 
 	if (func_name == 'acquire' || func_name_str.ends_with('.acquire')) && node.func is ast.Attribute {
@@ -569,16 +656,92 @@ pub fn (mut eg ExprGen) handle_via_mapper(node ast.Call, module_name string, fun
 }
 
 pub fn (mut eg ExprGen) handle_overloads(node ast.Call, call_sig ?analyzer.CallSignature, args []string) ?string {
-	if sig := call_sig {
-		func_name := if node.func is ast.Name { node.func.id } else if node.func is ast.Attribute { node.func.attr } else { '' }
-		if func_name.len > 0 {
-			final_args := eg.process_mutated_args(func_name, args, call_sig)
-			if sig.is_class {
-				return '${func_name}(${final_args.join(', ')})'
+	func_name := if node.func is ast.Name { node.func.id } else if node.func is ast.Attribute { node.func.attr } else { '' }
+	if func_name.len == 0 {
+		return none
+	}
+	
+	mut qual_name := func_name
+	mut obj_str := ''
+	if node.func is ast.Attribute {
+		attr := node.func
+		obj_type := eg.guess_type(attr.value)
+		v_obj_type := eg.map_python_type(obj_type, false)
+		qual_name = '${v_obj_type}.${func_name}'
+		obj_str = eg.visit(attr.value)
+	}
+	
+	if qual_name in eg.state.overloaded_signatures {
+		sigs := eg.state.overloaded_signatures[qual_name]
+		mut arg_types := []string{}
+		for arg_expr in node.args {
+			arg_types << eg.map_python_type(eg.guess_type(arg_expr), false)
+		}
+		
+		// In methods, first sig arg is often self/cls, skip it if sig was recorded WITH it
+		for sig in sigs {
+			mut matches := true
+			mut sig_arg_types := []string{}
+			// Ensure we only collect parameter types, skipping receiver
+			for k, v in sig {
+				if k !in ['return', 'self', 'cls'] {
+					sig_arg_types << eg.map_python_type(v, false)
+				}
+			}
+			
+			if sig_arg_types.len != arg_types.len {
+				matches = false
+			} else {
+				for i := 0; i < arg_types.len; i++ {
+					if !eg.types_match(arg_types[i], sig_arg_types[i]) {
+						matches = false
+						break
+					}
+				}
+			}
+			
+			if matches {
+				mut type_suffix_parts := []string{}
+				for k, v in sig {
+					if k in ['return', 'self', 'cls'] { continue }
+					mut clean_type := if v in eg.state.type_vars { 'generic' } else { v }
+					clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[', '_').replace(']', '').replace('.', '_')
+					type_suffix_parts << clean_type
+				}
+				
+				mut mangled_name := func_name
+				if type_suffix_parts.len > 0 {
+					mangled_name = '${mangled_name}_${type_suffix_parts.join("_")}'
+				} else {
+					mangled_name = '${mangled_name}_noargs'
+				}
+				
+				final_args := eg.process_mutated_args(mangled_name, args, call_sig)
+				if obj_str.len > 0 {
+					return '${obj_str}.${mangled_name}(${final_args.join(", ")})'
+				}
+				return '${mangled_name}(${final_args.join(", ")})'
 			}
 		}
 	}
+
+	if sig := call_sig {
+		if sig.is_class {
+			final_args := eg.process_mutated_args(func_name, args, call_sig)
+			return '${func_name}(${final_args.join(', ')})'
+		}
+	}
 	return none
+}
+
+fn (eg &ExprGen) types_match(t1 string, t2 string) bool {
+	if t1 == t2 || t2 == 'Any' || t1 == 'Any' { return true }
+	if t1 == 'int' && t2 == 'f64' { return true }
+	if t1.contains('|') || t2.contains('|') {
+		// Simplified sumtype match
+		return true
+	}
+	return false
 }
 
 pub fn (mut eg ExprGen) handle_fallback_call(node ast.Call, func_name_str string, args []string, keyword_args map[string]string, call_sig ?analyzer.CallSignature) string {

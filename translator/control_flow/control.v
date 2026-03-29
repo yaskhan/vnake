@@ -51,7 +51,13 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 
 	if val := node.value {
 		expr := m.visit_expr(val)
-		if expr.len > 0 {
+		if expr == "none" {
+			if m.env.state.current_function_return_type == "void" {
+				m.emit('return')
+			} else {
+				m.emit('return none')
+			}
+		} else if expr.len > 0 {
 			m.emit('return ${expr}')
 		} else {
 			m.emit('return')
