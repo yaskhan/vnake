@@ -319,8 +319,11 @@ fn (h ClassFieldsHandler) build_visibility_blocks(fields []FieldDefInfo, mut out
 
 	for f in fields {
 		is_private := f.orig_name.starts_with('_')
+		is_impl := f.def.contains('_Impl')
 		if is_typed_dict {
 			if f.is_readonly { pub_fields << f.def } else { pub_mut_fields << f.def }
+		} else if is_impl {
+			pub_fields << f.def
 		} else if is_private {
 			if f.is_mutated { priv_mut_fields << f.def } else { priv_fields << f.def }
 		} else {
