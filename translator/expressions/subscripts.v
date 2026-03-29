@@ -17,25 +17,25 @@ pub fn (mut eg ExprGen) visit_subscript(node ast.Subscript) string {
 	val_type := eg.guess_type(node.value)
 	pure_val_type := val_type.trim_left('&')
 
+	// Narrowed loop variable: for k in d: d[k] -> match k { "a" { d.a } ... }
+	mut idx_type := eg.guess_type(node.slice)
+	if idx_type.starts_with('Literal[') {
+		literals_str := idx_type[8..idx_type.len - 1]
+		parts := literals_str.split(',').map(it.trim(' "\''))
+		mut match_branches := []string{}
+		idx_str := eg.visit(node.slice)
+		for part in parts {
+			match_branches << "'${part}' { Any(${value}.${part}) }"
+		}
+		match_branches << "else { panic('unreachable typeddict access') }"
+		return 'match ${idx_str} { ${match_branches.join(' ')} }'
+	}
+
 	// TypedDict access d["a"] -> d.a
 	if pure_val_type in eg.state.dataclasses || pure_val_type in eg.state.defined_classes {
 		if node.slice is ast.Constant && (node.slice.token.typ == .string_tok || node.slice.token.typ == .fstring_tok) {
-			field := node.slice.value.trim('\'"')
+			field := node.slice.value.trim('\'\"')
 			return '${value}.${field}'
-		}
-
-		// Narrowed loop variable: for k in d: d[k] -> match k { "a" { d.a } ... }
-		mut idx_type := eg.guess_type(node.slice)
-		if idx_type.starts_with('Literal[') {
-			literals_str := idx_type[8..idx_type.len - 1]
-			parts := literals_str.split(',').map(it.trim(' "\''))
-			mut match_branches := []string{}
-			idx_str := eg.visit(node.slice)
-			for part in parts {
-				match_branches << "'${part}' { Any(${value}.${part}) }"
-			}
-			match_branches << "else { panic('unreachable typeddict access') }"
-			return 'match ${idx_str} { ${match_branches.join(' ')} }'
 		}
 	}
 
