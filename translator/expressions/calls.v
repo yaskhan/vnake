@@ -492,37 +492,37 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 				items << "'\${${arg}}'"
 			}
 		}
-		
+
 		is_stderr := keyword_args['file'] == 'sys.stderr'
 		sep := if s := keyword_args['sep'] { s } else { "' '" }
 		end := if e := keyword_args['end'] { e } else { "'\\n'" }
 
-		mut all_literals := (sep.starts_with("'") || sep.starts_with('"')) && (end.starts_with("'") || end.starts_with('"'))
-		if all_literals {
-			for arg in args { if !(arg.starts_with("'") || arg.starts_with('"')) { all_literals = false; break } }
-		}
+		sep_is_lit := sep.starts_with("'") || sep.starts_with('"')
+		end_is_lit := end.starts_with("'") || end.starts_with('"')
 
-		if !all_literals {
+		if sep_is_lit && end_is_lit {
+			mut simple_items := []string{}
+			for arg in args {
+				if arg.starts_with("'") || arg.starts_with('"') {
+					simple_items << arg.trim("'\"")
+				} else {
+					simple_items << "\${${arg}}"
+				}
+			}
+			final_sep := sep.trim("'\"")
+			final_fmt := simple_items.join(final_sep)
+			final_end := end.trim("'\"")
+			if final_end == '\\n' {
+				return if is_stderr { "eprintln('${final_fmt}')" } else { "println('${final_fmt}')" }
+			} else {
+				return if is_stderr { "eprint('${final_fmt}${final_end.replace('\\', '\\\\')}')" } else { "print('${final_fmt}${final_end.replace('\\', '\\\\')}')" }
+			}
+		} else {
 			fmt_str := "[${items.join(', ')}].join(${sep})"
 			if end == "'\\n'" {
 				return if is_stderr { "eprintln(${fmt_str})" } else { "println(${fmt_str})" }
 			}
 			return if is_stderr { "eprint(\${${fmt_str}}\${${end}})" } else { "print(\${${fmt_str}}\${${end}})" }
-		} else {
-			mut simple_items := []string{}
-			for arg in args {
-				if arg.starts_with("'") || arg.starts_with('"') { simple_items << arg.trim("'\"") } else { simple_items << "\${${arg}}" }
-			}
-			final_sep := sep.trim("'\"")
-			final_end := end.replace("\\t", "\t").trim("'\"")
-			final_fmt := simple_items.join(final_sep)
-			if final_end == '\\n' {
-				return if is_stderr { "eprintln('${final_fmt}')" } else { "println('${final_fmt}')" }
-			} else {
-				mut out_end := end.trim("'\"")
-				if out_end == '\t' || out_end == '\\t' { out_end = '\\t' }
-				return if is_stderr { "eprint('${final_fmt}\\\\t')" } else { "print('${final_fmt}\\\\t')" }
-			}
 		}
 	}
 
