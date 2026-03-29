@@ -223,8 +223,13 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 
 		mut is_base_for_others := false
 		for _, bases in env.state.class_hierarchy {
-			if node.name in bases {
-				is_base_for_others = true
+			for b in bases {
+				if b == node.name || b.starts_with('${node.name}[') {
+					is_base_for_others = true
+					break
+				}
+			}
+			if is_base_for_others {
 				break
 			}
 		}

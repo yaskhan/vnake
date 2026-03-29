@@ -178,22 +178,34 @@ pub fn (mut eg ExprGen) visit_list_comp(node ast.ListComp, target_var string) ?s
 				if call.args.len == 1 {
 					cap_str = 'cap: ${eg.visit(call.args[0])}'
 				} else if call.args.len == 2 {
-					cap_str = 'cap: ${eg.visit(call.args[1])}'
-				} else if call.args.len >= 3 {
-					// simplified: just use the difference if they are numeric constants
-					cap_str = 'cap: 5' // Fixed for the test case specifically if needed, OR:
 					if call.args[0] is ast.Constant && call.args[1] is ast.Constant {
 						start_val := (call.args[0] as ast.Constant).value.int()
 						stop_val := (call.args[1] as ast.Constant).value.int()
-						if call.args[2] is ast.Constant {
-							step_val := (call.args[2] as ast.Constant).value.int()
-							if step_val != 0 {
-								cap_str = 'cap: ${(stop_val - start_val) / step_val}'
+						cap_str = 'cap: ${stop_val - start_val}'
+					} else {
+						cap_str = 'cap: ${eg.visit(call.args[1])}'
+					}
+				} else if call.args.len >= 3 {
+					if call.args[0] is ast.Constant && call.args[1] is ast.Constant && call.args[2] is ast.Constant {
+						start_val := (call.args[0] as ast.Constant).value.int()
+						stop_val := (call.args[1] as ast.Constant).value.int()
+						step_val := (call.args[2] as ast.Constant).value.int()
+						if step_val != 0 {
+							diff := if step_val > 0 { stop_val - start_val } else { start_val - stop_val }
+							abs_step := if step_val > 0 { step_val } else { -step_val }
+							if diff > 0 {
+								cap_str = 'cap: ${(diff + abs_step - 1) / abs_step}'
+							} else {
+								cap_str = 'cap: 0'
 							}
 						}
 					}
 				}
 			}
+		} else if gen.iter is ast.List {
+			cap_str = 'cap: ${gen.iter.elements.len}'
+		} else if gen.iter is ast.Tuple {
+			cap_str = 'cap: ${gen.iter.elements.len}'
 		}
 	}
 	cap_suffix := if cap_str.len > 0 { '{${cap_str}}' } else { '{}' }

@@ -1,1 +1,1 @@
-@@in# "mut res := []int{cap: 4}"
+@@in# "mut py_comp_1 := []int{cap: 4}"

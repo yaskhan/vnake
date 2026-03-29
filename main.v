@@ -3,7 +3,7 @@ module main
 import analyzer
 import os
 import translator
-import ast
+import ast as _
 
 pub struct TranspilerConfig {
 pub mut:

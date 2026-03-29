@@ -1,1 +1,1 @@
-@@in# "result << py_comp"
+@@in# "result << py_range(5).map(it * 2)"

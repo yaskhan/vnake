@@ -40,6 +40,12 @@ pub fn (mut t Translator) visit_stmt(node ast.Statement) {
 			t.emit_indented('//##LLM@@ Unsupported statement: ${node.str()}')
 		}
 	}
+	if t.state.pending_llm_call_comments.len > 0 {
+		for comment in t.state.pending_llm_call_comments {
+			t.emit_indented(comment)
+		}
+		t.state.pending_llm_call_comments.clear()
+	}
 }
 
 fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr string, source_type string) {
@@ -196,7 +202,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		return
 	}
 
-	if target is ast.Name && (node.value is ast.ListComp || node.value is ast.DictComp || node.value is ast.SetComp) {
+	if target is ast.Name && (node.value is ast.ListComp || node.value is ast.DictComp || node.value is ast.SetComp || node.value is ast.GeneratorExp) {
 		lhs := base.sanitize_name(target.id, false, map[string]bool{}, '', map[string]bool{})
 		val := node.value
 		if val is ast.ListComp {
@@ -205,6 +211,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			rhs = eg.visit_dict_comp(val, lhs) or { '' }
 		} else if val is ast.SetComp {
 			rhs = eg.visit_set_comp(val, lhs) or { '' }
+		} else if val is ast.GeneratorExp {
+			rhs = eg.visit_generator_exp(val, lhs) or { '' }
 		}
 		if rhs == lhs { return }
 	} else {

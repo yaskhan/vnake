@@ -90,7 +90,10 @@ pub fn (mut eg ExprGen) get_call_signature(func_name_str string, loc_key string)
 	for key, sig in eg.analyzer.call_signatures {
 		if key == func_name_str || key.ends_with('.${func_name_str}') { return sig }
 	}
-	return eg.analyzer.call_signatures[func_name_str]
+	if func_name_str in eg.analyzer.call_signatures {
+		return eg.analyzer.call_signatures[func_name_str]
+	}
+	return none
 }
 
 pub fn (mut eg ExprGen) process_call_args(node ast.Call, call_sig ?analyzer.CallSignature) []string {
@@ -310,6 +313,22 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	if func_name_str == 'reversed' {
 		eg.state.used_builtins['py_reversed'] = true
 		return 'py_reversed(${args.join(', ')})'
+	}
+	
+	if func_name_str == 'input' {
+		prompt := if args.len > 0 { args[0] } else { "''" }
+		eg.state.used_builtins['os'] = true
+		return 'os.input(${prompt})'
+	}
+	
+	if func_name_str == 'enumerate' {
+		eg.state.used_builtins['py_enumerate'] = true
+		return 'py_enumerate(${args.join(', ')})'
+	}
+	
+	if func_name_str == 'zip' {
+		eg.state.used_builtins['py_zip'] = true
+		return 'py_zip(${args.join(', ')})'
 	}
 
 	if func_name_str in eg.state.defined_classes {
