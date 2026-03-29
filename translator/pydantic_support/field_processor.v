@@ -154,7 +154,7 @@ pub fn (p PydanticFieldProcessor) generate_struct_tags(info PydanticFieldInfo) s
 	return ''
 }
 
-pub fn (p PydanticFieldProcessor) generate_validation_code(info PydanticFieldInfo, struct_var string) []string {
+pub fn (p PydanticFieldProcessor) generate_validation_code(info PydanticFieldInfo, struct_var string, mut env PydanticVisitEnv) []string {
 	_ = p
 	mut code := []string{}
 	field_access := '${struct_var}.${info.name}'
@@ -202,6 +202,23 @@ pub fn (p PydanticFieldProcessor) generate_validation_code(info PydanticFieldInf
 	if info.const_value.len > 0 {
 		code << '${indent}if ${prefix} != ${info.const_value} { return error("Validation Error: ${info.name} must be ${trim_quotes(info.const_value)}") }'
 	}
+	
+	// Nested validation
+	mut clean_type := info.type_str
+	if clean_type.starts_with('?') {
+		clean_type = clean_type[1..]
+	}
+	if clean_type in env.state.defined_classes && env.state.defined_classes[clean_type]['is_pydantic'] {
+		code << '${indent}// recursive validation for nested Pydantic model'
+		code << '${indent}${prefix}.validate() or { return err }'
+	} else if clean_type.starts_with('[]') {
+		elem_type := clean_type[2..]
+		if elem_type in env.state.defined_classes && env.state.defined_classes[elem_type]['is_pydantic'] {
+			code << '${indent}// recursive validation for list of Pydantic models'
+			code << '${indent}for mut item in ${prefix} { item.validate() or { return err } }'
+		}
+	}
+	
 	if info.is_optional {
 		code << '    }'
 	}

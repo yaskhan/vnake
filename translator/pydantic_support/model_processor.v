@@ -226,7 +226,7 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 		}
 	}
 
-	validate_code := p.generate_validate_method(struct_name, fields, validators, config, export)
+	validate_code := p.generate_validate_method(struct_name, fields, validators, config, export, mut env)
 	if validate_code.len > 0 {
 		env.emit_function_fn(validate_code)
 	}
@@ -244,6 +244,7 @@ fn (p PydanticModelProcessor) generate_validate_method(
 	validators []PydanticValidatorInfo,
 	config PydanticConfigInfo,
 	export string,
+	mut env PydanticVisitEnv,
 ) string {
 	mut code := []string{}
 	mut has_validation := false
@@ -280,7 +281,7 @@ fn (p PydanticModelProcessor) generate_validate_method(
 	}
 
 	for field in fields {
-		for line in p.field_processor.generate_validation_code(field, 'm') {
+		for line in p.field_processor.generate_validation_code(field, 'm', mut env) {
 			code << line
 			has_validation = true
 		}

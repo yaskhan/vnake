@@ -72,6 +72,6 @@ pub fn (p PydanticValidatorProcessor) extract_info(node ast.FunctionDef, mut env
 
 pub fn (p PydanticValidatorProcessor) process(node ast.FunctionDef, mut env PydanticVisitEnv) string {
 	_ = p
-	_ = env
+	env.visit_stmt_fn(node)
 	return node.name
 }

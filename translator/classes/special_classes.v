@@ -6,10 +6,31 @@ pub struct SpecialClassesHandler {}
 
 pub fn (h SpecialClassesHandler) process_enum_body(node ast.ClassDef, is_flag bool, mut env ClassVisitEnv) []string {
 	_ = h
-	_ = node
 	_ = is_flag
-	_ = env
-	return []string{}
+	mut fields := []string{}
+	for item in node.body {
+		if item is ast.Assign {
+			for target in item.targets {
+				if target is ast.Name {
+					// V Enums are usually capitalized
+					name := target.id.to_upper()
+					val := env.visit_expr_fn(item.value)
+					fields << '    ${name} = ${val}'
+				}
+			}
+		} else if item is ast.AnnAssign {
+			if item.target is ast.Name {
+				name := item.target.id.to_upper()
+				if value := item.value {
+					val := env.visit_expr_fn(value)
+					fields << '    ${name} = ${val}'
+				} else {
+					fields << '    ${name}'
+				}
+			}
+		}
+	}
+	return fields
 }
 
 pub fn (h SpecialClassesHandler) generate_enum_definition(
