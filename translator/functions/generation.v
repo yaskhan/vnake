@@ -55,6 +55,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 	mut func_name := sanitize_name(node.name, false)
 	mut is_property := dec_info.is_property
+	_ = is_property
 	mut is_setter := false
 	
 	for decorator in node.decorator_list {
@@ -146,8 +147,17 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		func_name = 'str'
 	} else if orig_name == '__repr__' {
 		func_name = 'str' // fallback
+	} else if orig_name == '__len__' {
+		func_name = 'len'
+	} else if orig_name == '__getitem__' {
+		func_name = 'idx'
+	} else if orig_name == '__setitem__' {
+		func_name = 'set'
+	} else if orig_name == '__next__' {
+		func_name = 'next'
+	} else if orig_name == '__iter__' {
+		func_name = 'iter'
 	}
-
 	// Args processing
 	mut args_str_list := []string{}
 	mut args_names := []string{}
