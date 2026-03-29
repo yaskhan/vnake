@@ -65,7 +65,7 @@ fn noop_tuple_registrar(_ string) string {
 
 pub struct VariablesModule {
 pub mut:
-	state                   base.TranslatorState
+	state                   &base.TranslatorState
 	analyzer                analyzer.Analyzer
 	emitter                 VariablesEmitter
 	visit_expr_fn           fn (ast.Expression) string = noop_visit_expr
@@ -73,7 +73,7 @@ pub mut:
 	current_assignment_type string
 }
 
-pub fn new_variables_module(state base.TranslatorState, analyzer_ref analyzer.Analyzer, visit_expr_fn fn (ast.Expression) string) VariablesModule {
+pub fn new_variables_module(state &base.TranslatorState, analyzer_ref analyzer.Analyzer, visit_expr_fn fn (ast.Expression) string) VariablesModule {
 	return VariablesModule{
 		state:                   state
 		analyzer:                analyzer_ref

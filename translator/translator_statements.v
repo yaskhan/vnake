@@ -381,7 +381,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		}
 	}
 
-	t.emit_indented('${t.visit_expr(target)} = ${rhs}')
+	t.state.in_assignment_lhs = true
+	lhs_expr := t.visit_expr(target)
+	t.state.in_assignment_lhs = false
+	t.emit_indented('${lhs_expr} = ${rhs}')
 }
 
 fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
@@ -422,7 +425,10 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			t.state.current_assignment_type = prev_assignment_type
 			return
 		}
-		t.emit_indented('${t.visit_expr(node.target)} = ${t.visit_expr(value)}')
+		t.state.in_assignment_lhs = true
+		lhs_expr := t.visit_expr(node.target)
+		t.state.in_assignment_lhs = false
+		t.emit_indented('${lhs_expr} = ${t.visit_expr(value)}')
 	}
 }
 

@@ -97,16 +97,16 @@ fn (mut m ControlFlowModule) visit_with_item(item ast.WithItem) {
 			m.emit('${var_name} := ${context_expr}')
 			m.emit('defer { ${var_name}.close() }')
 		} else {
-			m.env.state.zip_counter++
 			tmp_var := 'ctx_mgr_${m.env.state.zip_counter}'
+			m.env.state.zip_counter++
 			m.emit('${tmp_var} := ${context_expr}')
 			m.emit('defer { ${tmp_var}.close() }')
 		}
 		return
 	}
 
-	m.env.state.zip_counter++
 	tmp_var := 'ctx_mgr_${m.env.state.zip_counter}'
+	m.env.state.zip_counter++
 	m.emit('${tmp_var} := ${context_expr}')
 	m.emit('defer { ${tmp_var}.exit(none, none, none) }')
 	if opt := item.optional_vars {
