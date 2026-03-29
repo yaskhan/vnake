@@ -25,12 +25,32 @@ fn test_transpilation() {
 	// Cases are in vlangtr/tests/cases
 	// Note: @FILE is the current file path
 	current_dir := os.dir(@FILE)
-	cases_dir := os.join_path(current_dir, 'cases')
+	mut cases_dir := os.join_path(current_dir, 'cases')
 	
-	if !os.exists(cases_dir) {
-		println('Cases directory not found: ${cases_dir}')
-		assert false
-		return
+	// Check for --run-one argument
+	mut run_one_folder := ''
+	for i, arg in os.args {
+		if arg == '--run-one' && i + 1 < os.args.len {
+			run_one_folder = os.args[i + 1]
+			break
+		}
+	}
+	
+	if run_one_folder != '' {
+		// Use the specified folder
+		if !os.exists(run_one_folder) {
+			println('Specified folder not found: ${run_one_folder}')
+			assert false
+			return
+		}
+		cases_dir = run_one_folder
+		println('Running tests from: ${cases_dir}')
+	} else {
+		if !os.exists(cases_dir) {
+			println('Cases directory not found: ${cases_dir}')
+			assert false
+			return
+		}
 	}
 	
 	mut files := collect_py_files(cases_dir)

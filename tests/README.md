@@ -100,6 +100,33 @@ Run only expression tests:
 v -enable-globals test vlangtr/tests/remaining_expr_tests_test.v
 ```
 
+### Running tests from a specific folder
+
+You can run tests from a specific folder using the `--run-one` argument:
+
+```bash
+v -enable-globals run  tests\transpiler_test.v --run-one <folder_path>
+```
+
+**Examples:**
+
+Run all tests from `test_contextlib_closing` folder (including all `case_001`, `case_002`, etc. subfolders):
+
+```bash
+v -enable-globals run  tests\transpiler_test.v --run-one tests/cases/generated/test_contextlib/test_contextlib_closing
+```
+
+Run all tests from `test_contextlib` folder (including all subfolders):
+
+```bash
+v -enable-globals run  tests\transpiler_test.v --run-one tests\cases\generated\test_contextlib
+```
+
+**Notes:**
+- The folder path can be absolute or relative to the current directory
+- If the specified folder does not exist, the test will fail with an error message
+- When using `--run-one`, the summary will show only tests from the specified folder
+
 ## Practice
 
 - For new transpilation cases, add a pair `*.py` + `*.expected.v` to `cases/`.
