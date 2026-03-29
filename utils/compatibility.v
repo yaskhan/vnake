@@ -157,13 +157,7 @@ fn (c CompatibilityLayer) preprocess_bracketless_except(source string) string {
 			continue
 		}
 
-		mut full_header := header.rest
-		mut j := i
-		for c.find_header_colon(full_header) == -1 && j + 1 < lines.len {
-			j++
-			full_header += '\n${lines[j]}'
-		}
-
+		full_header, j := c.collect_multiline_header(lines, i, header.rest)
 		colon_index := c.find_header_colon(full_header)
 		if colon_index == -1 {
 			result << line
@@ -213,7 +207,12 @@ fn (c CompatibilityLayer) match_except_header(line string) ExceptHeader {
 }
 
 fn (c CompatibilityLayer) find_header_colon(text string) int {
-	mut depth := 0
+	_, index := c.find_header_colon_with_depth(text, 0)
+	return index
+}
+
+fn (c CompatibilityLayer) find_header_colon_with_depth(text string, initial_depth int) (int, int) {
+	mut depth := initial_depth
 	for i, ch in text {
 		if ch == `(` || ch == `[` || ch == `{` {
 			depth++
@@ -222,10 +221,32 @@ fn (c CompatibilityLayer) find_header_colon(text string) int {
 				depth--
 			}
 		} else if ch == `:` && depth == 0 {
-			return i
+			return depth, i
 		}
 	}
-	return -1
+	return depth, -1
+}
+
+fn (c CompatibilityLayer) collect_multiline_header(lines []string, start_index int, initial_rest string) (string, int) {
+	depth, colon_index := c.find_header_colon_with_depth(initial_rest, 0)
+	if colon_index != -1 {
+		return initial_rest, start_index
+	}
+
+	mut current_depth := depth
+	mut full_header_parts := [initial_rest]
+	mut j := start_index
+	for j + 1 < lines.len {
+		j++
+		next_line := lines[j]
+		full_header_parts << '\n' + next_line
+		new_depth, next_colon_index := c.find_header_colon_with_depth('\n' + next_line, current_depth)
+		current_depth = new_depth
+		if next_colon_index != -1 {
+			break
+		}
+	}
+	return full_header_parts.join(''), j
 }
 
 fn (c CompatibilityLayer) wrap_bracketless_except_clause(clause string) string {
@@ -288,13 +309,7 @@ fn (c CompatibilityLayer) preprocess_generic_match(source string) string {
 			continue
 		}
 
-		mut full_case := case_header.rest
-		mut j := i
-		for c.find_header_colon(full_case) == -1 && j + 1 < lines.len {
-			j++
-			full_case += '\n${lines[j]}'
-		}
-
+		full_case, j := c.collect_multiline_header(lines, i, case_header.rest)
 		colon_index := c.find_header_colon(full_case)
 		if colon_index == -1 {
 			result << line
