@@ -36,7 +36,7 @@ fn (mut m StdLibMapper) init_mappings() {
 		'exp': 'math.exp'
 		'log': 'math.log'
 		'log10': 'math.log10'
-		'pow': 'math.pow'
+		'pow': 'math.pow(f64(__ARG0__), f64(__ARG1__))'
 		'ceil': 'math.ceil'
 		'floor': 'math.floor'
 		'fabs': 'math.abs'
@@ -182,7 +182,7 @@ fn (mut m StdLibMapper) init_mappings() {
 		'truediv': 'py_op_div'
 		'floordiv': 'py_op_div'
 		'mod': 'py_op_mod'
-		'pow': 'math.pow'
+		'pow': 'math.pow(f64(__ARG0__), f64(__ARG1__))'
 		'eq': 'py_op_eq'
 		'ne': 'py_op_ne'
 		'lt': 'py_op_lt'
@@ -412,10 +412,19 @@ pub fn (m &StdLibMapper) get_mapping(mod_name string, func string, args []string
 	}
 
 	handler := module_map[func]
-	if handler.contains('__ARGS__') {
-		return handler.replace('__ARGS__', args.join(', '))
+	mut res := handler
+	if res.contains('__ARG') {
+		for i, arg in args {
+			res = res.replace('__ARG${i}__', arg)
+		}
 	}
-	return '${handler}(${args.join(", ")})'
+	if res.contains('__ARGS__') {
+		return res.replace('__ARGS__', args.join(', '))
+	}
+	if res.contains('(') {
+		return res
+	}
+	return '${res}(${args.join(", ")})'
 }
 
 pub fn (m &StdLibMapper) get_constant_mapping(mod_name string, name string) ?string {
