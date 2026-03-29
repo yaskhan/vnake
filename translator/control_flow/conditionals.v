@@ -307,6 +307,7 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 				m.emit('mut ${var} := ${v_type}(none)')
 				m.declare_local(var)
 				m.env.analyzer.type_map[var] = v_type
+				m.env.analyzer.raw_type_map[var] = v_type
 			}
 		}
 		for var, _ in else_vars {
@@ -317,6 +318,7 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 				m.emit('mut ${var} := ${v_type}(none)')
 				m.declare_local(var)
 				m.env.analyzer.type_map[var] = v_type
+				m.env.analyzer.raw_type_map[var] = v_type
 			}
 		}
 	}
