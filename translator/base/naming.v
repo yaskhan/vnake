@@ -66,6 +66,44 @@ pub fn get_factory_name(struct_name string, hierarchy map[string][]string) strin
 	return 'new_${sanitized.to_lower()}'
 }
 
+pub const v_reserved_keywords = [
+	'fn',
+	'type',
+	'struct',
+	'mut',
+	'if',
+	'else',
+	'for',
+	'return',
+	'match',
+	'interface',
+	'enum',
+	'pub',
+	'import',
+	'module',
+	'const',
+	'unsafe',
+	'defer',
+	'go',
+	'chan',
+	'shared',
+	'spawn',
+	'assert',
+	'sizeof',
+	'typeof',
+	'__global',
+	'as',
+	'in',
+	'is',
+	'none',
+	'map',
+	'array',
+	'string',
+	'bool',
+	'Any',
+	'union',
+]
+
 // sanitize_name sanitizes Python identifiers to comply with V
 pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, scc_prefix string, local_vars map[string]bool) string {
 	if name.len == 0 {
@@ -113,7 +151,7 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 		res = res.replace('_', '')
 		res += '_'.repeat(prefix_count)
 
-		if res in reserved_words {
+		if res in reserved_words || res in v_reserved_keywords {
 			return 'Py${res}'
 		}
 		return res
@@ -123,7 +161,7 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 	mut sanitized := to_snake_case(clean_name)
 	sanitized += '_'.repeat(prefix_count)
 
-	if sanitized in reserved_words {
+	if sanitized in reserved_words || sanitized in v_reserved_keywords {
 		return 'py_${sanitized}'
 	}
 

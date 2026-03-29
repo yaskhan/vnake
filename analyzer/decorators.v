@@ -144,10 +144,12 @@ pub fn (p DecoratorProcessor) generate_cache_wrapper(info DecoratorInfo, func_na
 
 	key_gen := if key_parts.len == 0 {
 		"'__no_args__'"
-	} else if key_parts.len == 1 {
-		"'${key_parts[0]}'"
 	} else {
-		"'${key_parts.join('_')}'"
+		mut interp_parts := []string{}
+		for p in key_parts {
+			interp_parts << '\${${p}}'
+		}
+		"\"${interp_parts.join('_')}\""
 	}
 
 	mut call_prefix := ''
