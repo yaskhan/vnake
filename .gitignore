@@ -57,3 +57,5 @@ coverage/
 
 # Intermediate test results
 final_output_*.txt
+
+v/
