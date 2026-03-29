@@ -59,3 +59,8 @@ coverage/
 final_output_*.txt
 
 v/
+/tests/cases/generated/**/001.v
+/tests/cases/generated/**/002.v
+/tests/cases/generated/**/003.v
+/tests/cases/generated/**/004.v
+/tests/cases/generated/**/005.v
