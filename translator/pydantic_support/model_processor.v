@@ -187,7 +187,15 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 		ov_key_init := '${struct_name}.__init__'
 		if ov_key_init in env.state.overloaded_signatures {
 			sigs := env.state.overloaded_signatures[ov_key_init]
-			generics := '' // TODO: handle generics for Pydantic overloads
+			
+			mut generics := ''
+			if env.state.current_class_generics.len > 0 {
+				mut v_generics := []string{}
+				for py_gen in env.state.current_class_generics {
+					v_generics << env.state.current_class_generic_map[py_gen] or { py_gen }
+				}
+				generics = '[' + v_generics.join(', ') + ']'
+			}
 			
 			for sig in sigs {
 				mut type_suffix_parts := []string{}
