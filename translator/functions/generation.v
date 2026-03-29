@@ -156,11 +156,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		args_names << name
 		mut a_type := if node.args.vararg == none && node.args.kwarg == none { 'int' } else { 'Any' }
 		if ann := arg.annotation {
-			if is_setter {
-				a_type = env.map_type_fn(env.visit_expr_fn(ann), struct_name, false, true, false)
-			} else {
-				a_type = env.map_annotation_fn(ann)
-			}
+			a_type = env.map_annotation_fn(ann)
 		} else if is_setter {
 			// In V, setters must match the getter's return type.
 			mut prop_name := node.name
@@ -221,8 +217,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		args_names << '...${name}'
 		mut a_type := 'Any'
 		if ann := vararg.annotation {
-			can_use_union := env.state.current_class == ''
-			a_type = env.map_type_fn(env.visit_expr_fn(ann), '', can_use_union, true, false)
+			a_type = env.map_annotation_fn(ann)
 		}
 		// V varargs use the element type: ...T
 		if a_type.starts_with('[]') {
@@ -234,12 +229,12 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 	mut ret_type := 'void'
 	if ann := node.returns {
-		ret_type = env.map_type_fn(env.visit_expr_fn(ann), struct_name, !is_property, true, true)
+		ret_type = env.map_annotation_fn(ann)
 	}
 	if func_name in ['str', 'repr'] {
 		ret_type = 'string'
 	}
-	if ret_type == 'void' && func_name == 'iter' {
+	if (ret_type == 'void' || ret_type == '') && func_name == 'iter' {
 		ret_type = struct_name
 	}
 	if ret_type != 'void' { annotations_data['return'] = ret_type }
@@ -274,7 +269,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	}
 
 	pub_pfx := if env.state.is_exported(node.name) { 'pub ' } else { '' }
-	ret_suffix := if final_ret_type != 'void' && !is_noreturn { ' ${final_ret_type}' } else { '' }
+	ret_suffix := if final_ret_type != 'void' && final_ret_type != '' && !is_noreturn { ' ${final_ret_type}' } else { '' }
 	attr_pfx := if is_noreturn { '[noreturn]\n' } else { '' }
 	
 	mut func_generics := extract_implicit_generics(node, env.analyzer.type_vars, map[string]bool{},
