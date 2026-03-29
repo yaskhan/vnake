@@ -290,6 +290,9 @@ fn guess_type_dict(node ast.Dict, ctx TypeGuessingContext) string {
 
 fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) string {
 	actual_name := ctx.name_remap[node.id] or { node.id }
+	if actual_name.starts_with('(') && actual_name.contains(' as ') {
+		return actual_name.all_after(' as ').all_before(')').trim_space()
+	}
 	if actual_name in ctx.explicit_any_types || node.id in ctx.explicit_any_types {
 		return 'Any'
 	}

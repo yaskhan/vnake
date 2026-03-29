@@ -27,16 +27,7 @@ pub fn new_transpiler() Transpiler {
 pub fn (t Transpiler) transpile(source_code string) string {
 	_ = t
 	mut trans := translator.new_translator()
-	mut tr := translator.new_module_translator_with_flags(
-		mut trans.state,
-		fn [mut trans] (node ast.Statement) { trans.visit_stmt(node) },
-		false,
-		false
-	)
-	mut lexer := ast.new_lexer(source_code, '')
-	mut parser := ast.new_parser(lexer)
-	module_node := parser.parse_module()
-	return tr.visit_module(module_node)
+	return trans.translate(source_code, '')
 }
 
 pub fn generate_all_helpers(output_path string) bool {

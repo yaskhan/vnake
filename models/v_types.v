@@ -35,6 +35,10 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		return 'void'
 	}
 
+	if py_type.starts_with('[]') {
+		return py_type
+	}
+
 	// Handle leading * for TypeVarTuple
 	mut clean_type := py_type
 	if clean_type.starts_with('*') && !clean_type.starts_with('**') {
@@ -95,6 +99,34 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		'builtins.str' { return 'string' }
 		'builtins.bool' { return 'bool' }
 		else {}
+	}
+	
+	// Handle Python 3.10+ union types: int | str
+	if clean_type.contains('|') && !clean_type.contains('[') {
+		parts := clean_type.split('|').map(it.trim_space())
+		mut v_parts := []string{}
+		for p in parts {
+			v_parts << map_python_type_to_v(p, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+		}
+		
+		// Deduplicate
+		mut unique_v_parts := []string{}
+		for p in v_parts { if p !in unique_v_parts { unique_v_parts << p } }
+		
+		if 'Any' in unique_v_parts { return 'Any' }
+		
+		mut non_none := []string{}
+		for t in unique_v_parts { if t != 'none' { non_none << t } }
+		if non_none.len == 1 && unique_v_parts.len > 1 {
+			return '?${non_none[0]}'
+		}
+		
+		union_str := unique_v_parts.join(' | ')
+		if !allow_union {
+			reg_res := sum_type_registrar(union_str)
+			if reg_res.len > 0 { return reg_res }
+		}
+		return union_str
 	}
 
 	if clean_type in generic_map {

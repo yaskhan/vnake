@@ -222,14 +222,14 @@ fn (mut t TypeInferenceVisitorMixin) expr_to_type_string(node ast.Expression) st
 		ast.Starred { t.expr_to_type_string(node.value) }
 		ast.Slice {
 			mut parts := []string{}
-			if lower := node.lower {
-				parts << t.expr_to_type_string(lower)
+			if lower_expr := node.lower {
+				parts << t.expr_to_type_string(lower_expr)
 			}
-			if upper := node.upper {
-				parts << t.expr_to_type_string(upper)
+			if upper_expr := node.upper {
+				parts << t.expr_to_type_string(upper_expr)
 			}
-			if step := node.step {
-				parts << t.expr_to_type_string(step)
+			if step_expr := node.step {
+				parts << t.expr_to_type_string(step_expr)
 			}
 			parts.join(':')
 		}
@@ -856,7 +856,9 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 			t.store_type(param.arg, 'string')
 		} else {
 			arg_types << v_type
-			t.store_type(param.arg, v_type)
+			if v_type != 'Any' {
+				t.store_type(param.arg, v_type)
+			}
 		}
 	}
 	if vararg := node.args.vararg {

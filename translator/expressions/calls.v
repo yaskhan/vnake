@@ -443,6 +443,10 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		return '${args[0]} is ${v_type}'
 	}
 
+	if func_name_str == 'issubclass' && args.len >= 2 {
+		return '${args[0]} in ${args[1]}'
+	}
+
 	if func_name_str == 'list' && args.len == 0 { return '[]Any{}' }
 	if func_name_str == 'dict' && args.len == 0 { return 'map[string]Any{}' }
 
@@ -633,16 +637,7 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 
 	// String methods
 	mut current_type := obj_type
-	receiver_token_str := receiver_expr.get_token()
-	loc_key_str := '${receiver_token_str.line}:${receiver_token_str.column}'
-	if narrowed := eg.analyzer.location_map[loc_key_str] {
-		current_type = eg.map_python_type(narrowed, false)
-	} else if inferred := eg.analyzer.get_type(eg.analyzer.render_expr(receiver_expr)) {
-		if inferred != 'Any' && inferred != 'unknown' {
-			current_type = eg.map_python_type(inferred, false)
-		}
-	}
-		if current_type == 'string' || current_type == 'Any' {
+	if current_type == 'string' || current_type == 'Any' {
 		if attr == 'lower' { return '${recv}.to_lower()' }
 		if attr == 'upper' { return '${recv}.to_upper()' }
 		if attr == 'capitalize' { return '${recv}.capitalize()' }

@@ -28,14 +28,16 @@ fn (env &ClassVisitEnv) type_utils_context() base.TypeUtilsContext {
 fn map_python_type(type_str string, struct_name string, is_return bool, mut env ClassVisitEnv) string {
 	opts := base.TypeMapOptions{
 		struct_name:        struct_name
-		allow_union:        true
-		register_sum_types: false
+		allow_union:        false
+		register_sum_types: true
 		is_return:          is_return
 		generic_map:        env.state.current_class_generic_map
 	}
 	mut ctx := env.type_utils_context()
-	return base.map_type(type_str, opts, mut ctx, noop_sum_type_registrar, noop_literal_registrar,
-		noop_tuple_registrar)
+	return base.map_type(type_str, opts, mut ctx, fn [mut env] (name string) string {
+		env.state.generated_sum_types[name] = ''
+		return name
+	}, noop_literal_registrar, noop_tuple_registrar)
 }
 
 fn guess_type(node ast.Expression, env &ClassVisitEnv) string {

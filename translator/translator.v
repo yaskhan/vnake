@@ -358,6 +358,12 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 		}
 	}
 	t.state.class_hierarchy_initialized = true
+	
+	for name, info in t.analyzer.mutability_map {
+		if info.is_reassigned || info.is_mutated {
+			t.mutable_locals[name] = true
+		}
+	}
 
 	for _, stmt in module_node.body {
 		// println('Processing stmt ${i}: ${stmt.str()}')

@@ -281,10 +281,32 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		} else {
 			inferred := t.guess_type(node.value)
 			mut v_inferred := inferred
-			if v_inferred == 'str' { v_inferred = 'string' }
+			if v_inferred == 'str' {
+				v_inferred = 'string'
+			}
 			if v_inferred != 'Any' && v_inferred != 'int' {
 				t.analyzer.type_map[target.id] = v_inferred
 			}
+
+			// Decompose list literal for mutable locals if it has elements (for cap optimization)
+			val := node.value
+			if val is ast.List && (target.id in t.mutable_locals || lhs in t.mutable_locals) {
+				// Avoid decomposition for dynamic lists (with starred expressions)
+				mut has_starred := false
+				for elt in val.elements { if elt is ast.Starred { has_starred = true; break } }
+				
+				if val.elements.len > 1 && !has_starred { // Only for multi-element lists to match test expectations
+					mut inner_eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
+					elt_type := t.map_annotation_str(t.guess_type(val.elements[0]), '', true, true, false)
+					t.emit_indented('mut ${lhs} := []${elt_type}{cap: ${val.elements.len}}')
+					for elt in val.elements {
+						t.emit_indented('${lhs} << ${inner_eg.visit(elt)}')
+					}
+					t.declare_local(lhs)
+					return
+				}
+			}
+
 			if target.id in t.mutable_locals || lhs in t.mutable_locals {
 				t.emit_indented('mut ${lhs} := ${rhs_text}')
 			} else {

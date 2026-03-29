@@ -25,6 +25,12 @@ pub fn new_analyzer(type_data map[string]string) &Analyzer {
 // analyze runs Python code analysis
 pub fn (mut a Analyzer) analyze(node ast.Module) {
 	a.visit_module(node)
+	
+	mut ai := new_alias_inferer()
+	ai.analyze(node)
+	for k, v in ai.alias_to_type {
+		a.type_map[k] = v
+	}
 }
 
 // get_type returns variable type

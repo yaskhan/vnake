@@ -148,6 +148,23 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 		}
 	}
 
+	if !opts.allow_union && v_type.contains(' | ') {
+		// Convert "A | B" to "SumType_AB", with sorted parts for determinism
+		mut parts := v_type.split(' | ')
+		parts.sort()
+		mut name_parts := []string{}
+		for p in parts {
+			mut part_name := p.capitalize()
+			if part_name == 'Str' {
+				part_name = 'String'
+			}
+			name_parts << part_name
+		}
+		st_name := 'SumType_${name_parts.join('')}'
+		registrar(st_name)
+		return st_name
+	}
+
 	return v_type
 }
 

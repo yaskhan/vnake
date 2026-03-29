@@ -460,7 +460,7 @@ pub fn (mut eg ExprGen) visit_named_expr(node ast.NamedExpr) string {
 fn (eg &ExprGen) map_python_type(type_str string, is_return bool) string {
 	opts := base.TypeMapOptions{
 		struct_name:        eg.state.current_class
-		allow_union:        true
+		allow_union:        false
 		register_sum_types: false
 		is_return:          is_return
 		generic_map:        eg.state.current_class_generic_map

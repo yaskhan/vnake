@@ -150,7 +150,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	for arg in args {
 		name := sanitize_name(arg.arg, false)
 		args_names << name
-		mut a_type := 'Any'
+		mut a_type := if node.args.vararg == none && node.args.kwarg == none { 'int' } else { 'Any' }
 		if ann := arg.annotation {
 			a_type = env.map_annotation_fn(ann)
 		} else if is_setter {

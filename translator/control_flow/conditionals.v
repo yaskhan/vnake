@@ -88,7 +88,7 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 		func_expr := node.func
 		if func_expr is ast.Name {
 			name_id := func_expr.id
-			if name_id == 'isinstance' && positive && node.args.len == 2 {
+			if name_id == 'isinstance' && node.args.len == 2 {
 				arg0 := node.args[0]
 					mut var_name := ''
 					if arg0 is ast.Name {
@@ -134,27 +134,9 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 					arg0_node := node.args[0]
 					if arg0_node is ast.Name {
 						id := arg0_node.id
-						if positive {
-							mut n_type := guard_info.narrowed_type
-							if n_type == 'str' { n_type = 'string' }
-							res[id] = n_type
-						} else if guard_info.is_type_is {
-							// For TypeIs, the negative branch is also narrowed.
-							if orig_type := m.env.analyzer.get_type(id) {
-								if orig_type.contains('|') {
-									parts := orig_type.split('|').map(it.trim_space())
-									mut others := []string{}
-									for p in parts {
-										if p != guard_info.narrowed_type {
-											others << p
-										}
-									}
-									if others.len > 0 {
-										res[id] = others.join(' | ')
-									}
-								}
-							}
-						}
+						mut n_type := guard_info.narrowed_type
+						if n_type == 'str' { n_type = 'string' }
+						res[id] = n_type
 					}
 				}
 			}
@@ -205,7 +187,8 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 	mut original_remaps := map[string]string{}
 	narrowing := m.collect_narrowing(test, positive)
 
-	for var_name, narrowed_type in narrowing {
+	for var_name, n_type in narrowing {
+		mut narrowed_type := n_type
 		if narrowed_type == 'none' {
 			continue
 		}
@@ -217,7 +200,7 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		if test is ast.Compare {
 			if base_type.starts_with('?') && narrowed_type == base_type[1..] {
 				is_auto = true
-			} else if (base_type.starts_with('SumType_') || base_type.contains('|')) && !narrowed_type.contains('|') {
+			} else if (base_type.starts_with('SumType_') || base_type.contains('|')) && !narrowed_type.contains('|') && !var_name.contains('.') {
 				is_auto = true
 			}
 		}
@@ -225,16 +208,56 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		if is_auto {
 			continue
 		}
+
+		if !positive {
+			// Basic negative narrowing for binary unions (e.g. int | string)
+			if base_type.contains(' | ') && !base_type.contains(' |  | ') { // Exactly two types
+				parts := base_type.split(' | ')
+				if parts.len == 2 {
+					mut remaining_type := ''
+					if parts[0] == narrowed_type {
+						remaining_type = parts[1]
+					} else if parts[1] == narrowed_type {
+						remaining_type = parts[0]
+					}
+					
+					if remaining_type != '' {
+						eprintln('DEBUG NEGATIVE NARROWING: base=${base_type} test=${narrowed_type} narrowed=${remaining_type}')
+						narrowed_type = remaining_type
+						// Fall through to remapping logic below
+					} else {
+						continue
+					}
+				} else {
+					continue
+				}
+			} else {
+				continue
+			}
+		}
 		
 		if narrowed_type !in ['Any', 'void', 'none'] {
 			// Tests expect hybrid approach:
 			// 1. If it's a manual check (node is ast.Compare), use in-place cast.
 			// 2. If it's a function call (TypeGuard), use explicit narrowed variable.
-			is_call_narrowing := test is ast.Call || (test is ast.UnaryOp && (test as ast.UnaryOp).operand is ast.Call)
+			is_isinstance := if test is ast.Call {
+				func := test.func
+				func is ast.Name && func.id == 'isinstance'
+			} else {
+				false
+			}
+			is_call_narrowing := if test is ast.Call {
+				true
+			} else if test is ast.UnaryOp {
+				test.operand is ast.Call
+			} else {
+				false
+			} && !is_isinstance
 			
 			if is_call_narrowing && !var_name.contains('.') {
 				narrowed_name := 'narrowed${branch_suffix}_${sanitized}'.replace('.', '_').replace('__', '_')
 				m.emit('${narrowed_name} := (${sanitized} as ${narrowed_type})')
+				m.env.analyzer.type_map[narrowed_name] = narrowed_type
 				if var_name in m.env.state.name_remap {
 					original_remaps[var_name] = m.env.state.name_remap[var_name]
 				} else {

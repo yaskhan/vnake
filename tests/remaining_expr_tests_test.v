@@ -3,6 +3,7 @@ module tests
 import analyzer
 import ast
 import models
+import translator.base
 import translator.expressions as exprs
 
 fn translate_expr(source string, type_map map[string]string) string {
@@ -14,8 +15,9 @@ fn translate_expr(source string, type_map map[string]string) string {
 	}
 
 	mut an := analyzer.new_analyzer(type_map)
+	mut tr_state := base.new_translator_state()
 	mut model := models.VType.unknown
-	mut eg := exprs.new_expr_gen(&model, &an)
+	mut eg := exprs.new_expr_gen(&model, an, tr_state)
 	first_stmt := module_node.body[0]
 	return match first_stmt {
 		ast.Expr { eg.visit(first_stmt.value) }
@@ -30,16 +32,16 @@ fn test_assert_translation() {
 }
 
 fn test_floor_div_translation() {
-	assert translate_expr('-7 // 2', map[string]string{}) == 'int(math.floor(f64(-7) / f64(2)))'
-	assert translate_expr('7 // -2', map[string]string{}) == 'int(math.floor(f64(7) / f64(-2)))'
+	assert translate_expr('-7 // 2', map[string]string{}) == 'i64(math.floor(f64(-7) / f64(2)))'
+	assert translate_expr('7 // -2', map[string]string{}) == 'i64(math.floor(f64(7) / f64(-2)))'
 	assert translate_expr('7.0 // 2', map[string]string{}) == 'math.floor(7.0 / 2)'
 	assert translate_expr('7 // 2.0', map[string]string{}) == 'math.floor(7 / 2.0)'
 }
 
 fn test_pow_translation() {
-	assert translate_expr('2 ** -1', map[string]string{}) == 'int(math.powi(f64(2), -1))'
-	assert translate_expr('2 ** -2', map[string]string{}) == 'int(math.powi(f64(2), -2))'
-	assert translate_expr('2.0 ** -1', map[string]string{}) == 'math.pow(f64(2.0), f64(-1))'
+	assert translate_expr('2 ** -1', map[string]string{}) == 'math.pow(f64(2), f64(-1))'
+	assert translate_expr('2 ** -2', map[string]string{}) == 'math.pow(f64(2), f64(-2))'
+	assert translate_expr('2.0 ** -1', map[string]string{}) == 'math.pow(2.0, f64(-1))'
 	assert translate_expr('2 ** 2', map[string]string{}) == 'int(math.powi(f64(2), 2))'
 }
 
