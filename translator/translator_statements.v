@@ -130,7 +130,7 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 							for arg in val.args {
 								arg_strs << t.visit_expr(arg)
 							}
-							t.emit_indented('self.${parent_name}_Impl = new_${base.to_snake_case(parent_name)}_impl(${arg_strs.join(', ')})')
+							t.emit_indented('self.${parent_name}_Impl = *new_${base.to_snake_case(parent_name)}_impl(${arg_strs.join(', ')})')
 							return
 						}
 					}

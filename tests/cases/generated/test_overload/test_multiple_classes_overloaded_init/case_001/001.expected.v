@@ -1,5 +1,5 @@
-@@in# "fn new_a_int(x int) A {"
-@@in# "fn new_b_string(y string) B {"
+@@in# "fn new_a_int(x int) &A {"
+@@in# "fn new_b_string(y string) &B {"
 @@in# "a := new_a_int(1)"
 @@in# "b := new_b_string('s')"
 @@notin# "fn new_a_string"

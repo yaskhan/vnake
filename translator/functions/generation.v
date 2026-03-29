@@ -354,6 +354,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		for k, v in annotations_data {
 			anno_parts << "'${k}': '${v}'"
 		}
+		_ = struct_name
 		const_name := base.to_snake_case('${struct_name}_${func_name}_annotations')
 		env.emit_constant_fn('pub const ${const_name} = { ${anno_parts.join(", ")} }')
 	}
