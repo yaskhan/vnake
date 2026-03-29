@@ -787,12 +787,44 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	// Check for receiver narrowing
 	receiver_token := receiver_expr.get_token()
 	loc_key := '${receiver_token.line}:${receiver_token.column}'
-	if narrowed := eg.analyzer.location_map[loc_key] {
-		v_narrowed := eg.map_python_type(narrowed, false)
-		v_obj_base := eg.map_python_type(obj_type_raw, false)
-		if v_narrowed != v_obj_base && v_narrowed != 'Any' {
+	
+	mut original_type_raw := obj_type_raw
+	if receiver_expr is ast.Attribute {
+		obj_base_type := eg.guess_type(receiver_expr.value).all_before('[')
+		field_key := '${obj_base_type}.${receiver_expr.attr}'
+		if base_field := eg.analyzer.get_type(field_key) {
+			if base_field != 'Any' && base_field != 'unknown' {
+				original_type_raw = base_field
+			}
+		}
+	}
+	
+	mut actual_narrowed := eg.analyzer.location_map[loc_key] or { '' }
+	if actual_narrowed == '' && obj_type_raw != 'Any' && obj_type_raw != original_type_raw {
+		actual_narrowed = obj_type_raw
+	}
+
+	if actual_narrowed.len > 0 {
+		v_narrowed := eg.map_python_type(actual_narrowed, false)
+		v_original_base := eg.map_python_type(original_type_raw, false)
+
+		if v_narrowed != 'Any' && (v_narrowed != v_original_base || v_original_base.starts_with('SumType_')) {
 			obj = "(${obj} as ${v_narrowed})"
-			obj_type_raw = narrowed
+			obj_type_raw = actual_narrowed
+		}
+	} else if original_type_raw.starts_with('SumType_') || original_type_raw.contains('|') {
+		// Automatic narrowing for common methods if not explicitly narrowed
+		mut inferred := ''
+		if attr in ['lower', 'upper', 'capitalize', 'title', 'strip', 'split', 'join', 'isdigit', 'isalpha', 'isalnum', 'replace', 'startswith', 'endswith'] {
+			inferred = 'string'
+		} else if attr in ['append', 'extend', 'pop', 'remove', 'sort', 'reverse'] {
+			inferred = '[]Any'
+		}
+		
+		if inferred.len > 0 {
+			v_inferred := eg.map_python_type(inferred, false)
+			obj = "(${obj} as ${v_inferred})"
+			obj_type_raw = inferred
 		}
 	}
 	obj_type := eg.map_python_type(obj_type_raw, false)
