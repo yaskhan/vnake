@@ -581,7 +581,7 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 			if node.args[0] is ast.Name {
 				id := (node.args[0] as ast.Name).id
 				if id == 'int' { d_type = 'int' }
-				else if id == 'list' { d_type = '[]Any' }
+				else if id == 'list' { d_type = '[]int' }
 				else if id == 'dict' { d_type = 'map[string]Any' }
 			}
 		}

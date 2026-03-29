@@ -58,7 +58,7 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		return guess_type_attribute(node, ctx)
 	}
 	if node is ast.Subscript {
-		return guess_type_subscript(node)
+		return guess_type_subscript(node, ctx)
 	}
 	if node is ast.BinaryOp {
 		return guess_type_binop(node, ctx)
@@ -155,6 +155,16 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 		}
 		if fid == 'Counter' {
 			return 'map[string]int'
+		}
+		if fid == 'defaultdict' && node.args.len > 0 {
+			mut d_type := 'Any'
+			if node.args[0] is ast.Name {
+				id := (node.args[0] as ast.Name).id
+				if id == 'int' { d_type = 'int' }
+				else if id == 'list' { d_type = '[]int' }
+				else if id == 'dict' { d_type = 'map[string]Any' }
+			}
+			return 'map[string]' + d_type
 		}
 		if fid == 'py_range' {
 			return '[]int'
@@ -332,7 +342,14 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext) string {
 	return 'Any'
 }
 
-fn guess_type_subscript(node ast.Subscript) string {
+fn guess_type_subscript(node ast.Subscript, ctx TypeGuessingContext) string {
+	val_type := guess_type(node.value, ctx, true)
+	if val_type.starts_with("[]") {
+		return val_type[2..]
+	}
+	if val_type.starts_with("map[") && val_type.contains("]") {
+		return val_type.all_after("]")
+	}
 	if node.value is ast.Attribute {
 		if node.value.value is ast.Name && node.value.value.id == 'sys' && node.value.attr == 'argv' {
 			return 'string'
