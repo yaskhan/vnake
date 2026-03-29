@@ -192,6 +192,18 @@ pub fn map_python_type_to_v(py_type string) string {
 		'object' {
 			return 'Any'
 		}
+		'dict' {
+			return 'map[string]Any'
+		}
+		'list' {
+			return '[]Any'
+		}
+		'tuple' {
+			return '[]Any'
+		}
+		'set' {
+			return 'datatypes.Set[Any]'
+		}
 		else {
 			if clean_type.starts_with('List[') || clean_type.starts_with('list[') {
 				inner := clean_type[5..clean_type.len - 1]
@@ -208,6 +220,10 @@ pub fn map_python_type_to_v(py_type string) string {
 					}
 				}
 				return 'map[string]Any'
+			}
+			if clean_type.starts_with('Set[') || clean_type.starts_with('set[') {
+				inner := clean_type[4..clean_type.len - 1]
+				return 'datatypes.Set[' + map_python_type_to_v(inner) + ']'
 			}
 			if clean_type.starts_with('Optional[') {
 				inner := clean_type[9..clean_type.len - 1]
@@ -233,6 +249,18 @@ pub fn map_python_type_to_v(py_type string) string {
 				for p in parts {
 					mapped << map_python_type_to_v(p)
 				}
+				
+				// Optional check
+				mut has_none := false
+				mut others := []string{}
+				for m in mapped {
+					if m == 'none' { has_none = true }
+					else { others << m }
+				}
+				if has_none && others.len == 1 {
+					return '?${others[0]}'
+				}
+				
 				return mapped.join(' | ')
 			}
 			return clean_type
