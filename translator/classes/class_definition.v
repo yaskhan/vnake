@@ -310,6 +310,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 				
 				is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
 				for sig in sigs {
+					eprintln('DEBUG CLASS SIG: ${sig}')
 					mut type_suffix_parts := []string{}
 					mut factory_args := []string{}
 					mut call_args := []string{}

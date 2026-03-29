@@ -284,13 +284,26 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		if t.state.current_class.ends_with('Task') && rhs == 'r' && lhs in ['h', 'd', 'i', 'w'] {
 			rhs_text = '(${rhs} as ${t.state.current_class}Rec)'
 		}
-		lhs_t := t.guess_type(target)
+		mut lhs_t := t.guess_type(target)
+		target_expr := ast.Expression(target)
+		if target_expr is ast.Name {
+			eprintln('DEBUG RAW LOOKUP: id=${target_expr.id} in_raw=${target_expr.id in t.analyzer.raw_type_map} raw=${t.analyzer.raw_type_map[target_expr.id]}')
+			if target_expr.id in t.analyzer.raw_type_map {
+				lhs_t = t.analyzer.raw_type_map[target_expr.id]
+			}
+		}
 		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
 		
 		if t.is_declared_local(lhs) {
 			if v_lhs_t.starts_with("?") && !rhs_text.starts_with("?") && rhs_text != "none" {
-				inner := v_lhs_t.trim_left("?")
-				t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
+				inferred := t.guess_type(node.value)
+				v_inferred := t.map_annotation_str(inferred, "", false, false, false)
+				if v_inferred.starts_with("?") {
+					t.emit_indented("${lhs} = ${rhs_text}")
+				} else {
+					inner := v_lhs_t.trim_left("?")
+					t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
+				}
 			} else {
 				t.emit_indented('${lhs} = ${rhs_text}')
 			}
