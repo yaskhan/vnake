@@ -3,17 +3,65 @@ module expressions
 import ast
 
 fn (mut eg ExprGen) infer_generator_target_types(gen ast.Comprehension) {
+	iter_type := eg.guess_type(gen.iter)
+	mut elt_type := 'Any'
+	if iter_type.starts_with('[]') {
+		elt_type = iter_type[2..]
+	} else if iter_type.starts_with('map[') {
+		elt_type = 'string' // iteration over dict keys
+	} else if iter_type.starts_with('datatypes.Set[') {
+		elt_type = iter_type[14..iter_type.len-1]
+	}
+
 	if gen.iter is ast.Call {
 		iter_call := gen.iter
-		if iter_call.func is ast.Name && gen.target is ast.Name {
-			if iter_call.func.id in ['range', 'xrange', 'enumerate'] {
-				eg.analyzer.type_map[gen.target.id] = 'int'
+		if iter_call.func is ast.Name {
+			if iter_call.func.id in ['range', 'xrange'] {
+				elt_type = 'int'
+			} else if iter_call.func.id == 'enumerate' {
+				elt_type = 'PyEnumerateItem'
+				if gen.target is ast.Tuple && gen.target.elements.len >= 2 {
+					eg.infer_target_types_from_val(gen.target.elements[0], 'int')
+					// Index 1 is the item
+					if iter_call.args.len > 0 {
+						arg_type := eg.guess_type(iter_call.args[0])
+						if arg_type.starts_with('[]') {
+							eg.infer_target_types_from_val(gen.target.elements[1], arg_type[2..])
+						}
+					}
+					return
+				}
+			} else if iter_call.func.id == 'zip' && gen.target is ast.Tuple {
+				for i, elt in gen.target.elements {
+					if i < iter_call.args.len {
+						arg_type := eg.guess_type(iter_call.args[i])
+						if arg_type.starts_with('[]') {
+							eg.infer_target_types_from_val(elt, arg_type[2..])
+						}
+					}
+				}
 				return
+			} else if iter_call.func.id == 'zip' {
+				elt_type = 'PyZipItem'
 			}
 		}
 	}
-	if gen.iter is ast.List && gen.iter.elements.len > 0 && gen.target is ast.Name {
-		eg.analyzer.type_map[gen.target.id] = eg.guess_type(gen.iter.elements[0])
+
+	eg.infer_target_types_from_val(gen.target, elt_type)
+}
+
+fn (mut eg ExprGen) infer_target_types_from_val(target ast.Expression, val_type string) {
+	if target is ast.Name {
+		eg.analyzer.type_map[target.id] = val_type
+	} else if target is ast.Tuple && val_type.contains(',') {
+		// Try to split val_type if it is a tuple/zip item
+		// This is a simplification
+	} else if target is ast.Tuple {
+		for elt in target.elements {
+			if elt is ast.Name {
+				eg.analyzer.type_map[elt.id] = 'Any' // fallback
+			}
+		}
 	}
 }
 
@@ -165,6 +213,7 @@ pub fn (mut eg ExprGen) visit_list_comp(node ast.ListComp, target_var string) ?s
 		target = 'py_comp_${eg.state.unique_id_counter}'
 	}
 
+	eg.infer_generator_target_types(node.generators[0])
 	mut elt_type := eg.guess_type(node.elt)
 	if elt_type == 'unknown' {
 		elt_type = 'int'
@@ -220,6 +269,7 @@ pub fn (mut eg ExprGen) visit_generator_exp_inline(node ast.GeneratorExp) ?strin
 	if node.generators.len == 1 && node.generators[0].ifs.len == 0 {
 		gen := node.generators[0]
 		if gen.target is ast.Name {
+			eg.infer_generator_target_types(gen)
 			target_id := gen.target.id
 			iter_expr := eg.visit(gen.iter)
 			
@@ -259,6 +309,7 @@ pub fn (mut eg ExprGen) visit_dict_comp(node ast.DictComp, target_var string) ?s
 		eg.state.unique_id_counter++
 		target = 'py_comp_${eg.state.unique_id_counter}'
 	}
+	eg.infer_generator_target_types(node.generators[0])
 	key_type := eg.guess_type(node.key)
 	val_type := eg.guess_type(node.value)
 	eg.emit('mut ${target} := map[${key_type}]${val_type}{}')
@@ -274,6 +325,7 @@ pub fn (mut eg ExprGen) visit_set_comp(node ast.SetComp, target_var string) ?str
 		eg.state.unique_id_counter++
 		target = 'py_comp_${eg.state.unique_id_counter}'
 	}
+	eg.infer_generator_target_types(node.generators[0])
 	key_type := eg.guess_type(node.elt)
 	eg.emit('mut ${target} := datatypes.Set[${key_type}]{}')
 	eg.emit_generators(node.generators, fn [node, target] (mut eg ExprGen) {
