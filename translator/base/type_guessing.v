@@ -1,17 +1,10 @@
 module base
 
 import ast
+import models
+import analyzer
 
-pub struct TypeGuessingContext {
-pub:
-	type_map           map[string]string
-	location_map       map[string]string
-	known_v_types      map[string]string
-	name_remap         map[string]string
-	defined_classes    map[string]map[string]bool
-	explicit_any_types map[string]bool
-	target_type        string
-}
+pub type TypeGuessingContext = models.TypeGuessingContext
 
 // guess_type infers a best-effort V type for an expression node.
 pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location bool) string {
@@ -21,6 +14,12 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 			res := ctx.location_map[loc_key]
 			if res != 'none' {
 				return res
+			}
+		}
+		if ctx.analyzer != unsafe { nil } {
+			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
+			if mypy_type := a.get_mypy_type(node.str(), loc_key) {
+				return mypy_type
 			}
 		}
 	}

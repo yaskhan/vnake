@@ -2,21 +2,7 @@ module analyzer
 
 import ast
 
-fn expr_name(node ast.Expression) string {
-	return match node {
-		ast.Name { node.id }
-		ast.Attribute {
-			base := expr_name(node.value)
-			if base.len > 0 {
-				'${base}.${node.attr}'
-			} else {
-				node.attr
-			}
-		}
-		ast.Subscript { expr_name(node.value) }
-		else { '' }
-	}
-}
+// expr_name is now in utils.v
 
 fn call_name(node ast.Expression) string {
 	return match node {
@@ -382,7 +368,7 @@ fn (mut a AliasInferer) collect_aliases_expr(expr ast.Expression, mut aliases ma
 	}
 }
 
-pub fn (mut a AliasInferer) analyze(tree ast.Module) {
+pub fn (mut a AliasInferer) analyze(tree ast.Module, mut utils TypeInferenceUtilsMixin) {
 	mut aliases := map[string]string{}
 	mut instantiations := map[string]string{}
 	mut appends := map[string][]string{}
@@ -427,12 +413,13 @@ pub fn (mut a AliasInferer) analyze(tree ast.Module) {
 				a.alias_to_type[alias] = 'map[int]${inner_type}'
 			}
 		} else {
+			lcs := utils.find_lcs(used_types)
 			if base_type == 'list' {
-				a.alias_to_type[alias] = '[]Any'
+				a.alias_to_type[alias] = '[]${lcs}'
 			} else if base_type == 'set' {
-				a.alias_to_type[alias] = 'datatypes.Set[string]'
+				a.alias_to_type[alias] = 'datatypes.Set[${lcs}]'
 			} else {
-				a.alias_to_type[alias] = 'map[int]Any'
+				a.alias_to_type[alias] = 'map[int]${lcs}'
 			}
 		}
 	}

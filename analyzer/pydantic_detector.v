@@ -13,11 +13,10 @@ pub fn (d PydanticDetector) is_pydantic_model(node ast.ClassDef) bool {
 		}
 		if base is ast.Attribute {
 			if base.attr == 'BaseModel' {
-				if val := base.value {
-					if val is ast.Name {
-						if val.id == 'pydantic' {
-							return true
-						}
+				val := base.value
+				if val is ast.Name {
+					if val.id == 'pydantic' {
+						return true
 					}
 				}
 			}
@@ -28,10 +27,9 @@ pub fn (d PydanticDetector) is_pydantic_model(node ast.ClassDef) bool {
 				return true
 			}
 			if val is ast.Attribute && val.attr == 'BaseModel' {
-				if inner_val := val.value {
-					if inner_val is ast.Name && inner_val.id == 'pydantic' {
-						return true
-					}
+				inner_val := val.value
+				if inner_val is ast.Name && inner_val.id == 'pydantic' {
+					return true
 				}
 			}
 		}
@@ -46,10 +44,9 @@ pub fn (d PydanticDetector) is_pydantic_field(node ast.Expression) bool {
 			return true
 		}
 		if func is ast.Attribute && func.attr == 'Field' {
-			if val := func.value {
-				if val is ast.Name && val.id == 'pydantic' {
-					return true
-				}
+			val := func.value
+			if val is ast.Name && val.id == 'pydantic' {
+				return true
 			}
 		}
 	}

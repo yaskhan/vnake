@@ -1,23 +1,26 @@
 module analyzer
 
 import ast
-import translator.base as tbase
+import models
 
 const mutating_methods = ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update',
 	'setdefault', 'delete', 'add', 'discard']
 
 pub struct TypeInferenceVisitorMixin {
-	TypeInferenceBase
+	TypeInferenceUtilsMixin
+pub mut:
+	analyzer_ptr       voidptr = unsafe { nil }
+	guess_type_handler fn (ast.Expression, models.TypeGuessingContext) string = unsafe { nil }
 }
 
 pub fn new_type_inference_visitor_mixin() TypeInferenceVisitorMixin {
 	return TypeInferenceVisitorMixin{
-		TypeInferenceBase: new_type_inference_base()
+		TypeInferenceUtilsMixin: new_type_inference_utils_mixin()
 	}
 }
 
-fn (t &TypeInferenceVisitorMixin) type_ctx() tbase.TypeGuessingContext {
-	return tbase.TypeGuessingContext{
+fn (t &TypeInferenceVisitorMixin) type_ctx() models.TypeGuessingContext {
+	return models.TypeGuessingContext{
 		type_map:           t.type_map
 		location_map:       t.location_map
 		known_v_types:      map[string]string{}
@@ -36,7 +39,10 @@ fn (t &TypeInferenceVisitorMixin) defined_classes_for_guessing() map[string]map[
 }
 
 fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string {
-	return tbase.guess_type(node, t.type_ctx(), true)
+	if t.guess_type_handler != unsafe { nil } {
+		return t.guess_type_handler(node, t.type_ctx())
+	}
+	return 'Any'
 }
 
 fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
@@ -136,9 +142,21 @@ fn (mut t TypeInferenceVisitorMixin) mark_mutated_expr(node ast.Expression) {
 		}
 		ast.Attribute {
 			t.mark_mutated_expr(node.value)
+			name := expr_name(node)
+			if name.len > 0 {
+				mut info := t.get_mutability(name)
+				info.is_mutated = true
+				t.set_mutability(name, info)
+			}
 		}
 		ast.Subscript {
 			t.mark_mutated_expr(node.value)
+			name := expr_name(node)
+			if name.len > 0 {
+				mut info := t.get_mutability(name)
+				info.is_mutated = true
+				t.set_mutability(name, info)
+			}
 		}
 		ast.Tuple {
 			for elt in node.elements {

@@ -146,8 +146,8 @@ pub fn (p DecoratorProcessor) generate_cache_wrapper(info DecoratorInfo, func_na
 		"'__no_args__'"
 	} else {
 		mut interp_parts := []string{}
-		for p in key_parts {
-			interp_parts << '\${${p}}'
+		for kp in key_parts {
+			interp_parts << '\${${kp}}'
 		}
 		"\"${interp_parts.join('_')}\""
 	}

@@ -7,6 +7,7 @@ import ast
 pub struct Analyzer {
 	TypeInferenceVisitorMixin
 pub mut:
+	mypy_store            MypyPluginStore
 	context               string
 	stack                 []string
 }
@@ -15,10 +16,12 @@ pub mut:
 pub fn new_analyzer(type_data map[string]string) &Analyzer {
 	mut a := &Analyzer{
 		TypeInferenceVisitorMixin: new_type_inference_visitor_mixin()
+		mypy_store:                new_mypy_plugin_store()
 		context:                   ''
 		stack:                     []string{}
 	}
-	a.type_map = type_data.clone()
+	a.analyzer_ptr = a
+a.type_map = type_data.clone()
 	return a
 }
 
@@ -28,7 +31,7 @@ pub fn (mut a Analyzer) analyze(node ast.Module) {
 	a.visit_module(node)
 	
 	mut ai := new_alias_inferer()
-	ai.analyze(node)
+	ai.analyze(node, mut a.TypeInferenceVisitorMixin.TypeInferenceUtilsMixin)
 	for k, v in ai.alias_to_type {
 		a.type_map[k] = v
 	}
@@ -42,6 +45,25 @@ pub fn (mut a Analyzer) analyze(node ast.Module) {
 pub fn (a Analyzer) get_type(name string) ?string {
 	if name in a.type_map {
 		return a.type_map[name]
+	}
+	return none
+}
+
+// get_mypy_type returns type from mypy store
+pub fn (a Analyzer) get_mypy_type(name string, loc string) ?string {
+	if name.len > 0 && loc.len > 0 {
+		if res := a.mypy_store.collected_types[name] {
+			if typ := res[loc] {
+				return typ
+			}
+		}
+	}
+	if loc.len > 0 {
+		if res := a.mypy_store.collected_types['@'] {
+			if typ := res[loc] {
+				return typ
+			}
+		}
 	}
 	return none
 }
@@ -88,4 +110,23 @@ pub fn (a Analyzer) get_class_bases(class_name string) []string {
 		return a.class_hierarchy[class_name]
 	}
 	return []
+}
+// load_mypy_data loads data from MypyPluginStore
+pub fn (mut a Analyzer) load_mypy_data(store MypyPluginStore) {
+	for k, v in store.collected_types {
+		if k !in a.mypy_store.collected_types {
+			a.mypy_store.collected_types[k] = map[string]string{}
+		}
+		for loc, typ in v {
+			a.mypy_store.collected_types[k][loc] = typ
+		}
+	}
+	for k, v in store.collected_sigs {
+		if k !in a.mypy_store.collected_sigs {
+			a.mypy_store.collected_sigs[k] = map[string]string{}
+		}
+		for loc, sig in v {
+			a.mypy_store.collected_sigs[k][loc] = sig
+		}
+	}
 }

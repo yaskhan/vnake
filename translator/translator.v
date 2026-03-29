@@ -40,6 +40,9 @@ pub fn new_translator() &Translator {
 	t.state.mapper = stdlib_map.new_stdlib_mapper()
 	t.state.coroutine_handler = &t.coroutine_handler
 	t.control_flow_module.env = t.get_control_flow_env()
+	t.analyzer.guess_type_handler = fn (e ast.Expression, ctx models.TypeGuessingContext) string {
+		return base.guess_type(e, ctx, true)
+	}
 	return t
 }
 
@@ -341,7 +344,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.mutable_locals = map[string]bool{}
 	t.current_function_name = ''
 	
-	mut lexer := ast.new_lexer(source, filename)
+	mut compatibility := analyzer.new_compatibility_layer()
+	preprocessed := compatibility.preprocess_source(source)
+	mut lexer := ast.new_lexer(preprocessed, filename)
 	mut parser := ast.new_parser(lexer)
 	module_node := parser.parse_module()
 	

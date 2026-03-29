@@ -1,5 +1,27 @@
 module analyzer
 
+import ast
+
+pub fn expr_name(node ast.Expression) string {
+	return match node {
+		ast.Name { node.id }
+		ast.Attribute {
+			base := expr_name(node.value)
+			if base.len > 0 {
+				'${base}.${node.attr}'
+			} else {
+				node.attr
+			}
+		}
+		ast.Subscript {
+			expr_name(node.value)
+		}
+		else {
+			''
+		}
+	}
+}
+
 pub struct TypeInferenceUtilsMixin {
 	TypeInferenceBase
 }
@@ -10,22 +32,81 @@ pub fn new_type_inference_utils_mixin() TypeInferenceUtilsMixin {
 	}
 }
 
+pub fn (t &TypeInferenceUtilsMixin) get_ancestors(typ string) []string {
+	mut ancestors := [typ]
+	if typ in t.class_hierarchy {
+		for base in t.class_hierarchy[typ] {
+			ancestors << t.get_ancestors(base)
+		}
+	}
+	return ancestors
+}
+
+pub fn (t &TypeInferenceUtilsMixin) get_depth(typ string, current_depth int) int {
+	if typ !in t.class_hierarchy || t.class_hierarchy[typ].len == 0 {
+		return current_depth
+	}
+	mut max_d := current_depth
+	for base in t.class_hierarchy[typ] {
+		d := t.get_depth(base, current_depth + 1)
+		if d > max_d {
+			max_d = d
+		}
+	}
+	return max_d
+}
+
 pub fn (mut t TypeInferenceUtilsMixin) find_lcs(types []string) string {
 	if types.len == 0 {
 		return 'Any'
 	}
-	first := types[0]
-	mut all_same := true
+	mut unique_types := []string{}
 	for typ in types {
-		if typ != first {
-			all_same = false
-			break
+		if typ !in unique_types {
+			unique_types << typ
 		}
 	}
-	if all_same {
-		return first
+	if unique_types.len == 1 {
+		return unique_types[0]
 	}
-	return 'Any'
+
+	mut ancestor_lists := [][]string{}
+	for typ in unique_types {
+		ancestor_lists << t.get_ancestors(typ)
+	}
+
+	mut common := map[string]bool{}
+	for anc in ancestor_lists[0] {
+		common[anc] = true
+	}
+
+	for i := 1; i < ancestor_lists.len; i++ {
+		mut current_anc := map[string]bool{}
+		for anc in ancestor_lists[i] {
+			current_anc[anc] = true
+		}
+		for k, _ in common {
+			if k !in current_anc {
+				common.delete(k)
+			}
+		}
+	}
+
+	if common.len == 0 {
+		return 'Any'
+	}
+
+	mut lcs := 'Any'
+	mut max_depth := -1
+	for candidate, _ in common {
+		d := t.get_depth(candidate, 0)
+		if d > max_depth {
+			max_depth = d
+			lcs = candidate
+		}
+	}
+
+	return lcs
 }
 
 pub fn (mut t TypeInferenceUtilsMixin) mark_mutated(name string) {

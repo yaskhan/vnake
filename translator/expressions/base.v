@@ -31,6 +31,7 @@ fn (eg &ExprGen) type_ctx() base.TypeGuessingContext {
 		defined_classes:    eg.state.defined_classes
 		explicit_any_types: eg.analyzer.explicit_any_types
 		target_type:        eg.target_type
+		analyzer:           eg.analyzer
 	}
 }
 
