@@ -1,5 +1,5 @@
-@@in# "fn new_multi_int(x int) Multi {"
-@@in# "fn new_multi_string(x string) Multi {"
+@@in# "fn new_multi_int(x int) &Multi {"
+@@in# "fn new_multi_string(x string) &Multi {"
 @@in# "fn (mut self Multi) init_int(x int)"
 @@in# "fn (mut self Multi) init_string(x string)"
 @@in# "m1 := new_multi_int(1)"

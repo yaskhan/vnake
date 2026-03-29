@@ -1,5 +1,5 @@
 @@in# "fn new_user_dict_map_stringAny[T]"
 @@in# "fn new_user_dict_none[T]"
-@@in# "fn new_user_dict_map_stringAny[T](data map[string]Any) UserDict[T] {"
-@@in# "fn new_user_dict_none[T](data none) UserDict[T] {"
+@@in# "fn new_user_dict_map_stringAny[T](data map[string]Any) &UserDict[T] {"
+@@in# "fn new_user_dict_none[T](data none) &UserDict[T] {"
 @@notin# "new_user_dict_T"

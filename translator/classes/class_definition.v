@@ -295,7 +295,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		}
 
 		// Generate factory function new_X for simple struct if it has __init__ or __new__
-		if struct_name_for_body == struct_name && !is_enum && !is_flag {
+		if !is_enum && !is_flag {
 			ov_key_init := '${struct_name}.__init__'
 			ov_key_new := '${struct_name}.__new__'
 			
@@ -338,9 +338,9 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					}
 					
 					mut f_code := []string{}
-					factory_ret := if is_pydantic { '!${struct_name}${generics}' } else { '${struct_name}${generics}' }
+					factory_ret := if is_pydantic { '!&${struct_name_for_body}${generics}' } else { '&${struct_name_for_body}${generics}' }
 					f_code << '${prefix}fn ${mangled_factory}${generics}(${factory_args.join(", ")}) ${factory_ret} {'
-					f_code << '    mut self := ${struct_name}${generics}{}'
+					f_code << '    mut self := &${struct_name_for_body}${generics}{}'
 					// Call the appropriate mangled init
 					init_suffix := if type_suffix_parts.len > 0 { type_suffix_parts.join("_") } else { "noargs" }
 					init_name := if has_init_ov { 'init_${init_suffix}' } else { 'new_${init_suffix}' }
@@ -381,9 +381,9 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					
 					is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
 					mut f_code := []string{}
-					factory_ret := if is_pydantic { '!${struct_name}${generics}' } else { '${struct_name}${generics}' }
+					factory_ret := if is_pydantic { '!&${struct_name_for_body}${generics}' } else { '&${struct_name_for_body}${generics}' }
 					f_code << '${prefix}fn ${factory_name}${generics}(${factory_args.join(", ")}) ${factory_ret} {'
-					f_code << '    mut self := ${struct_name}${generics}{}'
+					f_code << '    mut self := &${struct_name_for_body}${generics}{}'
 					f_code << '    self.init(${call_args.join(", ")})'
 					if is_pydantic {
 						f_code << '    self.validate() or { return err }'
