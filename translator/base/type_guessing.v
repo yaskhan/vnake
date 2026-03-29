@@ -72,7 +72,7 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 	if node is ast.DictComp {
 		return guess_type_dictcomp(node, ctx)
 	}
-	return 'int'
+	return 'Any'
 }
 
 fn guess_constant_type(node ast.Constant) string {
@@ -100,7 +100,7 @@ fn guess_constant_type(node ast.Constant) string {
 			return 'none'
 		}
 	}
-	return 'int'
+	return 'int' // legacy fallback
 }
 
 fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
@@ -319,7 +319,7 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 	if node.id in ctx.type_map {
 		return ctx.type_map[node.id]
 	}
-	return 'int'
+	return 'Any'
 }
 
 fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext) string {
@@ -424,7 +424,7 @@ fn guess_type_lambda(node ast.Lambda, ctx TypeGuessingContext) string {
 	}
 	mut ret_type := guess_type(node.body, ctx, true)
 	if ret_type in ['void', 'Any', 'unknown'] {
-		ret_type = 'int'
+		ret_type = 'Any'
 	}
 	return 'fn(${param_types.join(', ')}) ${ret_type}'
 }
@@ -453,3 +453,4 @@ pub fn is_literal_string_expr(node ast.Expression, ctx TypeGuessingContext) bool
 	}
 	return false
 }
+

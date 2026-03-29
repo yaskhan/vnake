@@ -48,6 +48,7 @@ fn guess_type(node ast.Expression, env &ClassVisitEnv) string {
 		name_remap:         env.state.name_remap
 		defined_classes:    env.state.defined_classes
 		explicit_any_types: env.analyzer.explicit_any_types
+		analyzer:           env.analyzer
 	}
 	return base.guess_type(node, ctx, true)
 }

@@ -27,6 +27,7 @@ fn (t &TypeInferenceVisitorMixin) type_ctx() models.TypeGuessingContext {
 		name_remap:         map[string]string{}
 		defined_classes:    t.defined_classes_for_guessing()
 		explicit_any_types: t.explicit_any_types
+		analyzer:           t.analyzer_ptr
 	}
 }
 
@@ -42,12 +43,40 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 	if t.guess_type_handler != unsafe { nil } {
 		return t.guess_type_handler(node, t.type_ctx())
 	}
+	
+	// Fallback for analysis pass if handler is not set
+	match node {
+		ast.Constant {
+			tok := node.token
+			if tok.typ == .string_tok || tok.typ == .fstring_tok || tok.typ == .tstring_tok {
+				return 'string'
+			}
+			if tok.typ == .number {
+				return if node.value.contains('.') { 'f64' } else { 'int' }
+			}
+			if tok.typ == .keyword {
+				if node.value in ['True', 'False'] { return 'bool' }
+				if node.value == 'None' { return 'none' }
+			}
+		}
+		ast.List { return '[]Any' }
+		ast.Dict { return 'map[string]Any' }
+		ast.Tuple { return '[]Any' }
+		ast.UnaryOp {
+			return t.guess_expr_type(node.operand)
+		}
+		ast.Name { return t.get_type(node.id) }
+		else {}
+	}
 	return 'Any'
 }
 
 fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 	if name.len == 0 || typ.len == 0 {
 		return
+	}
+	if !t.has_type(name) {
+		t.raw_type_map[name] = typ
 	}
 	t.type_map[name] = typ
 	if !name.contains('.') && !name.contains('@') {
@@ -582,7 +611,6 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_lambda(node ast.Lambda) {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_list_comp(node ast.ListComp) {
-	t.visit_expr(node.elt)
 	for gen in node.generators {
 		t.visit_expr(gen.target)
 		t.visit_expr(gen.iter)
@@ -590,11 +618,10 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_list_comp(node ast.ListComp) {
 			t.visit_expr(cond)
 		}
 	}
+	t.visit_expr(node.elt)
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_dict_comp(node ast.DictComp) {
-	t.visit_expr(node.key)
-	t.visit_expr(node.value)
 	for gen in node.generators {
 		t.visit_expr(gen.target)
 		t.visit_expr(gen.iter)
@@ -602,10 +629,11 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_dict_comp(node ast.DictComp) {
 			t.visit_expr(cond)
 		}
 	}
+	t.visit_expr(node.key)
+	t.visit_expr(node.value)
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_set_comp(node ast.SetComp) {
-	t.visit_expr(node.elt)
 	for gen in node.generators {
 		t.visit_expr(gen.target)
 		t.visit_expr(gen.iter)
@@ -613,10 +641,10 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_set_comp(node ast.SetComp) {
 			t.visit_expr(cond)
 		}
 	}
+	t.visit_expr(node.elt)
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_generator(node ast.GeneratorExp) {
-	t.visit_expr(node.elt)
 	for gen in node.generators {
 		t.visit_expr(gen.target)
 		t.visit_expr(gen.iter)
@@ -624,6 +652,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_generator(node ast.GeneratorExp) 
 			t.visit_expr(cond)
 		}
 	}
+	t.visit_expr(node.elt)
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_if_exp(node ast.IfExp) {
@@ -841,6 +870,13 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 	combined_args << node.args.args
 	mut signature_args := combined_args.clone()
 	if signature_args.len > 0 && signature_args[0].arg in ['self', 'cls'] {
+		s_arg := signature_args[0].arg
+		if t.scope_names.len > 0 {
+			cls := t.scope_names[t.scope_names.len - 1]
+			if cls.len > 0 && cls[0].is_capital() {
+				t.store_type(s_arg, cls)
+			}
+		}
 		signature_args = signature_args[1..].clone()
 	}
 	signature_args << node.args.kwonlyargs
@@ -887,6 +923,24 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 	if kwarg := node.args.kwarg {
 		if annotation := kwarg.annotation {
 			t.visit_expr(annotation)
+		}
+	}
+	
+	qual_name := t.get_qualified_name(node.name)
+
+	t.push_scope(node.name)
+	for i, param_name in arg_names {
+		t.store_type(param_name, arg_types[i])
+	}
+	// Self type is already stored in store_type calls in our previous chunk if we were careful
+	// but let's re-store it in the new scope specifically.
+	if node.args.args.len > 0 && node.args.args[0].arg in ['self', 'cls'] {
+		s_arg := node.args.args[0].arg
+		if t.scope_names.len > 1 {
+			cls := t.scope_names[t.scope_names.len - 2]
+			if cls.len > 0 && cls[0].is_capital() {
+				t.store_type(s_arg, cls)
+			}
 		}
 	}
 
@@ -945,8 +999,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 	}
 
 	if is_property {
-		full_prop_name := t.get_qualified_name(node.name)
-		t.type_map[full_prop_name] = return_type
+		t.type_map[qual_name] = return_type
 	}
 
 	for type_param in node.type_params {
@@ -960,13 +1013,12 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 		}
 		sig_info['return'] = return_type
 		
-		qual_name := t.get_qualified_name(node.name)
 		t.overloaded_signatures[qual_name] << sig_info
 		// We don't visit the body of @overload stubs
+		t.pop_scope()
 		return
 	}
 
-	t.push_scope(node.name)
 	for stmt in node.body {
 		t.visit_stmt(stmt)
 	}
@@ -1017,39 +1069,37 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_class_def(node ast.ClassDef) {
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 	t.visit_expr(node.value)
-	value_type := match node.value {
-		ast.Call {
-			if node.value.func is ast.Name && node.value.func.id == 'TypeVar' {
-				for tgt in node.targets {
-					if tgt is ast.Name {
-						t.type_vars[tgt.id] = true
-					}
+	
+	mut value_type := t.guess_expr_type(node.value)
+	if node.value is ast.Call {
+		func_expr := node.value.func
+		if func_expr is ast.Name && func_expr.id == 'TypeVar' {
+			for tgt in node.targets {
+				if tgt is ast.Name {
+					t.type_vars[tgt.id] = true
 				}
-			}
-			if node.value.func is ast.Attribute {
-				call_attr := node.value.func
-				if call_attr.value is ast.Name && call_attr.value.id == 'hashlib' {
-					loc_key := '${node.value.token.line}:${node.value.token.column}'
-					if call_attr.attr == 'sha256' {
-						t.location_map[loc_key] = 'PyHashSha256'
-						'PyHashSha256'
-					} else if call_attr.attr == 'md5' {
-						t.location_map[loc_key] = 'PyHashMd5'
-						'PyHashMd5'
-					} else {
-						t.guess_expr_type(node.value)
-					}
-				} else {
-					t.guess_expr_type(node.value)
-				}
-			} else {
-				t.guess_expr_type(node.value)
 			}
 		}
-		else { t.guess_expr_type(node.value) }
+		if func_expr is ast.Attribute {
+			if func_expr.value is ast.Name && func_expr.value.id == 'hashlib' {
+				loc_key := '${node.value.token.line}:${node.value.token.column}'
+				if func_expr.attr == 'sha256' {
+					t.location_map[loc_key] = 'PyHashSha256'
+					value_type = 'PyHashSha256'
+				} else if func_expr.attr == 'md5' {
+					t.location_map[loc_key] = 'PyHashMd5'
+					value_type = 'PyHashMd5'
+				}
+			}
+		}
 	}
 
 	for target in node.targets {
+		loc_key := '${target.get_token().line}:${target.get_token().column}'
+		if value_type != 'Any' {
+			t.location_map[loc_key] = value_type
+		}
+		
 		match target {
 			ast.Name {
 				if target.id in t.mutability_map {
@@ -1058,7 +1108,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				current := t.get_type(target.id)
 				is_cap := target.id.len > 0 && target.id[0].is_capital()
 				if value_type != 'Any' {
-					if current == 'Any' || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
+					if current in ['Any', 'none', 'int'] || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
 						t.store_type(target.id, value_type)
 					}
 				}
@@ -1067,10 +1117,17 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				t.mark_mutated_expr(target)
 				obj_name := t.render_expr(target.value)
 				if obj_name.len > 0 {
-					t.store_type('${obj_name}.${target.attr}', value_type)
+					full_attr := '${obj_name}.${target.attr}'
+					current := t.get_type(full_attr)
+					if current in ['Any', 'unknown', 'none'] {
+						t.store_type(full_attr, value_type)
+					}
 				}
 				if target.value is ast.Name && target.value.id == 'self' {
-					t.store_type(target.attr, value_type)
+					current := t.get_type(target.attr)
+					if current in ['Any', 'unknown', 'none'] {
+						t.store_type(target.attr, value_type)
+					}
 				}
 			}
 			ast.Subscript {
@@ -1154,6 +1211,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_aug_assign(node ast.AugAssign) {
 pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 	annotation_str := t.expr_to_type_string(node.annotation)
 	mut v_type := map_python_type_to_v(annotation_str)
+	eprintln('DEBUG VISIT_ANN_ASSIGN: ann=${annotation_str} v_type=${v_type}')
 	if annotation_str == 'LiteralString' || annotation_str == 'typing.LiteralString'
 		|| annotation_str == 'typing_extensions.LiteralString' {
 		v_type = 'string'

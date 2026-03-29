@@ -119,6 +119,7 @@ pub fn (mut m VariablesModule) guess_type(node ast.Expression, use_location bool
 		name_remap:         m.state.name_remap
 		defined_classes:    m.state.defined_classes
 		explicit_any_types: m.analyzer.explicit_any_types
+		analyzer:           m.analyzer
 	}
 	return base.guess_type(node, ctx, use_location)
 }
