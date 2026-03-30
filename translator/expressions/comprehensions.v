@@ -2,6 +2,23 @@ module expressions
 
 import ast
 
+fn get_int_const(expr ast.Expression) (int, bool) {
+	if expr is ast.Constant {
+		return expr.value.int(), true
+	} else if expr is ast.UnaryOp {
+		if expr.op.value == '-' {
+			if expr.operand is ast.Constant {
+				return -expr.operand.value.int(), true
+			}
+		} else if expr.op.value == '+' {
+			if expr.operand is ast.Constant {
+				return expr.operand.value.int(), true
+			}
+		}
+	}
+	return 0, false
+}
+
 fn (mut eg ExprGen) infer_generator_target_types(gen ast.Comprehension) {
 	iter_type := eg.guess_type(gen.iter)
 	mut elt_type := 'Any'
@@ -227,18 +244,18 @@ pub fn (mut eg ExprGen) visit_list_comp(node ast.ListComp, target_var string) ?s
 				if call.args.len == 1 {
 					cap_str = 'cap: ${eg.visit(call.args[0])}'
 				} else if call.args.len == 2 {
-					if call.args[0] is ast.Constant && call.args[1] is ast.Constant {
-						start_val := (call.args[0] as ast.Constant).value.int()
-						stop_val := (call.args[1] as ast.Constant).value.int()
+					start_val, is_start_const := get_int_const(call.args[0])
+					stop_val, is_stop_const := get_int_const(call.args[1])
+					if is_start_const && is_stop_const {
 						cap_str = 'cap: ${stop_val - start_val}'
 					} else {
 						cap_str = 'cap: ${eg.visit(call.args[1])}'
 					}
 				} else if call.args.len >= 3 {
-					if call.args[0] is ast.Constant && call.args[1] is ast.Constant && call.args[2] is ast.Constant {
-						start_val := (call.args[0] as ast.Constant).value.int()
-						stop_val := (call.args[1] as ast.Constant).value.int()
-						step_val := (call.args[2] as ast.Constant).value.int()
+					start_val, is_start_const := get_int_const(call.args[0])
+					stop_val, is_stop_const := get_int_const(call.args[1])
+					step_val, is_step_const := get_int_const(call.args[2])
+					if is_start_const && is_stop_const && is_step_const {
 						if step_val != 0 {
 							diff := if step_val > 0 { stop_val - start_val } else { start_val - stop_val }
 							abs_step := if step_val > 0 { step_val } else { -step_val }
