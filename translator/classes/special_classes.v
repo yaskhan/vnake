@@ -12,15 +12,14 @@ pub fn (h SpecialClassesHandler) process_enum_body(node ast.ClassDef, is_flag bo
 		if item is ast.Assign {
 			for target in item.targets {
 				if target is ast.Name {
-					// V Enums are usually capitalized
-					name := target.id.to_upper()
+					name := target.id
 					val := env.visit_expr_fn(item.value)
 					fields << '    ${name} = ${val}'
 				}
 			}
 		} else if item is ast.AnnAssign {
 			if item.target is ast.Name {
-				name := item.target.id.to_upper()
+				name := item.target.id
 				if value := item.value {
 					val := env.visit_expr_fn(value)
 					fields << '    ${name} = ${val}'

@@ -28,6 +28,7 @@ fn (mut m ControlFlowModule) visit_with_item(item ast.WithItem) {
 	mut is_nullcontext := false
 	mut is_suppress := false
 	mut is_legacy_mgr := false
+	mut is_ignored := false
 
 	if item.context_expr is ast.Call {
 		call := item.context_expr
@@ -37,6 +38,9 @@ fn (mut m ControlFlowModule) visit_with_item(item ast.WithItem) {
 			}
 			if call.func.id == 'suppress' {
 				is_suppress = true
+			}
+			if call.func.id == 'redirect_stdout' {
+				is_ignored = true
 			}
 			if call.func.id in ['closing', 'open'] {
 				is_legacy_mgr = true
@@ -63,6 +67,9 @@ fn (mut m ControlFlowModule) visit_with_item(item ast.WithItem) {
 					if call.func.attr == 'suppress' {
 						is_suppress = true
 					}
+					if call.func.attr == 'redirect_stdout' {
+						is_ignored = true
+					}
 					if call.func.attr == 'closing' {
 						is_legacy_mgr = true
 					}
@@ -71,8 +78,10 @@ fn (mut m ControlFlowModule) visit_with_item(item ast.WithItem) {
 		}
 	}
 
-	if is_suppress {
-		m.emit('/* ${context_expr} */')
+	if is_suppress || is_ignored {
+		mut final_expr := context_expr.replace('py_contextlib_', 'contextlib.')
+		suffix := if is_ignored { " ignored" } else { "" }
+		m.emit('/* ${final_expr}${suffix} */')
 		return
 	}
 

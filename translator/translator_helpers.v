@@ -40,7 +40,15 @@ fn (mut t Translator) capture_target_expr(node ast.Expression) (string, []string
 		} else {
 			base_expr, setup = t.capture_expr(node.value)
 		}
-		idx_expr, idx_setup := t.capture_expr(node.slice)
+		
+		mut idx_expr := ""
+		mut idx_setup := []string{}
+		if node.slice is ast.Constant || node.slice is ast.Name {
+			idx_expr = t.visit_expr(node.slice)
+		} else {
+			idx_expr, idx_setup = t.capture_expr(node.slice)
+		}
+		
 		mut all_setup := []string{}
 		all_setup << setup
 		all_setup << idx_setup

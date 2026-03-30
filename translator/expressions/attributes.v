@@ -67,8 +67,21 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		
 		// Check for class variables first (meta singleton)
 		if defining := base.find_defining_class_for_class_var(target_class, node.attr, eg.state.class_vars, eg.analyzer.class_hierarchy) {
-			meta_const := "${base.to_snake_case(defining)}_meta"
-			return "${meta_const}.${attr_name}"
+			// Only remap to meta if it's a direct class access (e.g. Pt.x)
+			// or if it's an explicit ClassVar (not implemented yet).
+			
+			mut is_class_access := false
+			if node.value is ast.Name {
+				v := node.value
+				if v.id == target_class || v.id == obj_base {
+					is_class_access = true
+				}
+			}
+			
+			if is_class_access {
+				meta_const := "${base.to_snake_case(defining)}_meta"
+				return "${meta_const}.${attr_name}"
+			}
 		}
 
 		if defining := base.find_defining_class_for_static_method(target_class, node.attr, eg.analyzer.static_methods, eg.analyzer.class_methods, eg.analyzer.class_hierarchy) {

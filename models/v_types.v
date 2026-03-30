@@ -143,7 +143,7 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 
 // map_complex_type handles complex types like List[int], Dict[str, Any]
 fn map_complex_type(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
-	eprintln('DEBUG MAP_COMPLEX: ${py_type}')
+	 // eprintln('DEBUG MAP_COMPLEX: ${py_type}')
 	bracket_idx := py_type.index('[') or { return map_basic_type(py_type) }
 	base_type := py_type[..bracket_idx].trim_space()
 	mut args_str := py_type[bracket_idx + 1..py_type.len - 1].trim_space()
