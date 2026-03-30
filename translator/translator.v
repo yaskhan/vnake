@@ -338,6 +338,7 @@ fn (t &Translator) annotation_raw_name(node ast.Expression) string {
 
 pub fn (mut t Translator) translate(source string, filename string) string {
 	t.state = base.new_translator_state()
+	t.coroutine_handler = analyzer.new_coroutine_handler()
 	t.state.coroutine_handler = &t.coroutine_handler
 	t.state.mapper = stdlib_map.new_stdlib_mapper()
 	t.state.current_file_name = filename

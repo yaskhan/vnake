@@ -19,6 +19,47 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 
 	module_name, func_name := eg.resolve_module_and_func(node, func_name_str)
 
+	mut coroutine_handler_ptr := unsafe { &analyzer.CoroutineHandler(eg.state.coroutine_handler) }
+	if eg.state.coroutine_handler != unsafe { nil } && coroutine_handler_ptr.is_generator(func_name_str) {
+		eg.state.used_builtins['PyGenerator'] = true
+		gen_yield_type := coroutine_handler_ptr.generators[func_name_str] or { 'int' }
+
+		mut wrapper_params := []string{}
+		mut wrapper_args := []string{}
+		mut go_call_recv := ''
+		mut func_to_call_name := func_name_str
+
+		match node.func {
+			ast.Attribute {
+				attr_recv_expr := eg.visit(node.func.value)
+				attr_recv_type := eg.map_python_type(eg.guess_type(node.func.value), false)
+				wrapper_params << 'py_recv ${attr_recv_type}'
+				wrapper_args << attr_recv_expr
+				go_call_recv = 'py_recv.'
+				func_to_call_name = node.func.attr
+			}
+			else {}
+		}
+
+		for i, a in args {
+			a_type := if sig := call_sig { if i < sig.args.len { eg.map_python_type(sig.args[i], false) } else { "Any" } } else { "Any" }
+			wrapper_params << 'py_arg_${i} ${a_type}'
+			wrapper_args << a
+		}
+
+		mut go_args := []string{}
+		go_args << 'ch_out'
+		go_args << 'ch_in'
+		for i in 0..args.len { go_args << 'py_arg_${i}' }
+
+		return 'fn(${wrapper_params.join(", ")}) PyGenerator[${gen_yield_type}] {
+    ch_out := chan ${gen_yield_type}{cap: 0}
+    ch_in := chan PyGeneratorInput{cap: 0}
+    go ${go_call_recv}${func_to_call_name}(${go_args.join(", ")})
+    return PyGenerator[${gen_yield_type}]{out: ch_out, in_: ch_in}
+}(${wrapper_args.join(", ")})'
+	}
+
 	if func_name_str in ['get_type_hints', 'get_annotations'] {
 		return eg.handle_get_type_hints(node, args)
 	}

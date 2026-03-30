@@ -19,12 +19,12 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	}
 	is_method := struct_name.len > 0
 	mut annotations_data := map[string]string{}
+	mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
+	is_generator := if env.state.coroutine_handler != unsafe { nil } { coroutine_handler.is_generator(node.name) } else { false }
+	yield_type := if is_generator { coroutine_handler.get_yield_type(node) } else { 'int' }
+	if is_generator { env.state.used_builtins['PyGenerator'] = true }
 	
 	mut output := []string{}
-    mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
-    is_generator := if env.state.coroutine_handler != unsafe { nil } { coroutine_handler.is_generator(node.name) } else { false }
-    if is_generator { env.state.used_builtins["PyGenerator"] = true }
-    yield_type := if is_generator { coroutine_handler.get_yield_type(node) } else { "int" }
 	
 	// Decorators
 	// Decorators Analysis
@@ -241,7 +241,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		annotations_data[name] = a_type
 	}
 
-	mut ret_type := if is_generator { "PyGenerator[${yield_type}]" } else { "void" }
+	mut ret_type := 'void'
 	if ann := node.returns {
 		ret_type = env.map_annotation_fn(ann)
 	}
@@ -308,56 +308,35 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	
 	op_space := if is_operator { ' ' } else { '' }
 	if is_generator {
-        mut ch_out_name := coroutine_handler.get_temp_channel_name()
-        mut ch_in_name := coroutine_handler.get_temp_channel_name()
-        output << '${attr_pfx}${pub_pfx}fn ${receiver_str}${real_func_name}${op_space}${gen_s}(${args_str_list.join(", ")})${ret_suffix} {'
-        output << '    ${ch_out_name} := chan ${yield_type}{cap: 0}'
-        output << '    ${ch_in_name} := chan PyGeneratorInput{cap: 0}'
-        mut closure_args_list := args_names.clone()
-        mut closure_params_list := args_str_list.clone()
-        if receiver_name.len > 0 {
-            closure_args_list.insert(0, 'self')
-            closure_params_list.insert(0, 'self ${struct_name}')
-        }
-        closure_args_str := closure_args_list.join(', ')
-        closure_params_str := closure_params_list.join(', ')
-        output << '    go fn(ch_out chan ${yield_type}, ch_in chan PyGeneratorInput, ${closure_params_str}) {'
-        env.emit_fn(output.join('\\n'))
-        env.state.indent_level += 2
-        coroutine_handler.enter_generator('ch_out', 'ch_in')
-        env.push_scope_fn()
-        for stmt in node.body {
-            env.visit_stmt_fn(stmt)
-        }
-        env.pop_scope_fn()
-        coroutine_handler.exit_generator()
-        env.state.indent_level -= 2
-        env.emit_fn('        ch_out.close()')
-        env.emit_fn('    }(${ch_out_name}, ${ch_in_name}, ${closure_args_str})')
-        env.emit_fn('    return PyGenerator[${yield_type}]{out: ${ch_out_name}, in_: ${ch_in_name}}')
-        env.emit_fn('}')
-    } else {
-        output << '${attr_pfx}${pub_pfx}fn ${receiver_str}${real_func_name}${op_space}${gen_s}(${args_str_list.join(", ")})${ret_suffix} {'
-		for start_stmt in injected_start {
-			output << '    ${start_stmt}'
-		}
-		for end_stmt in injected_end {
-			output << '    ${end_stmt}'
-		}
+		args_str_list.insert(0, 'ch_out chan ${yield_type}')
+		args_str_list.insert(1, 'ch_in chan PyGeneratorInput')
+	}
+	output << '${attr_pfx}${pub_pfx}fn ${receiver_str}${real_func_name}${op_space}${gen_s}(${args_str_list.join(", ")})${ret_suffix} {'
+	for start_stmt in injected_start {
+		output << '    ${start_stmt}'
+	}
+	for end_stmt in injected_end {
+		output << '    ${end_stmt}'
+	}
 
-		env.emit_fn(output.join('\n'))
+	env.emit_fn(output.join('\n'))
 
-		env.state.indent_level++
-		env.push_scope_fn()
+	env.state.indent_level++
+	env.push_scope_fn()
+	if is_generator {
+		coroutine_handler.enter_generator('ch_out', 'ch_in')
+		env.emit_fn('    _ = <-ch_in')
+	}
 
-		for stmt in node.body {
-			env.visit_stmt_fn(stmt)
-		}
+	for stmt in node.body {
+		env.visit_stmt_fn(stmt)
+	}
 
-		env.pop_scope_fn()
-		env.state.indent_level--
-		env.emit_fn('}')
-    }
+	if is_generator { coroutine_handler.exit_generator() }
+	env.pop_scope_fn()
+	env.state.indent_level--
+	if is_generator { env.emit_fn('    ch_out.close()') }
+	env.emit_fn('}')
 
 	if cache_wrapper_needed {
 		cache_name := if is_method { '${struct_name.to_lower()}_${func_name}_cache' } else { '${func_name}_cache' }
