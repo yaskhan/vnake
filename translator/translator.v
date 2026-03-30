@@ -130,7 +130,6 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				else { t.state.imported_symbols[node.id] or { node.id } }
 			}
 			if node.id == 'list' || node.id == 'OrderedCollection' {
-				eprintln('MAP_ANNOTATION: id=${node.id} res=${res}')
 			}
 			return res
 		}

@@ -65,7 +65,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 		ast.UnaryOp {
 			return t.guess_expr_type(node.operand)
 		}
-		ast.Name { return t.get_type(node.id) }
+		ast.Name { res := t.get_type(node.id); return if res == 'Any' { 'int' } else { res } }
 		ast.Call {
 			if node.func is ast.Name {
 				fid := node.func.id
@@ -1243,7 +1243,6 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_aug_assign(node ast.AugAssign) {
 pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 	annotation_str := t.expr_to_type_string(node.annotation)
 	mut v_type := map_python_type_to_v(annotation_str)
-	eprintln('DEBUG VISIT_ANN_ASSIGN: ann=${annotation_str} v_type=${v_type}')
 	if annotation_str == 'LiteralString' || annotation_str == 'typing.LiteralString'
 		|| annotation_str == 'typing_extensions.LiteralString' {
 		v_type = 'string'
