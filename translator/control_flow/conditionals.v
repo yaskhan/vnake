@@ -222,7 +222,7 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 					}
 					
 					if remaining_type != '' {
-						eprintln('DEBUG NEGATIVE NARROWING: base=${base_type} test=${narrowed_type} narrowed=${remaining_type}')
+						 // eprintln('DEBUG NEGATIVE NARROWING: base=${base_type} test=${narrowed_type} narrowed=${remaining_type}')
 						narrowed_type = remaining_type
 						// Fall through to remapping logic below
 					} else {

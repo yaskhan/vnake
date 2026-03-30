@@ -186,15 +186,18 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 				field_type := env.map_annotation_fn(stmt.annotation)
 				raw_type := env.visit_expr_fn(stmt.annotation)
 				
-				if is_dataclass || is_typed_dict { d_field_order << field_name }
-	
 				is_class_var := raw_type.contains('ClassVar[') || raw_type.starts_with('ClassVar')
+				is_init_var := raw_type.contains('InitVar[') || raw_type.starts_with('InitVar')
 				is_readonly := raw_type.contains('ReadOnly[') || raw_type.starts_with('ReadOnly')
+
+				if (is_dataclass || is_typed_dict) && !is_class_var && !is_init_var { d_field_order << field_name }
 	
 				default_val := if v := stmt.value { env.visit_expr_fn(v) } else { '' }
 	
-				if is_class_var {
-					h.set_class_var(struct_name, field_name, field_type, if default_val.len > 0 { default_val } else { 'none' }, mut env)
+				if is_class_var || is_init_var {
+					if is_class_var {
+						h.set_class_var(struct_name, field_name, field_type, if default_val.len > 0 { default_val } else { 'none' }, mut env)
+					}
 				} else {
 					mut info := h.get_field_def_info(field_name, field_type, struct_name, default_val, orig_name, mut env)
 					info.is_readonly = is_readonly

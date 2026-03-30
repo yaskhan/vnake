@@ -280,7 +280,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		}
 
 		class_vars := env.state.class_vars[struct_name] or { []map[string]string{} }
-		if class_vars.len > 0 {
+		if class_vars.len > 0 && !is_dataclass {
 			meta_struct_name := '${struct_name}Meta'
 			mut meta_parts := []string{}
 			meta_parts << 'pub struct ${meta_struct_name} {'
@@ -310,7 +310,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 				
 				is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
 				for sig in sigs {
-					eprintln('DEBUG CLASS SIG: ${sig}')
+					 // eprintln('DEBUG CLASS SIG: ${sig}')
 					mut type_suffix_parts := []string{}
 					mut factory_args := []string{}
 					mut factory_assignments := []string{}

@@ -43,7 +43,7 @@ pub fn generate_overload_variants(
 			if arg_name in ['self', 'cls'] { continue }
 			
 			mut clean_type := if arg_type in state.type_vars { 'generic' } else { arg_type }
-			clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[', '_').replace(']', '').replace('.', '_')
+			clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('Iterable[T]', 'arr_generic').replace('Iterable', 'arr_generic').replace('[', '_').replace(']', '').replace('.', '_')
 			type_suffix_parts << clean_type
 			args_str_list << '${sanitize_fn(arg_name, false)} ${arg_type}'
 		}
@@ -75,6 +75,12 @@ pub fn generate_overload_variants(
 		for py_name in func_generics {
 			v_gens_to_declare << combined_gen_map[py_name] or { py_name }
 		}
+		if is_method && (dec_info.is_classmethod || dec_info.is_staticmethod) {
+			for cg in state.current_class_generics {
+				v_gen := state.current_class_generic_map[cg] or { cg }
+				if v_gen !in v_gens_to_declare { v_gens_to_declare << v_gen }
+			}
+		}
 		
 		gen_s := base.get_generics_with_variance_str(v_gens_to_declare, combined_gen_map, state.generic_variance, state.generic_defaults)
 
@@ -99,7 +105,14 @@ pub fn generate_overload_variants(
 
 		is_operator := node.name in base.op_methods_to_symbols
 		pub_pfx_final := if is_operator { '' } else { pub_pfx }
-		mut ret_suffix := if sig['return'] != 'void' && sig['return'] != 'none' { ' ${sig["return"]}' } else { '' }
+		
+		mut sig_ret := sig['return']
+		if (is_operator || dec_info.is_classmethod || dec_info.is_staticmethod) && sig_ret.len > 0 && sig_ret[0].is_capital() && sig_ret !in ['Any', 'LiteralString', 'bool', 'int', 'f64'] {
+			if !sig_ret.starts_with('&') {
+				sig_ret = '&' + sig_ret
+			}
+		}
+		mut ret_suffix := if sig_ret != 'void' && sig_ret != 'none' { ' ${sig_ret}' } else { '' }
 		
 		mut receiver_parts := receiver_str.trim('() ').split(' ')
 		if receiver_parts.len == 2 && (node.name == '__init__' || node.name == '__setattr__') {

@@ -202,6 +202,46 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	}
 
 	if target is ast.List || target is ast.Tuple {
+		mut elements := []ast.Expression{}
+		if target is ast.List { elements = target.elements.clone() }
+		else if target is ast.Tuple { elements = target.elements.clone() }
+		
+		mut all_simple := true
+		for elt in elements {
+			if elt is ast.Starred || elt is ast.List || elt is ast.Tuple {
+				all_simple = false
+				break
+			}
+		}
+		
+		mut val_elements := []ast.Expression{}
+		if node.value is ast.List { it_list := node.value
+			val_elements = it_list.elements.clone() }
+		else if node.value is ast.Tuple { it_tuple := node.value
+			val_elements = it_tuple.elements.clone() }
+		
+		if all_simple && val_elements.len == elements.len {
+			mut lhs_parts := []string{}
+			mut rhs_parts := []string{}
+			for i in 0 .. elements.len {
+				lhs_parts << eg.visit(elements[i])
+				rhs_parts << eg.visit(val_elements[i])
+			}
+			
+			mut is_decl := false
+			for p in lhs_parts {
+				if !t.is_declared_local(p) { is_decl = true; break }
+			}
+			
+			if is_decl {
+				t.emit_indented('${lhs_parts.join(", ")} := ${rhs_parts.join(", ")}')
+				for p in lhs_parts { t.declare_local(p) }
+			} else {
+				t.emit_indented('${lhs_parts.join(", ")} = ${rhs_parts.join(", ")}')
+			}
+			return
+		}
+
 		rhs = eg.visit(node.value)
 		t.visit_destructuring(target, rhs, 'unknown')
 		return
@@ -258,14 +298,14 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			// High-fidelity type alias resolution
 			mut inferred_found := ''
 			if inf1 := t.analyzer.get_type(target.id) {
-				eprintln('DEBUG ALIAS RESOLVE1: id=${target.id} inf1=${inf1}')
+				 // eprintln('DEBUG ALIAS RESOLVE1: id=${target.id} inf1=${inf1}')
 				inferred_found = inf1
 			}
 			
 			if inferred_found == '' || inferred_found == 'int' || inferred_found == 'Any' {
 				qual := t.analyzer.get_qualified_name(target.id)
 				if inf2 := t.analyzer.get_type(qual) {
-					eprintln('DEBUG ALIAS RESOLVE2: id=${target.id} qual=${qual} inf2=${inf2}')
+					 // eprintln('DEBUG ALIAS RESOLVE2: id=${target.id} qual=${qual} inf2=${inf2}')
 					if inf2 != 'int' && inf2 != 'Any' {
 						inferred_found = inf2
 					}
@@ -299,7 +339,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		mut lhs_t := t.guess_type(target)
 		target_expr := ast.Expression(target)
 		if target_expr is ast.Name {
-			eprintln('DEBUG RAW LOOKUP: id=${target_expr.id} in_raw=${target_expr.id in t.analyzer.raw_type_map} raw=${t.analyzer.raw_type_map[target_expr.id]}')
 			if target_expr.id in t.analyzer.raw_type_map {
 				lhs_t = t.analyzer.raw_type_map[target_expr.id]
 			}
@@ -353,8 +392,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			}
 
-			is_opt := v_inferred.starts_with('?') || v_inferred == 'Any'
-			if target.id in t.mutable_locals || lhs in t.mutable_locals || is_opt {
+			is_opt_none := (v_inferred.starts_with('?') || v_inferred == 'Any') && (rhs_text.contains('none') || rhs_text.contains('NoneType'))
+			if target.id in t.mutable_locals || lhs in t.mutable_locals || is_opt_none {
 				t.emit_indented('mut ${lhs} := ${rhs_text}')
 			} else {
 				t.emit_indented('${lhs} := ${rhs_text}')
