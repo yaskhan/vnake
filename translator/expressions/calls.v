@@ -93,7 +93,7 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 		return overload
 	}
 
-	if result := eg.handle_object_method_call(node, node.func, func_name_str, args) {
+	if result := eg.handle_object_method_call(node, node.func, func_name_str, args, keyword_args) {
 		return result
 	}
 
@@ -255,7 +255,7 @@ pub fn (mut eg ExprGen) handle_get_type_hints(node ast.Call, args []string) stri
 	if args.len > 0 {
 		return 'py_get_type_hints_generic(${args[0]})'
 	}
-	return 'map[string]Any{}'
+	return '{}'
 }
 
 pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, func_name string, func_name_str string, args []string, call_sig ?analyzer.CallSignature, keyword_args map[string]string) ?string {
@@ -641,7 +641,35 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	}
 
 	if func_name_str == 'list' && args.len == 0 { return '[]Any{}' }
-	if func_name_str == 'dict' && args.len == 0 { return 'map[string]Any{}' }
+
+	if func_name_str == 'dict' {
+		if args.len == 0 && keyword_args.len == 0 { return '{}' }
+		if args.len == 0 && keyword_args.len > 0 {
+			mut items := []string{}
+			for k, v in keyword_args { items << "'${k}': ${v}" }
+			return '{' + items.join(', ') + '}'
+		}
+		if args.len == 1 && keyword_args.len == 0 {
+			arg_type := eg.guess_type(node.args[0])
+			if arg_type.starts_with('map[') { return args[0] }
+			eg.state.used_builtins['py_dict_from_pairs'] = true
+			return 'py_dict_from_pairs[map[string]Any](${args[0]})'
+		}
+		if args.len >= 1 || keyword_args.len > 0 {
+			eg.state.used_builtins['py_dict_update'] = true
+			mut base_map := if args.len > 0 { 'mut map[string]Any(${args[0]}).clone()' } else { '{}' }
+			mut items := []string{}
+			for k, v in keyword_args { items << "'${k}': ${v}" }
+			return 'py_dict_update(${base_map}, {${items.join(', ')}})'
+		}
+	}
+
+	if func_name_str in ['dict.fromkeys', 'collections.defaultdict.fromkeys'] {
+		eg.state.used_builtins['py_dict_fromkeys'] = true
+		mut def_val := if args.len > 1 { args[1] } else { 'none' }
+		return 'py_dict_fromkeys[map[string]Any](${args[0]}, ${def_val})'
+	}
+
 
 	if func_name_str == 'Counter' || (module_name == 'collections' && func_name == 'Counter') {
 		if args.len == 0 { return 'map[string]int{}' }
@@ -864,7 +892,7 @@ pub fn (mut eg ExprGen) handle_fallback_call(node ast.Call, func_name_str string
 	return '${func_name}(${final_args.join(', ')})'
 }
 
-pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.Expression, func_name_str string, args []string) ?string {
+pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.Expression, func_name_str string, args []string, keyword_args map[string]string) ?string {
 	if func_node !is ast.Attribute { return none }
 	attr := (func_node as ast.Attribute).attr
 	receiver_expr := (func_node as ast.Attribute).value
@@ -916,16 +944,31 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	}
 	obj_type := eg.map_python_type(obj_type_raw, false)
 	mut recv := "${obj}"
+	if attr == 'pop' {
+		if args.len == 0 { return '${obj}.pop()' }
+		// Heuristic: if first arg is a string, it's likely a dict pop
+		arg0 := node.args[0]
+		is_dict_pop := (obj_type.contains('map') || obj_type == 'Any' || obj_type == 'unknown') &&
+			((arg0 is ast.Constant && (arg0.token.typ == .string_tok || arg0.token.typ == .fstring_tok)) || eg.guess_type(arg0) == 'string')
+
+		if is_dict_pop {
+			eg.state.used_builtins['py_dict_pop'] = true
+			mut pop_args := args.clone()
+			if pop_args.len == 1 { pop_args << 'none' }
+			return 'py_dict_pop(mut ${obj}, ${pop_args.join(", ")})'
+		}
+		if obj_type.starts_with('[]') || obj_type == 'Any' || obj_type == 'unknown' {
+			eg.state.used_builtins['py_list_pop_at'] = true
+			return 'py_list_pop_at(mut ${obj}, ${args[0]})'
+		}
+	}
+
 
 	// List methods
 	if obj_type.starts_with('[]') || obj_type == 'Any' {
 		if attr == 'append' && args.len == 1 { return '${obj} << ${args[0]}' }
 		if attr == 'extend' && args.len == 1 { return '${obj} << ${args[0]}' }
-		if attr == 'pop' {
-			if args.len == 0 { return '${obj}.pop()' }
-			eg.state.used_builtins['py_list_pop_at'] = true
-			return 'py_list_pop_at(mut ${obj}, ${args[0]})'
-		}
+
 		if attr == 'remove' && args.len == 1 {
 			eg.state.used_builtins['py_list_remove'] = true
 			return 'py_list_remove(mut ${obj}, ${args[0]})'
@@ -935,6 +978,34 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 			return '${obj}.sort()'
 		}
 	}
+	// Map methods
+	if obj_type.contains('map') || obj_type == 'Any' || obj_type == 'unknown' {
+		if attr == 'update' {
+			eg.state.used_builtins['py_dict_update'] = true
+			mut items := []string{}
+			for k, v in keyword_args { items << "'${k}': ${v}" }
+			if args.len > 0 {
+				if keyword_args.len > 0 {
+					return 'py_dict_update(mut ${obj}, py_dict_update(map[string]Any(${args[0]}).clone(), {${items.join(', ')}}))'
+				}
+				return 'py_dict_update(mut ${obj}, ${args[0]})'
+			}
+			return 'py_dict_update(mut ${obj}, {${items.join(', ')}})'
+		}
+
+		if attr == 'setdefault' && args.len >= 1 {
+			eg.state.used_builtins['py_dict_setdefault'] = true
+			mut sd_args := args.clone()
+			if sd_args.len == 1 { sd_args << 'none' }
+			return 'py_dict_setdefault(mut ${obj}, ${sd_args.join(', ')})'
+		}
+		if attr == 'get' && args.len >= 1 {
+			mut get_args := args.clone()
+			if get_args.len == 1 { get_args << 'none' }
+			return '${obj}.get(${get_args.join(', ')})'
+		}
+	}
+
 
 	// String methods
 	mut current_type := obj_type
