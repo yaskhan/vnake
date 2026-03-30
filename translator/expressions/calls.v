@@ -349,6 +349,24 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	
 	if func_name_str in ['any', 'all', 'sum'] || (module_name == 'builtins' && func_name in ['any', 'all', 'sum']) {
 		b_name := if func_name_str in ['any', 'all', 'sum'] { func_name_str } else { func_name }
+		if b_name in ['any', 'all'] && args.len == 1 && node.args[0] is ast.GeneratorExp {
+			gen := node.args[0] as ast.GeneratorExp
+			if gen.generators.len == 1 {
+				comp_gen := gen.generators[0]
+				target_node := comp_gen.target
+				if target_node is ast.Name {
+					target := target_node
+					iter_expr := eg.visit(comp_gen.iter)
+
+					eg.state.name_remap[target.id] = 'it'
+					elt := eg.visit(gen.elt)
+					eg.state.name_remap.delete(target.id)
+
+					eg.state.used_builtins['py_${b_name}'] = true
+					return 'py_${b_name}(${iter_expr}.map(${elt}))'
+				}
+			}
+		}
 		eg.state.used_builtins['py_${b_name}'] = true
 		return 'py_${b_name}(${args.join(', ')})'
 	}
@@ -631,6 +649,18 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		return 'py_any(${args[0]})'
 	}
 
+	if func_name_str == 'iter' && args.len == 1 {
+		eg.state.used_builtins['py_iter'] = true
+		return 'py_iter(${args[0]})'
+	}
+
+	if func_name_str == 'next' && args.len >= 1 {
+		if args.len == 2 {
+			return '(${args[0]}.next() or { ${args[1]} })'
+		}
+		return '(${args[0]}.next() or { panic("StopIteration") })'
+	}
+
 	if func_name_str == 'len' && args.len == 1 {
 		return '${args[0]}.len'
 	}
@@ -648,8 +678,13 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		}
 	}
 
-	if func_name_str == 'round' && args.len == 1 {
-		return 'int(math.round(${args[0]}))'
+	if func_name_str == 'round' {
+		if args.len == 1 {
+			return 'int(math.round(${args[0]}))'
+		} else if args.len == 2 {
+			eg.state.used_builtins['py_round'] = true
+			return 'py_round(f64(${args[0]}), ${args[1]})'
+		}
 	}
 
 	if func_name_str == 'sorted' && args.len >= 1 {
@@ -658,6 +693,15 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	}
 
 	if func_name_str == 'isinstance' && args.len >= 2 {
+		arg1 := node.args[1]
+		if arg1 is ast.Tuple {
+			mut parts := []string{}
+			for elt in arg1.elements {
+				v_elt_type := eg.map_python_type(eg.visit(elt), false)
+				parts << '${args[0]} is ${v_elt_type}'
+			}
+			return '(${parts.join(" || ")})'
+		}
 		v_type := eg.map_python_type(args[1], false)
 		return '${args[0]} is ${v_type}'
 	}
