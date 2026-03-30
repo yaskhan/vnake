@@ -146,7 +146,17 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 					if !f_type.starts_with('?') && f_type != 'Any' { f_type = '?${f_type}' }
 				}
 			}
-			fields << h.get_field_def_info(field_name, map_python_type(f_type, struct_name, false, mut env), struct_name, '', orig_name, mut env)
+
+				if f_type == 'Any' || f_type == 'map[string]Any' || f_type == '[]Any' {
+					if inf := env.analyzer.type_map['self.' + orig_name] {
+					if inf != 'Any' && inf != '' { f_type = inf }
+				} else if inf := env.analyzer.type_map[orig_name] {
+						if inf != 'Any' && inf != '' { f_type = inf }
+					} else if inf_full := env.analyzer.type_map['.'] {
+						if inf_full != 'Any' && inf_full != '' { f_type = inf_full }
+					}
+				}
+								fields << h.get_field_def_info(field_name, map_python_type(f_type, struct_name, false, mut env), struct_name, '', orig_name, mut env)
 		}
 	} else if target is ast.Tuple {
 		for elt in target.elements { h.walk_init_expr(elt, self_name, none, mut fields, mut added_fields, struct_name, arg_type_map, mut env) }

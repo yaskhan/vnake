@@ -108,7 +108,9 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 			if content.starts_with("'") || content.starts_with('"') {
 				content = content[1..content.len - 1]
 			}
-			if content.trim_space() == 'map[string]Node' {
+			// If it's a type hint string (e.g. 'map[string]Node') we don't emit it as comment
+			trimmed := content.trim_space()
+			if (trimmed.starts_with('map[') || trimmed.starts_with('[]')) && trimmed.contains(']') {
 				return
 			}
 			for line in content.split_into_lines() {
