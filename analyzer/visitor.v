@@ -1256,15 +1256,20 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 	}
 
 	mut target_name := ''
+	mut is_self_attr := false
 	if node.target is ast.Name {
 		target_name = node.target.id
 	} else if node.target is ast.Attribute {
 		if node.target.value is ast.Name && node.target.value.id == 'self' {
 			target_name = node.target.attr
+			is_self_attr = true
 		}
 	}
 
 	if target_name.len > 0 {
+		if is_self_attr {
+			t.store_type('self.${target_name}', v_type)
+		}
 		if t.scope_names.len > 0 {
 			curr_scope := t.scope_names[t.scope_names.len - 1]
 			// If we are directly in a class scope (capitalized), store as class field
