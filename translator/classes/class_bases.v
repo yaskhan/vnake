@@ -132,6 +132,11 @@ pub fn (h ClassBasesHandler) is_descendant_of(cls_name string, target string, en
 }
 
 pub fn (h ClassBasesHandler) is_abstract_base_class(node ast.ClassDef, struct_name string, env &ClassVisitEnv) bool {
+	if struct_name in env.state.abstract_methods {
+		if env.state.abstract_methods[struct_name].len > 0 {
+			return true
+		}
+	}
 	for b in node.bases {
 		name := env.visit_expr_fn(b)
 		if name in ['ABC', 'abc.ABC'] { return true }
