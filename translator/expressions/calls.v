@@ -214,13 +214,24 @@ pub fn (mut eg ExprGen) handle_get_type_hints(node ast.Call, args []string) stri
 	if args.len > 0 {
 		return 'py_get_type_hints_generic(${args[0]})'
 	}
-	return 'map[string]Any{}'
+	return "map[string]Any{}"
 }
 
 pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, func_name string, func_name_str string, args []string, call_sig ?analyzer.CallSignature, keyword_args map[string]string) ?string {
-	if module_name == 'six' {
+	if func_name_str == "cls" || (eg.state.current_class.len > 0 && func_name_str == eg.state.current_class.replace("_Impl", "")) {
+		if eg.state.current_class.len > 0 {
+			struct_name := eg.state.current_class.replace("_Impl", "")
+			mut v_gens := []string{}
+			for py_name in eg.state.current_class_generics {
+				v_gens << eg.state.current_class_generic_map[py_name] or { py_name }
+			}
+			gen_s := if v_gens.len > 0 { "[${v_gens.join(", ")}]" } else { "" }
+			return "&${struct_name}${gen_s}{}"
+		}
+	}
+	if module_name == "six" {
 		return match func_name {
-			'PY2' { 'false' }
+			"PY2" { "false" }
 			'PY3' { 'true' }
 			'string_types' { '[]string' }
 			'text_type' { 'string' }

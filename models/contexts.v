@@ -1,7 +1,7 @@
 module models
 
 pub struct TypeGuessingContext {
-pub:
+pub mut:
 	type_map           map[string]string
 	location_map       map[string]string
 	known_v_types      map[string]string

@@ -272,7 +272,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		if cache_wrapper_needed { '${func_name}__impl' } else { func_name }
 	}
 	mut final_ret_type := ret_type
-	if is_operator && final_ret_type.len > 0 && final_ret_type[0].is_capital() && final_ret_type !in ['Any', 'LiteralString', 'bool', 'int', 'f64'] {
+	if (is_operator || (is_method && (is_static || dec_info.is_classmethod))) && final_ret_type.len > 0 && final_ret_type[0].is_capital() && final_ret_type !in ["Any", "LiteralString", "bool", "int", "f64", "NoneType"] && !final_ret_type.starts_with("SumType_") {
 		if !final_ret_type.starts_with('&') {
 			final_ret_type = '&' + final_ret_type
 		}

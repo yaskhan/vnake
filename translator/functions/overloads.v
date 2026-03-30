@@ -42,8 +42,8 @@ pub fn generate_overload_variants(
 			if arg_name == 'return' { continue }
 			if arg_name in ['self', 'cls'] { continue }
 			
-			mut clean_type := if arg_type in state.type_vars { 'generic' } else { arg_type }
-			clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[', '_').replace(']', '').replace('.', '_')
+			mut clean_type := if arg_type.contains("Iterable") { "arr_generic" } else if arg_type in state.type_vars || arg_type.contains("[T]") { "generic" } else { arg_type }
+			clean_type = clean_type.replace("?", "opt_").replace("[]", "arr_").replace("[", "_").replace("]", "").replace(".", "_")
 			type_suffix_parts << clean_type
 			args_str_list << '${sanitize_fn(arg_name, false)} ${arg_type}'
 		}
@@ -75,6 +75,12 @@ pub fn generate_overload_variants(
 		for py_name in func_generics {
 			v_gens_to_declare << combined_gen_map[py_name] or { py_name }
 		}
+		if is_method && (dec_info.is_staticmethod || dec_info.is_classmethod) {
+			for cg in state.current_class_generics {
+				v_cg := state.current_class_generic_map[cg] or { cg }
+				if v_cg !in v_gens_to_declare { v_gens_to_declare << v_cg }
+			}
+		}
 		
 		gen_s := base.get_generics_with_variance_str(v_gens_to_declare, combined_gen_map, state.generic_variance, state.generic_defaults)
 
@@ -98,13 +104,19 @@ pub fn generate_overload_variants(
 		}
 
 		is_operator := node.name in base.op_methods_to_symbols
-		pub_pfx_final := if is_operator { '' } else { pub_pfx }
-		mut ret_suffix := if sig['return'] != 'void' && sig['return'] != 'none' { ' ${sig["return"]}' } else { '' }
+		mut final_ret := sig["return"]
+		if final_ret.len > 0 && final_ret[0].is_capital() && final_ret !in ["Any", "LiteralString", "bool", "int", "f64", "NoneType"] && !final_ret.starts_with("SumType_") {
+			if !final_ret.starts_with("&") && !final_ret.starts_with("[]") && !final_ret.starts_with("map[") && !final_ret.starts_with("?") {
+				final_ret = "&" + final_ret
+			}
+		}
+		mut ret_suffix := if final_ret != "void" && final_ret != "none" && final_ret != "" { " ${final_ret}" } else { "" }
 		
 		mut receiver_parts := receiver_str.trim('() ').split(' ')
 		if receiver_parts.len == 2 && (node.name == '__init__' || node.name == '__setattr__') {
 			receiver_str = '(mut ${receiver_parts[0]} ${receiver_parts[1]}) '
 		}
+		pub_pfx_final := if is_operator { "" } else { pub_pfx }
 
 		spacing := if is_operator { ' ' } else { '' }
 		emit_fn('${indent_fn()}${deprecated_attr}${pub_pfx_final}fn ${receiver_str}${func_name}${gen_s}${spacing}(${args_str_list.join(", ")})${ret_suffix} {')
