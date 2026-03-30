@@ -136,7 +136,11 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			added_fields[field_name] = true
 
 			mut f_type := 'Any'
-			if val := value_expr {
+			if t1 := env.analyzer.type_map['${self_name}.${orig_name}'] {
+				f_type = t1
+			} else if t2 := env.analyzer.type_map[orig_name] {
+				f_type = t2
+			} else if val := value_expr {
 				if val is ast.Name && val.id in arg_type_map {
 					f_type = arg_type_map[val.id]
 				} else {
