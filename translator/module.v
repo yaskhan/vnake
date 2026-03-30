@@ -929,6 +929,16 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
+
+	if m.state.used_builtins['py_dict_items'] {
+		m.emitter.add_helper_function('struct PyDictItem[K, V] { key K; value V }')
+		m.emitter.add_helper_function('fn py_dict_items[K, V](d map[K]V) []PyDictItem[K, V] {
+    mut res := []PyDictItem[K, V]{cap: d.len}
+    for k, v in d { res << PyDictItem[K, V]{k, v} }
+    return res
+}')
+	}
+
 	if m.state.used_builtins['py_dict_setdefault'] {
 		m.emitter.add_helper_function('fn py_dict_setdefault[K, V](mut d map[K]V, key K, default V) V {
     if key in d { return d[key] }
@@ -1430,6 +1440,16 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
     }
     return res
 }")
+	}
+
+
+	if m.state.used_builtins['py_dict_items'] {
+		m.emitter.add_helper_function('struct PyDictItem[K, V] { key K; value V }')
+		m.emitter.add_helper_function('fn py_dict_items[K, V](d map[K]V) []PyDictItem[K, V] {
+    mut res := []PyDictItem[K, V]{cap: d.len}
+    for k, v in d { res << PyDictItem[K, V]{k, v} }
+    return res
+}')
 	}
 
 	if m.state.used_builtins['py_dict_setdefault'] {

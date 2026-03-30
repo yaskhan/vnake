@@ -119,6 +119,8 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 	mut is_range := false
 	mut is_enumerate := false
 	mut is_dict_items := false
+	mut is_dict_keys := false
+	mut is_dict_values := false
 	if node.iter is ast.Call {
 		call := node.iter
 		if call.func is ast.Name {
@@ -140,6 +142,12 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			}
 			if call.func.attr == 'items' {
 				is_dict_items = true
+			}
+			if call.func.attr == 'keys' {
+				is_dict_keys = true
+			}
+			if call.func.attr == 'values' {
+				is_dict_values = true
 			}
 		}
 	}
@@ -210,6 +218,15 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 		iter_expr = m.visit_expr(node.iter.args[0])
 	}
 
+	if (is_dict_items || is_dict_keys || is_dict_values) {
+		it := node.iter
+		if it is ast.Call {
+			if it.func is ast.Attribute {
+				iter_expr = m.visit_expr(it.func.value)
+			}
+		}
+	}
+
 	if node.target is ast.Tuple {
 		if target.starts_with('[') && target.ends_with(']') && !is_enumerate && !is_dict_items {
 			val_name := 'py_val_${m.env.state.unique_id_counter}'
@@ -262,6 +279,9 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			m.env.state.indent_level++
 			m.emit('${target} := ${target}_u8.ascii_str()')
 		}
+	} else if is_dict_values {
+		m.emit('for _, ${target} in ${iter_expr} {')
+		m.env.state.indent_level++
 	} else {
 		m.emit('for ${target} in ${iter_expr} {')
 		m.env.state.indent_level++

@@ -1004,6 +1004,22 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 			if get_args.len == 1 { get_args << 'none' }
 			return '${obj}.get(${get_args.join(', ')})'
 		}
+		if attr == 'keys' {
+			return '${obj}.keys()'
+		}
+		if attr == 'values' {
+			return '${obj}.values()'
+		}
+		if attr == 'items' {
+			eg.state.used_builtins['py_dict_items'] = true
+			return 'py_dict_items(${obj})'
+		}
+		if attr == 'clear' {
+			return '${obj}.clear()'
+		}
+		if attr == 'copy' {
+			return '${obj}.clone()'
+		}
 	}
 
 
