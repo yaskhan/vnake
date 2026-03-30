@@ -457,27 +457,35 @@ pub fn (mut eg ExprGen) visit_formatted_value(node ast.FormattedValue) string {
 
 pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	mut params := []string{}
+	mut param_types := map[string]string{}
 	for arg in node.args.posonlyargs {
-		params << '${arg.arg} ${eg.lambda_param_type(arg.annotation)}'
+		typ := eg.lambda_param_type(arg.annotation)
+		params << "${arg.arg} ${typ}"
+		param_types[arg.arg] = typ
 	}
 	for arg in node.args.args {
-		params << '${arg.arg} ${eg.lambda_param_type(arg.annotation)}'
+		typ := eg.lambda_param_type(arg.annotation)
+		params << "${arg.arg} ${typ}"
+		param_types[arg.arg] = typ
 	}
 	for arg in node.args.kwonlyargs {
-		params << '${arg.arg} ${eg.lambda_param_type(arg.annotation)}'
+		typ := eg.lambda_param_type(arg.annotation)
+		params << "${arg.arg} ${typ}"
+		param_types[arg.arg] = typ
 	}
 	if va := node.args.vararg {
-		params << '${va.arg} []Any'
+		params << "${va.arg} []Any"
+		param_types[va.arg] = "[]Any"
 	}
-	ret_type := eg.lambda_return_type(node.body)
+	ret_type := eg.lambda_return_type(node.body, param_types)
 	mut val := eg.visit(node.body)
 	args_str := params
-	if ret_type in ['none', 'void', 'None'] {
+	if ret_type in ["none", "void", "None"] {
 		if val == "none" { val = "" }
 		body_s := if val.len > 0 { " ${val} " } else { "" }
-		return 'fn (${args_str.join(", ")}) {${body_s}}'
+		return "fn (${args_str.join(', ')}) {${body_s}}"
 	}
-	return 'fn (${args_str.join(", ")}) ${ret_type} { return ${val} }'
+	return "fn (${args_str.join(', ')}) ${ret_type} { return ${val} }"
 }
 
 fn (mut eg ExprGen) lambda_param_type(annotation ?ast.Expression) string {
@@ -496,9 +504,13 @@ fn (mut eg ExprGen) lambda_param_type(annotation ?ast.Expression) string {
 	return 'int'
 }
 
-fn (eg &ExprGen) lambda_return_type(body ast.Expression) string {
-	ret_type := eg.guess_type(body)
-	return if ret_type in ['Any', 'void', 'unknown'] { 'Any' } else { ret_type }
+fn (eg &ExprGen) lambda_return_type(body ast.Expression, param_types map[string]string) string {
+	mut ctx := eg.type_ctx()
+	for k, v in param_types {
+		ctx.type_map[k] = v
+	}
+	ret_type := base.guess_type(body, ctx, true)
+	return if ret_type in ["Any", "void", "unknown"] { "Any" } else { ret_type }
 }
 
 pub fn (mut eg ExprGen) visit_await(node ast.Await) string {

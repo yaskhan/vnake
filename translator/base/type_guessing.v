@@ -430,20 +430,27 @@ fn guess_type_dictcomp(node ast.DictComp, ctx TypeGuessingContext) string {
 
 fn guess_type_lambda(node ast.Lambda, ctx TypeGuessingContext) string {
 	mut param_types := []string{}
+	mut local_ctx := ctx
 	for arg in node.args.posonlyargs {
-		param_types << (ctx.type_map[arg.arg] or { 'int' })
+		typ := ctx.type_map[arg.arg] or { "int" }
+		param_types << typ
+		local_ctx.type_map[arg.arg] = typ
 	}
 	for arg in node.args.args {
-		param_types << (ctx.type_map[arg.arg] or { 'int' })
+		typ := ctx.type_map[arg.arg] or { "int" }
+		param_types << typ
+		local_ctx.type_map[arg.arg] = typ
 	}
 	for arg in node.args.kwonlyargs {
-		param_types << (ctx.type_map[arg.arg] or { 'int' })
+		typ := ctx.type_map[arg.arg] or { "int" }
+		param_types << typ
+		local_ctx.type_map[arg.arg] = typ
 	}
-	mut ret_type := guess_type(node.body, ctx, true)
-	if ret_type in ['void', 'Any', 'unknown'] {
-		ret_type = 'Any'
+	mut ret_type := guess_type(node.body, local_ctx, true)
+	if ret_type in ["void", "Any", "unknown"] {
+		ret_type = "Any"
 	}
-	return 'fn(${param_types.join(', ')}) ${ret_type}'
+	return "fn(${param_types.join(', ')}) ${ret_type}"
 }
 
 pub fn is_literal_string_expr(node ast.Expression, ctx TypeGuessingContext) bool {
