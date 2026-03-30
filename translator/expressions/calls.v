@@ -299,6 +299,30 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		eg.state.used_builtins['py_urlparse'] = true
 		return 'py_urlparse(${args.join(', ')})'
 	}
+
+	if module_name == 'itertools' {
+		if func_name == 'count' {
+			eg.state.used_builtins['py_count'] = true
+			mut count_args := args.clone()
+			if count_args.len == 0 { count_args << '0' }
+			if count_args.len == 1 { count_args << '1' }
+			return 'py_count(${count_args.join(', ')})'
+		}
+		if func_name == 'repeat' {
+			eg.state.used_builtins['py_repeat'] = true
+			mut repeat_args := args.clone()
+			if repeat_args.len == 1 { repeat_args << '-1' }
+			return 'py_repeat(${repeat_args.join(', ')})'
+		}
+		if func_name == 'cycle' {
+			eg.state.used_builtins['py_cycle'] = true
+			return 'py_cycle(${args.join(', ')})'
+		}
+		if func_name == 'chain' {
+			eg.state.used_builtins['py_chain'] = true
+			return 'py_chain(${args.join(', ')})'
+		}
+	}
 	if func_name_str in ['bytes', 'bytearray'] {
 		if args.len > 0 {
 			if args[0].starts_with("'") || args[0].starts_with('"') {
