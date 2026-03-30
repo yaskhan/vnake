@@ -519,7 +519,7 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 		|| m.state.used_builtins['py_set_difference'] || m.state.used_builtins['py_set_xor']
 		|| m.state.used_builtins['py_set_subset'] || m.state.used_builtins['py_set_strict_subset']
 		|| m.state.used_builtins['py_set_superset'] || m.state.used_builtins['py_set_strict_superset']
-		|| m.state.used_builtins['py_set_from_list'] || m.state.used_builtins['py_set_from_iter'] {
+		|| m.state.used_builtins['py_set_from_list'] || m.state.used_builtins['py_set_from_iter'] || m.state.used_builtins['py_set_from_array'] {
 		m.emitter.add_helper_import('datatypes')
 		if m.state.used_builtins['py_set_union'] {
 			m.emitter.add_helper_function('fn py_set_union[K](a datatypes.Set[K], b datatypes.Set[K]) datatypes.Set[K] {
@@ -532,6 +532,13 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 			m.emitter.add_helper_function('fn py_set_intersection[K](a datatypes.Set[K], b datatypes.Set[K]) datatypes.Set[K] {
     mut res := datatypes.Set[K]{}
     for k, _ in a.elements { if k in b.elements { res.add(k) } }
+    return res
+}')
+		}
+		if m.state.used_builtins['py_set_from_array'] {
+			m.emitter.add_helper_function('fn py_set_from_array[K](arr []K) datatypes.Set[K] {
+    mut res := datatypes.Set[K]{}
+    for x in arr { res.add(x) }
     return res
 }')
 		}
@@ -969,6 +976,13 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
     for k, _ in a.elements { if k in b.elements { res.add(k) } }
     return res
 }')
+		if m.state.used_builtins['py_set_from_array'] {
+			m.emitter.add_helper_function('fn py_set_from_array[K](arr []K) datatypes.Set[K] {
+    mut res := datatypes.Set[K]{}
+    for x in arr { res.add(x) }
+    return res
+}')
+		}
 	}
 
 	if m.state.used_builtins['py_bool'] {
