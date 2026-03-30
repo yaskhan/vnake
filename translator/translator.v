@@ -338,6 +338,7 @@ fn (t &Translator) annotation_raw_name(node ast.Expression) string {
 
 pub fn (mut t Translator) translate(source string, filename string) string {
 	t.state = base.new_translator_state()
+	t.state.coroutine_handler = &t.coroutine_handler
 	t.state.mapper = stdlib_map.new_stdlib_mapper()
 	t.state.current_file_name = filename
 	t.analyzer = analyzer.new_analyzer(map[string]string{})
@@ -355,6 +356,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	
 	// Pre-analyze to fill type map for aliases
 	t.analyzer.analyze(module_node)
+	t.coroutine_handler.scan_module(module_node)
 	// Second pass to propagate inferences back to aliases
 	t.analyzer.analyze(module_node)
 
