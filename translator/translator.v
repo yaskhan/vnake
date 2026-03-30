@@ -1,6 +1,5 @@
 module translator
 
-// VERIFY: 12345
 import analyzer
 import ast
 import base
@@ -8,8 +7,6 @@ import expressions
 import models
 import classes
 import functions
-import stdlib_map
-import control_flow
 
 pub struct Translator {
 pub mut:
@@ -20,47 +17,32 @@ pub mut:
 	current_function_name string
 	classes_module   classes.ClassesModule
 	functions_module functions.FunctionsModule
-	coroutine_handler analyzer.CoroutineHandler
-	control_flow_module control_flow.ControlFlowModule
 }
 
-pub fn new_translator() &Translator {
+pub fn new_translator(state &base.TranslatorState, type_analyzer &analyzer.Analyzer) &Translator {
 	mut t := &Translator{
-		state:    base.new_translator_state()
-		analyzer: analyzer.new_analyzer(map[string]string{})
-		model:    .unknown
+		state:    state
+		analyzer: type_analyzer
+		model:    models.VType{}
 		mutable_locals: map[string]bool{}
-		current_function_name: ''
-		classes_module:   classes.new_classes_module()
+		classes_module: classes.new_classes_module()
 		functions_module: functions.new_functions_module()
-		coroutine_handler: analyzer.new_coroutine_handler()
-		control_flow_module: control_flow.new_control_flow_module()
-	}
-	println("TRANSLATOR_CREATED")
-	t.state.mapper = stdlib_map.new_stdlib_mapper()
-	t.state.coroutine_handler = &t.coroutine_handler
-	t.control_flow_module.env = t.get_control_flow_env()
-	t.analyzer.guess_type_handler = fn (e ast.Expression, ctx models.TypeGuessingContext) string {
-		return base.guess_type(e, ctx, true)
 	}
 	return t
+}
+
+fn (mut t Translator) indent() string {
+	return '\t'.repeat(t.state.indent_level)
 }
 
 fn (mut t Translator) emit(line string) {
 	t.state.output << line
 }
 
-fn (mut t Translator) indent() string {
-	return t.state.indent()
-}
-
 fn (mut t Translator) emit_indented(line string) {
-	t.state.output << '${t.state.indent()}${line}'
+	t.state.output << t.indent() + line
 }
 
-fn (mut t Translator) emit_tail(line string) {
-	t.state.tail << line
-}
 
 fn (mut t Translator) push_scope() {
 	t.state.scope_stack << map[string]bool{}
@@ -141,133 +123,41 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				return '&${t.state.current_class}${gen_s}'
 			}
 			full_name := t.annotation_raw_name(node)
-			if full_name in ['NoReturn', 'typing.NoReturn'] { return 'noreturn' }
-			if full_name in ['Any', 'typing.Any'] { return 'Any' }
-			if full_name in ['Self', 'typing.Self'] {
-				gen_s := if t.state.current_class_generics.len > 0 {
-					'[${t.state.current_class_generics.join(", ")}]'
-				} else { '' }
-				return '&${t.state.current_class}${gen_s}'
-			}
-			return t.map_annotation(node.value)
+			return t.state.imported_symbols[full_name] or { full_name }
 		}
 		ast.Subscript {
-			base_raw := t.annotation_raw_name(node.value)
-			if base_raw in ['TypeGuard', 'typing.TypeGuard', 'TypeIs', 'typing.TypeIs'] {
-				narrowed := t.map_annotation(node.slice)
-				if t.current_function_name.len > 0 {
-					t.state.type_guards[t.current_function_name] = base.TypeGuardInfo{
-						narrowed_type: narrowed
-						is_type_is:    base_raw.contains('TypeIs')
-					}
-				}
-				return 'bool'
+			val := t.map_annotation(node.value)
+			slice := t.map_annotation(node.slice)
+			if val == 'Optional' {
+				return '?' + slice
 			}
-			if base_raw in ['Optional', 'typing.Optional'] {
-				return '?${t.map_annotation(node.slice)}'
+			if val == 'Union' {
+				// SUM TYPE
+				return slice
 			}
-			if base_raw in ['Union', 'typing.Union'] {
-				if node.slice is ast.Tuple {
-					mut parts := []string{}
-					for elt in node.slice.elements {
-						parts << t.map_annotation(elt)
-					}
-					mut res_parts := []string{}
-					mut contains_none := false
-					for p in parts { 
-						if p != '' { res_parts << p } 
-						else { contains_none = true }
-					}
-					res_type := res_parts.join(' | ')
-					if contains_none {
-						return if res_type.len > 0 { t.map_annotation_str('?${res_type}', '', false, true, false) } else { 'none' }
-					}
-					return t.map_annotation_str(res_type, '', false, true, false)
-				}
-				return t.map_annotation(node.slice)
+			return '${val}[${slice}]'
+		}
+		ast.Tuple {
+			mut elts := []string{}
+			for elt in node.elements {
+				elts << t.map_annotation(elt)
 			}
-			if base_raw in ['List', 'typing.List', 'list'] {
-				return '[]${t.map_annotation(node.slice)}'
-			}
-			if base_raw in ['Tuple', 'typing.Tuple', 'tuple'] {
-				if node.slice is ast.Tuple {
-					mut parts := []string{}
-					for elt in node.slice.elements {
-						parts << t.map_annotation(elt)
-					}
-					return '[${parts.join(', ')}]'
-				}
-				return '[${t.map_annotation(node.slice)}]'
-			}
-			if base_raw in ['Dict', 'typing.Dict', 'dict'] {
-				if node.slice is ast.Tuple {
-					mut parts := []string{}
-					for elt in node.slice.elements {
-						parts << t.map_annotation(elt)
-					}
-					if parts.len >= 2 {
-						return 'map[${parts[0]}]${parts[1]}'
-					}
-				}
-				return 'map[string]Any'
-			}
-			if base_raw in ['Set', 'typing.Set', 'set'] {
-				return 'datatypes.Set[${t.map_annotation(node.slice)}]'
-			}
-			if base_raw in ['Required', 'typing.Required'] {
-				return t.map_annotation(node.slice)
-			}
-			if base_raw in ['NotRequired', 'typing.NotRequired'] {
-				return '?${t.map_annotation(node.slice)}'
-			}
-			if base_raw in ['Final', 'typing.Final'] {
-				return t.map_annotation(node.slice)
-			}
-			if base_raw in ['ReadOnly', 'typing.ReadOnly'] {
-				return t.map_annotation(node.slice)
-			}
-			if base_raw in ['ClassVar', 'typing.ClassVar'] {
-				return t.map_annotation(node.slice)
-			}
-			if base_raw in ['Literal', 'typing.Literal'] {
-				t.state.used_builtins['LiteralEnum_'] = true
-				return 'LiteralEnum_'
-			}
-			return t.map_annotation(node.value) + '[${t.map_annotation(node.slice)}]'
+			return elts.join(', ')
 		}
 		ast.Constant {
 			if node.value == 'None' { return '' }
-			if node.value.starts_with("'") || node.value.starts_with('"') {
-				return node.value[1..node.value.len - 1]
-			}
 			return node.value
 		}
-		ast.BinaryOp {
-			if node.op.value == '|' {
-				l := t.map_annotation(node.left)
-				r := t.map_annotation(node.right)
-				if l == '' { return if r == '' { 'none' } else { '?${r}' } }
-				if r == '' { return '?${l}' }
-				return t.map_annotation_str('${l} | ${r}', '', false, true, false)
-			}
-			return ''
-		}
-		else {
-			return ''
-		}
+		else { return '' }
 	}
 }
 
-pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string, allow_union bool, register bool, is_return bool) string {
-	mut actual_struct := if struct_name.len > 0 && struct_name != 'Self' { struct_name } else { t.state.current_class }
-	if actual_struct == '' { actual_struct = 'Self' }
-	
+fn (mut t Translator) map_annotation_str(type_str string, struct_name string, allow_union bool, register bool, is_return bool) string {
 	opts := base.TypeMapOptions{
-		struct_name:        actual_struct
+		struct_name:        struct_name
 		allow_union:        allow_union
 		register_sum_types: register
 		is_return:          is_return
-		self_type:          actual_struct
 		generic_map:        t.state.current_class_generic_map
 	}
 	mut ctx := base.TypeUtilsContext{
@@ -277,128 +167,80 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		warnings:         t.state.warnings
 		config:           t.state.config
 	}
-	mut st := t.state
-	res := base.map_type(type_str, opts, mut ctx, fn [mut t, actual_struct] (name string) string {
+	return base.map_type(type_str, opts, mut ctx, fn [mut t, struct_name] (name string) string {
 		if name == 'Self' || name == 'typing.Self' {
 			mut v_gens := []string{}
 			for gn in t.state.current_class_generics {
 				v_gens << t.state.current_class_generic_map[gn] or { gn }
 			}
 			gen_s := if v_gens.len > 0 { "[${v_gens.join(', ')}]" } else { "" }
-			return "&" + actual_struct + gen_s
-		}
-		if name.contains("|") {
-			t.state.generated_sum_types[name] = ''
-			return name
+			return "&" + struct_name + gen_s
 		}
 		return ""
-	}, fn (_ []string) string { return '' }, fn (_ string) string { return '' })
-	
-	if !allow_union && res.contains('|') {
-		// Convert "A | B" to "SumType_AB"
-		mut parts := res.split('|').map(it.trim_space())
-		parts.sort()
-		mut name_parts := []string{}
-		for p in parts { 
-			mut part_name := p.capitalize()
-			if part_name == 'Str' { part_name = 'String' }
-			name_parts << part_name 
-		}
-		st_name := 'SumType_${name_parts.join("")}'
-		st.generated_sum_types[st_name] = res
-		return st_name
-	}
-	if res.len == 0 {
-		return type_str
-	}
-	return res
+	}, fn [mut t] (variants []string) string {
+		return t.register_sum_type(variants)
+	}, fn [mut t] (tuple_type string) string {
+		return t.register_tuple_type(tuple_type)
+	})
 }
 
-fn (t &Translator) annotation_raw_name(node ast.Expression) string {
+fn (mut t Translator) annotation_raw_name(node ast.Expression) string {
 	match node {
-		ast.Name {
-			return node.id
-		}
+		ast.Name { return node.id }
 		ast.Attribute {
-			parent := t.annotation_raw_name(node.value)
-			if parent.len > 0 {
-				return '${parent}.${node.attr}'
-			}
-			return node.attr
+			return t.annotation_raw_name(node.value) + '.' + node.attr
 		}
-		ast.Subscript {
-			return t.annotation_raw_name(node.value)
-		}
-		else {
-			return ''
-		}
+		else { return '' }
 	}
 }
 
-pub fn (mut t Translator) translate(source string, filename string) string {
-	t.state = base.new_translator_state()
-	t.coroutine_handler = analyzer.new_coroutine_handler()
-	t.state.coroutine_handler = &t.coroutine_handler
-	t.state.mapper = stdlib_map.new_stdlib_mapper()
-	t.state.current_file_name = filename
-	t.analyzer = analyzer.new_analyzer(map[string]string{})
-	t.state.output = []string{}
-	t.state.tail = []string{}
-	t.model = .unknown
-	t.mutable_locals = map[string]bool{}
-	t.current_function_name = ''
-	
-	mut compatibility := analyzer.new_compatibility_layer()
-	preprocessed := compatibility.preprocess_source(source)
-	mut lexer := ast.new_lexer(preprocessed, filename)
-	mut parser := ast.new_parser(lexer)
-	module_node := parser.parse_module()
-	
-	// Pre-analyze to fill type map for aliases
-	t.analyzer.analyze(module_node)
-	t.coroutine_handler.scan_module(module_node)
-	// Second pass to propagate inferences back to aliases
-	t.analyzer.analyze(module_node)
+fn (mut t Translator) register_sum_type(variants []string) string {
+	mut sorted_variants := variants.clone()
+	sorted_variants.sort()
+	name := sorted_variants.join('_').replace('[]', 'arr_').replace('&', 'ptr_').replace('[', '_').replace(']', '_').replace(', ', '_')
+	sum_name := 'SumType_${name}'
+	if sum_name !in t.state.generated_sum_types {
+		t.state.generated_sum_types[sum_name] = 'type ${sum_name} = ${variants.join(' | ')}'
+	}
+	return sum_name
+}
 
-	for k, v in t.analyzer.class_hierarchy {
-		t.state.class_hierarchy[k] = v.clone()
-	}
-	for k, v in t.analyzer.main_to_mixins {
-		t.state.main_to_mixins[k] = v.clone()
-	}
-	for k, v in t.analyzer.overloaded_signatures {
-		t.state.overloaded_signatures[k] = v.clone()
-	}
-	for k, _ in t.analyzer.type_vars {
-		t.state.type_vars[k] = true
-	}
-	for k, _ in t.analyzer.typed_dicts {
-		t.state.typed_dicts[k] = true
-	}
-	for k, v in t.analyzer.call_signatures {
-		if narrowed := v.narrowed_type {
-			t.state.type_guards[k] = base.TypeGuardInfo{
-				narrowed_type: narrowed
-				is_type_is:    v.is_type_is
-			}
+fn (mut t Translator) register_tuple_type(tuple_type string) string {
+	name := tuple_type.replace('[]', 'arr_').replace('&', 'ptr_').replace('[', '_').replace(']', '_').replace(', ', '_')
+	tuple_name := 'TupleStruct_${name}'
+	if tuple_name !in t.state.generated_sum_types {
+		mut fields := []string{}
+		variants := tuple_type.split(', ')
+		for i, v in variants {
+			fields << 'it_${i} ${v}'
 		}
+		t.state.generated_sum_types[tuple_name] = 'struct ${tuple_name} {\npub mut:\n\t${fields.join('\n\t')}\n}'
 	}
-	t.state.class_hierarchy_initialized = true
-	
-	for name, info in t.analyzer.mutability_map {
-		if info.is_reassigned || info.is_mutated {
-			t.mutable_locals[name] = true
-		}
-	}
+	return tuple_name
+}
 
-	for _, stmt in module_node.body {
-		// println('Processing stmt ${i}: ${stmt.str()}')
+pub fn (mut t Translator) translate(module_node &ast.Module) string {
+	t.state.scope_stack << map[string]bool{}
+	
+	for stmt in module_node.body {
 		t.visit_stmt(stmt)
 	}
 
-	t.append_helpers()
+	mut res_output := []string{}
+	res_output << 'module main\n'
 
-	if t.state.used_builtins['math.pow'] || t.state.used_builtins['math.floor'] {
+	if t.state.constant_code.len > 0 {
+		res_output << t.state.constant_code.join('\n')
+	}
+
+	for _, v in t.state.generated_sum_types {
+		res_output << v
+	}
+
+	res_output << t.state.output.join('\n')
+
+	// Add imports
+	if t.state.used_builtins['math'] {
 		t.state.output.insert(0, 'import math')
 	}
 	if t.state.used_builtins['encoding.base64'] {
@@ -424,5 +266,35 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	if uses_binary {
 		t.state.output.insert(0, 'import binary')
 	}
-	return t.state.output.join('\n')
+
+	// Prepend imports and main module to output
+	mut final_output := []string{}
+	final_output << 'module main'
+	final_output << ''
+
+	mut imports := []string{}
+	if t.state.used_builtins['math'] { imports << 'import math' }
+	if t.state.used_builtins['encoding.base64'] { imports << 'import encoding.base64' }
+	if t.state.used_builtins['compress.zlib'] { imports << 'import compress.zlib' }
+	if t.state.used_builtins['datatypes'] { imports << 'import datatypes' }
+	if uses_os { imports << 'import os' }
+	if uses_binary { imports << 'import binary' }
+
+	if imports.len > 0 {
+		final_output << imports.join('\n')
+		final_output << ''
+	}
+
+	if t.state.constant_code.len > 0 {
+		final_output << t.state.constant_code.join('\n')
+		final_output << ''
+	}
+
+	for _, v in t.state.generated_sum_types {
+		final_output << v
+	}
+
+	final_output << t.state.output.join('\n')
+
+	return final_output.join('\n')
 }

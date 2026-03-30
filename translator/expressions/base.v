@@ -2,6 +2,7 @@ module expressions
 
 import analyzer
 import ast
+import functions
 import base
 import models
 
@@ -458,34 +459,69 @@ pub fn (mut eg ExprGen) visit_formatted_value(node ast.FormattedValue) string {
 pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	mut params := []string{}
 	mut param_types := map[string]string{}
-	for arg in node.args.posonlyargs {
+	mut current_scope := map[string]bool{}
+	mut extra_captures := []string{}
+
+	mut all_args_params := node.args.posonlyargs.clone()
+	all_args_params << node.args.args
+	all_args_params << node.args.kwonlyargs
+
+	for arg in all_args_params {
+		if d := arg.default_ {
+			if d is ast.Name && d.id == arg.arg {
+				extra_captures << base.sanitize_name(arg.arg, false, map[string]bool{}, "", map[string]bool{})
+				continue
+			}
+		}
 		typ := eg.lambda_param_type(arg.annotation)
 		params << "${arg.arg} ${typ}"
 		param_types[arg.arg] = typ
+		current_scope[arg.arg] = true
 	}
-	for arg in node.args.args {
-		typ := eg.lambda_param_type(arg.annotation)
-		params << "${arg.arg} ${typ}"
-		param_types[arg.arg] = typ
+
+	mut llm_comment := ""
+	if node.args.kwarg != none && node.args.vararg != none {
+		llm_comment = "//##LLM@@ Lambda has both *args and **kwargs\n"
 	}
-	for arg in node.args.kwonlyargs {
-		typ := eg.lambda_param_type(arg.annotation)
-		params << "${arg.arg} ${typ}"
-		param_types[arg.arg] = typ
+
+	if kw := node.args.kwarg {
+		params << "${kw.arg} map[string]Any"
+		param_types[kw.arg] = "map[string]Any"
+		current_scope[kw.arg] = true
 	}
 	if va := node.args.vararg {
 		params << "${va.arg} []Any"
 		param_types[va.arg] = "[]Any"
+		current_scope[va.arg] = true
 	}
+
+	mut captures := functions.find_captured_vars(node, eg.state.scope_stack, fn (s string, b bool) string {
+		return base.sanitize_name(s, b, map[string]bool{}, "", map[string]bool{})
+	})
+	if extra_captures.len > 0 {
+		for ec in extra_captures {
+			if ec !in captures {
+				captures << ec
+			}
+		}
+	}
+	capture_str := if captures.len > 0 { "[${captures.join(", ")}] " } else { "" }
+
 	ret_type := eg.lambda_return_type(node.body, param_types)
+
+	eg.state.scope_stack << current_scope
+	eg.state.scope_names << "<lambda>"
 	mut val := eg.visit(node.body)
-	args_str := params
+	eg.state.scope_stack = eg.state.scope_stack[..eg.state.scope_stack.len - 1]
+	eg.state.scope_names = eg.state.scope_names[..eg.state.scope_names.len - 1]
+
+	args_str := params.join(", ")
 	if ret_type in ["none", "void", "None"] {
 		if val == "none" { val = "" }
 		body_s := if val.len > 0 { " ${val} " } else { "" }
-		return "fn (${args_str.join(', ')}) {${body_s}}"
+		return "${llm_comment}fn ${capture_str}(${args_str}) {${body_s}}"
 	}
-	return "fn (${args_str.join(', ')}) ${ret_type} { return ${val} }"
+	return "${llm_comment}fn ${capture_str}(${args_str}) ${ret_type} { return ${val} }"
 }
 
 fn (mut eg ExprGen) lambda_param_type(annotation ?ast.Expression) string {
