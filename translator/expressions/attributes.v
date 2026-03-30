@@ -64,6 +64,11 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	// Static/Class methods and Class variables
 	if obj_base in eg.state.defined_classes || obj_type in eg.state.defined_classes {
 		target_class := if obj_base in eg.state.defined_classes { obj_base } else { obj_type }
+
+		// Handle Enum members
+		if eg.state.defined_classes[target_class]['is_enum'] {
+			return "${target_class}.${base.to_snake_case(node.attr).to_lower()}"
+		}
 		
 		// Check for class variables first (meta singleton)
 		if defining := base.find_defining_class_for_class_var(target_class, node.attr, eg.state.class_vars, eg.analyzer.class_hierarchy) {
@@ -87,6 +92,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		if defining := base.find_defining_class_for_static_method(target_class, node.attr, eg.analyzer.static_methods, eg.analyzer.class_methods, eg.analyzer.class_hierarchy) {
 			return "${defining}_${attr_name}"
 		}
+
 	}
 
 	mut res := "${obj}.${attr_name}"

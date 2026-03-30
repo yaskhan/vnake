@@ -1,6 +1,7 @@
 module classes
 
 import ast
+import base
 
 pub struct SpecialClassesHandler {}
 
@@ -12,17 +13,36 @@ pub fn (h SpecialClassesHandler) process_enum_body(node ast.ClassDef, is_flag bo
 		if item is ast.Assign {
 			for target in item.targets {
 				if target is ast.Name {
-					name := target.id
-					val := env.visit_expr_fn(item.value)
-					fields << '    ${name} = ${val}'
+					name := base.to_snake_case(target.id).to_lower()
+					val_expr := item.value
+					mut is_auto := false
+					if val_expr is ast.Call {
+						func_expr := val_expr.func
+						if func_expr is ast.Name {
+							if func_expr.id == 'auto' {
+								is_auto = true
+							}
+						} else if func_expr is ast.Attribute {
+							attr_val := func_expr.value
+							if func_expr.attr == 'auto' && attr_val is ast.Name && attr_val.id == 'enum' {
+								is_auto = true
+							}
+						}
+					}
+					if is_auto {
+						fields << '    ${name}'
+					} else {
+						val := env.visit_expr_fn(item.value)
+						fields << '    ${name} = ${val}'
+					}
 				}
 			}
 		} else if item is ast.AnnAssign {
-			if item.target is ast.Name {
-				name := item.target.id
+			target_expr := item.target
+			if target_expr is ast.Name {
+				name := base.to_snake_case(target_expr.id).to_lower()
 				if value := item.value {
-					val := env.visit_expr_fn(value)
-					fields << '    ${name} = ${val}'
+					fields << '    ${name} = ${env.visit_expr_fn(value)}'
 				} else {
 					fields << '    ${name}'
 				}

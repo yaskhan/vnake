@@ -106,6 +106,10 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 	}
 
 	base_fields, current_class_bases, is_enum, is_int_enum, is_flag, is_unittest, is_protocol, _, is_typed_dict := classes.class_bases_handler.process_bases(node, struct_name, mut env)
+
+	if is_enum || is_int_enum {
+		env.state.defined_classes[struct_name]["is_enum"] = true
+	}
 	env.state.current_class_bases = current_class_bases
 	for f in base_fields { fields << f }
 
