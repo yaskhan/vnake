@@ -70,7 +70,9 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			dec_name = env.visit_expr_fn(decorator)
 		}
 		
-		output << '// @${dec_name}'
+			if !dec_name.ends_with("classmethod") && !dec_name.ends_with("staticmethod") && !dec_name.ends_with("property") && !dec_name.ends_with(".setter") && !dec_name.ends_with(".deleter") && !dec_name.ends_with("deprecated") && !dec_name.ends_with("lru_cache") && dec_name !in ["timer", "log"] {
+				output << "// @${dec_name}"
+			}
 		
 		if dec_name.ends_with('.setter') {
 			func_name = 'set_${func_name}'
@@ -88,8 +90,12 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		} else if dec_name.ends_with('lru_cache') {
 			cache_wrapper_needed = true
 		} else if dec_name in ['timer', 'log'] {
-			injected_start << "println('Start ${node.name}...')"
-			injected_end << "defer { println('End ${node.name}...') }"
+			if "println('Start ${node.name}...')" !in injected_start {
+					injected_start << "println('Start ${node.name}...')"
+				}
+			if "defer { println('End ${node.name}...') }" !in injected_end {
+					injected_end << "defer { println('End ${node.name}...') }"
+				}
 		} else if dec_name.ends_with('deprecated') {
 			is_deprecated = true
 			if decorator is ast.Call && decorator.args.len > 0 {
@@ -109,6 +115,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	// Name mangling for static/class methods
 	if is_method && is_static {
 		func_name = '${struct_name}_${func_name}'
+		receiver_str = ''
 	}
 
 	// Receiver handling
