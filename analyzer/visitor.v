@@ -741,6 +741,26 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_while(node ast.While) {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_for(node ast.For) {
+	if node.target is ast.Name {
+		mut literals := []string{}
+		mut all_constants := true
+		if node.iter is ast.List {
+			for elt in node.iter.elements {
+				if elt is ast.Constant {
+					literals << elt.value
+				} else { all_constants = false; break }
+			}
+		} else if node.iter is ast.Tuple {
+			for elt in node.iter.elements {
+				if elt is ast.Constant {
+					literals << elt.value
+				} else { all_constants = false; break }
+			}
+		} else { all_constants = false }
+		if all_constants && literals.len > 0 {
+			t.type_map[node.target.id] = 'Literal[' + literals.join(', ') + ']'
+		}
+	}
 	t.visit_expr(node.target)
 	t.visit_expr(node.iter)
 	t.visit_stmt_list(node.body)
