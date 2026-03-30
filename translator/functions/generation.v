@@ -19,6 +19,10 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	}
 	is_method := struct_name.len > 0
 	mut annotations_data := map[string]string{}
+	mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
+	is_generator := if env.state.coroutine_handler != unsafe { nil } { coroutine_handler.is_generator(node.name) } else { false }
+	yield_type := if is_generator { coroutine_handler.get_yield_type(node) } else { 'int' }
+	if is_generator { env.state.used_builtins['PyGenerator'] = true }
 	
 	mut output := []string{}
 	
@@ -303,6 +307,10 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	gen_s := base.get_generics_with_variance_str(v_gens_to_declare, combined_gen_map, env.state.generic_variance, env.state.generic_defaults)
 	
 	op_space := if is_operator { ' ' } else { '' }
+	if is_generator {
+		args_str_list.insert(0, 'ch_out chan ${yield_type}')
+		args_str_list.insert(1, 'ch_in chan PyGeneratorInput')
+	}
 	output << '${attr_pfx}${pub_pfx}fn ${receiver_str}${real_func_name}${op_space}${gen_s}(${args_str_list.join(", ")})${ret_suffix} {'
 	for start_stmt in injected_start {
 		output << '    ${start_stmt}'
@@ -310,18 +318,24 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	for end_stmt in injected_end {
 		output << '    ${end_stmt}'
 	}
-	
+
 	env.emit_fn(output.join('\n'))
-	
+
 	env.state.indent_level++
 	env.push_scope_fn()
-	
+	if is_generator {
+		coroutine_handler.enter_generator('ch_out', 'ch_in')
+		env.emit_fn('    _ = <-ch_in')
+	}
+
 	for stmt in node.body {
 		env.visit_stmt_fn(stmt)
 	}
 
+	if is_generator { coroutine_handler.exit_generator() }
 	env.pop_scope_fn()
 	env.state.indent_level--
+	if is_generator { env.emit_fn('    ch_out.close()') }
 	env.emit_fn('}')
 
 	if cache_wrapper_needed {
