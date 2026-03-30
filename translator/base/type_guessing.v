@@ -124,7 +124,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 			return 'string'
 		}
 		if fid in ['int', 'len'] {
-			return 'int'
+			return 'Any'
 		}
 		if fid == 'float' {
 			return 'f64'
@@ -166,6 +166,12 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 			}
 			return 'map[string]' + d_type
 		}
+		if fid in ['sum', 'py_sum'] {
+			return 'Any'
+		}
+		if fid in ['any', 'all', 'py_any', 'py_all'] {
+			return 'bool'
+		}
 		if fid == 'py_range' {
 			return '[]int'
 		}
@@ -205,7 +211,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 			return ctx.type_map[ret_key]
 		}
 	}
-	return 'Any'
+	return 'int'
 }
 
 fn guess_type_list(node ast.Expression, ctx TypeGuessingContext) string {
@@ -329,7 +335,7 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 	if node.id in ctx.type_map {
 		return ctx.type_map[node.id]
 	}
-	return 'Any'
+	return 'int'
 }
 
 fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext) string {
