@@ -2,7 +2,8 @@ module base
 
 // NamingMixin - mixin for naming utilities and identifier sanitization
 
-// to_snake_case converts CamelCase or UPPER_CASE to snake_case
+// to_snake_case converts CamelCase or UPPER_CASE to snake_case.
+// This version is optimized for ASCII performance while maintaining UTF-8 correctness.
 pub fn to_snake_case(name string) string {
 	if name.len == 0 || name == '_' {
 		return name
@@ -18,7 +19,36 @@ pub fn to_snake_case(name string) string {
 		return name
 	}
 
-	// Handle already separated names
+	// Fast path for ASCII strings
+	if name.is_ascii() {
+		mut res := []u8{cap: name.len + 2}
+		for i := 0; i < name.len; i++ {
+			ch := name[i]
+			if ch.is_capital() && i > 0 {
+				prev := name[i - 1]
+				if prev == `_` {
+					// skip
+				} else if is_lower_ascii(prev) {
+					res << `_`
+				} else if i + 1 < name.len && is_lower_ascii(name[i + 1]) {
+					res << `_`
+				}
+			}
+			if ch == `_` {
+				if i > 0 && name[i-1] == `_` {
+					continue
+				}
+			}
+			if ch.is_capital() {
+				res << ch + 32
+			} else {
+				res << ch
+			}
+		}
+		return res.bytestr()
+	}
+
+	// Fallback for UTF-8 strings
 	if name.contains('_') {
 		mut parts := []string{}
 		for p in name.split('_') {
