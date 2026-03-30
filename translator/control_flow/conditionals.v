@@ -203,6 +203,16 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 			} else if (base_type.starts_with('SumType_') || base_type.contains('|')) && !narrowed_type.contains('|') && !var_name.contains('.') {
 				is_auto = true
 			}
+		} else if test is ast.Call {
+			if test.func is ast.Name && (test.func as ast.Name).id == 'isinstance' {
+				if !narrowed_type.contains('|') && !var_name.contains('.') {
+					// Only use auto-narrowing for Any (to avoid redundant (x as int))
+					// but NOT for SumTypes (where test expects (x as int))
+					if base_type == 'Any' {
+						is_auto = true
+					}
+				}
+			}
 		}
 
 		if is_auto {
