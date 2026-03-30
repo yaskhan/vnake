@@ -30,6 +30,15 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 		return special
 	}
 
+		if func_name_str in ['fractions.Fraction', 'Fraction'] || (module_name == 'fractions' && func_name == 'Fraction') {
+		if args.len == 1 {
+			eg.state.used_builtins['py_fraction'] = true
+			return 'py_fraction(${args[0]})'
+		} else if args.len == 2 {
+			return 'fractions.fraction(${args[0]}, ${args[1]})'
+		}
+	}
+
 	if mapped_val := eg.handle_via_mapper(node, module_name, func_name, args) {
 		if mapped_val.contains('(') {
 			eg.state.used_builtins[mapped_val.all_before('(')] = true

@@ -89,7 +89,9 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			}
 		}
 	} else if target is ast.Attribute {
+		m.state.in_assignment_lhs = true
 		lhs = m.visit_expr(target)
+		m.state.in_assignment_lhs = false
 		if !lhs.contains('_meta.') {
 			obj_type := m.guess_type(target.value, true)
 			if obj_type in m.state.readonly_fields {
@@ -160,7 +162,9 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			m.emit('${list_obj}.insert_many(${lower}, ${rhs})')
 			return
 		}
+		m.state.in_assignment_lhs = true
 		lhs = m.visit_expr(target)
+		m.state.in_assignment_lhs = false
 	} else if target is ast.Tuple || target is ast.List {
 		rhs := m.visit_expr(node.value)
 		if m.state.in_main {

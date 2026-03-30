@@ -1329,11 +1329,13 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_array[T](code string, init []T) []T { return init }')
 	}
 
-	if m.state.imported_modules.values().contains('fractions') {
+		if m.state.imported_modules.values().contains('fractions') {
 		m.emitter.add_helper_import('math.fractions')
 		m.emitter.add_helper_function('fn py_fraction(val Any) fractions.Fraction {
     \x24if val is int { return fractions.fraction(i64(val), 1) }
-    \x24else \x24if val is f64 { return fractions.from_f64(f64(val)) }
+    \x24else \x24if val is i64 { return fractions.fraction(val, 1) }
+    \x24else \x24if val is f64 { return fractions.approximate(val) }
+    \x24else \x24if val is string { return fractions.approximate(val.f64()) }
     return fractions.fraction(0, 1)
 }')
 	}
