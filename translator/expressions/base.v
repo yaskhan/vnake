@@ -506,6 +506,7 @@ fn (mut eg ExprGen) lambda_param_type(annotation ?ast.Expression) string {
 
 fn (eg &ExprGen) lambda_return_type(body ast.Expression, param_types map[string]string) string {
 	mut ctx := eg.type_ctx()
+	ctx.type_map = ctx.type_map.clone()
 	for k, v in param_types {
 		ctx.type_map[k] = v
 	}

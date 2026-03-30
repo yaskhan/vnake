@@ -431,6 +431,7 @@ fn guess_type_dictcomp(node ast.DictComp, ctx TypeGuessingContext) string {
 fn guess_type_lambda(node ast.Lambda, ctx TypeGuessingContext) string {
 	mut param_types := []string{}
 	mut local_ctx := ctx
+	local_ctx.type_map = ctx.type_map.clone()
 	for arg in node.args.posonlyargs {
 		typ := ctx.type_map[arg.arg] or { "int" }
 		param_types << typ
