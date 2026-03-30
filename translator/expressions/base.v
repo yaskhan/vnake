@@ -356,7 +356,11 @@ pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
 	is_struct := dict_type in eg.state.defined_classes
 
 	if node.keys.len == 0 {
-		return if is_struct { '${dict_type}{}' } else { 'map[string]Any{}' }
+		if is_struct { return "${dict_type}{}" }
+		if dict_type.starts_with("map[") {
+			return "${dict_type}{}"
+		}
+		return "map[string]Any{}"
 	}
 	mut items := []string{}
 	for i, key in node.keys {

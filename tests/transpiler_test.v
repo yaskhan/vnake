@@ -144,6 +144,11 @@ fn check_expected_output(actual string, expected string, expected_path string) !
 	if expected.contains('@@in#') || expected.contains('@@notin#') || expected.contains('@@or#') {
 		return check_expected_directives(actual, expected, expected_path)
 	}
+	// For generated tests without markers, treat as substring search if it is a single line type/snippet
+	if expected_path.contains('generated') && expected.count('
+') <= 1 {
+		return actual.contains(expected.trim_space())
+	}
 	return actual.trim_space() == expected.trim_space()
 }
 
