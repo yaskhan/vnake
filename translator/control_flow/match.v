@@ -25,9 +25,6 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 	}
 	if pattern is ast.MatchSequence {
 		mut array_types := ['[]int', '[]f64', '[]string', '[]bool', '[]Any']
-		if subject_expr.contains('any_') {
-			array_types = ['[]Any']
-		}
 		mut star_idx := -1
 		for i, p in pattern.patterns {
 			if p is ast.MatchStar {
@@ -66,8 +63,7 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 							slice_expr := if num_trailing == 0 { '[${i}..]' } else { '[${i}..${end_expr}]' }
 							branches << '${subject_expr} is ${t} { Any((${subject_expr} as ${t})${slice_expr}) }'
 						}
-						branches << 'else { Any(0) }'
-						extract = 'if ${branches.join(' else if ')}'
+						extract = 'if ${branches.join(' else if ')} else { Any(0) }'
 					}
 					bindings << '${name} := ${extract}'
 				}
@@ -95,8 +91,7 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 					}
 					sub_expr_branches << '${subject_expr} is ${t} { Any((${subject_expr} as ${t})[${idx}]) }'
 				}
-				sub_expr_branches << 'else { Any(0) }'
-				sub_expr = 'if ${sub_expr_branches.join(' else if ')}'
+				sub_expr = 'if ${sub_expr_branches.join(' else if ')} else { Any(0) }'
 			}
 
 			sub_cond, sub_binds := m.compile_pattern(p, sub_expr)
