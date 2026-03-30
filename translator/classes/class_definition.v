@@ -109,11 +109,6 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 	env.state.current_class_bases = current_class_bases
 	for f in base_fields { fields << f }
 
-	is_abc := classes.class_bases_handler.is_abstract_base_class(node, struct_name, &env)
-	if is_abc {
-		env.state.known_interfaces[struct_name] = true
-	}
-
 	if is_typed_dict {
 		env.state.readonly_fields[struct_name] = map[string]bool{}
 	}
@@ -132,6 +127,58 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		}
 	}
 	body = filtered_body.clone()
+
+	mut abs_methods := []string{}
+	for base_name in current_class_bases {
+		sanitized_base := sanitize_name(base_name, true)
+		if sanitized_base in env.state.abstract_methods {
+			for m in env.state.abstract_methods[sanitized_base] {
+				if m !in abs_methods {
+					abs_methods << m
+				}
+			}
+		}
+	}
+	for method in methods {
+		mut is_abs := false
+		for dec in method.decorator_list {
+			d_name := env.visit_expr_fn(dec)
+			if d_name in ["abstractmethod", "abc.abstractmethod"] {
+				is_abs = true
+				break
+			}
+		}
+		if is_abs {
+			if method.name !in abs_methods { abs_methods << method.name }
+		} else {
+			mut is_pass := false
+			if method.body.len == 1 {
+				stmt := method.body[0]
+				if stmt is ast.Pass {
+					is_pass = true
+				} else if stmt is ast.Expr && stmt.value is ast.Constant {
+					// docstring only
+					is_pass = true
+				}
+			} else if method.body.len == 0 {
+				is_pass = true
+			}
+
+			if !is_pass {
+				mut new_abs := []string{}
+				for m in abs_methods {
+					if m != method.name { new_abs << m }
+				}
+				abs_methods = new_abs.clone()
+			}
+		}
+	}
+	env.state.abstract_methods[struct_name] = abs_methods
+
+	is_abc := classes.class_bases_handler.is_abstract_base_class(node, struct_name, &env)
+	if is_abc {
+		env.state.known_interfaces[struct_name] = true
+	}
 
 	mut has_post_init := false
 	for method in methods {
@@ -234,7 +281,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			}
 		}
 
-		if (is_base_for_others || is_protocol || is_abc) && !node.name.ends_with('Mixin') {
+		if (is_base_for_others || is_protocol || is_abc || env.state.known_interfaces[struct_name]) && !node.name.ends_with('Mixin') {
 			struct_name_for_body = '${struct_name}_Impl'
 			env.state.current_class = struct_name_for_body
 			env.state.class_to_impl[struct_name] = struct_name_for_body

@@ -75,6 +75,7 @@ pub mut:
 	overloaded_signatures        map[string][]map[string]string
 	type_params_map              map[string][]string
 	generic_variance             map[string]string
+	abstract_methods             map[string][]string
 	generic_defaults             map[string]string
 	finally_stack                []voidptr
 	loop_stack                   []map[string]voidptr
@@ -152,6 +153,7 @@ pub fn new_translator_state() &TranslatorState {
 		imported_modules:             map[string]string{}
 		imported_symbols:             map[string]string{}
 		single_dispatch_functions:    map[string]map[string]string{}
+		abstract_methods:             map[string][]string{}
 		known_interfaces:             map[string]bool{}
 		class_hierarchy:              map[string][]string{}
 		main_to_mixins:               map[string][]string{}
