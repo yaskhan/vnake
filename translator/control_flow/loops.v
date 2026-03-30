@@ -210,15 +210,22 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			return
 		}
 		start := if range_args.len == 2 { m.visit_expr(range_args[0]) } else { '0' }
-		stop := if range_args.len >= 2 { m.visit_expr(range_args[range_args.len - 1]) } else { m.visit_expr(range_args[0]) }
+		stop := if range_args.len >= 2 {
+			m.visit_expr(range_args[range_args.len - 1])
+		} else {
+			m.visit_expr(range_args[0])
+		}
 		iter_expr = '${start}..${stop}'
 	}
 
 	if is_enumerate && node.iter is ast.Call && node.iter.args.len > 0 {
+		if node.target is ast.Name {
+			m.emit('//##LLM@@ Enumerate used with a single target variable instead of unpacking. Please rewrite to unpack the index and value properly.')
+		}
 		iter_expr = m.visit_expr(node.iter.args[0])
 	}
 
-	if (is_dict_items || is_dict_keys || is_dict_values) {
+	if is_dict_items || is_dict_keys || is_dict_values {
 		it := node.iter
 		if it is ast.Call {
 			if it.func is ast.Attribute {
