@@ -61,6 +61,10 @@ pub fn (mut e ModuleEmitter) add_helper_import(name string) {
 pub fn (e &ModuleEmitter) emit() string {
 	mut parts := []string{}
 
+	if e.module_name.len > 0 {
+		parts << 'module ${e.module_name}'
+	}
+
 	if e.imports.len > 0 {
 		mut names := e.imports.keys()
 		names.sort()
