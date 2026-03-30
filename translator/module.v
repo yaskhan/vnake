@@ -1164,7 +1164,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 	if m.state.imported_modules.values().contains('itertools') {
 		m.emitter.add_helper_function('fn py_chain[T](args ...[]T) []T {
     mut res := []T{}
-    for arg in args { res << arg }
+    for arg in args { for x in arg { res << x } }
     return res
 }')
 		m.emitter.add_helper_struct('struct PyCountIterator { mut: val int step int }')
@@ -1174,6 +1174,21 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
     return val
 }')
 		m.emitter.add_helper_function('fn py_count(start int, step int) PyCountIterator { return PyCountIterator{val: start, step: step} }')
+		m.emitter.add_helper_struct('struct PyRepeatIterator[T] { val T mut: count int }')
+		m.emitter.add_helper_function('fn (mut i PyRepeatIterator[T]) next() ?T {
+    if i.count == 0 { return none }
+    if i.count > 0 { i.count-- }
+    return i.val
+}')
+		m.emitter.add_helper_function('fn py_repeat[T](val T, count int) PyRepeatIterator[T] { return PyRepeatIterator[T]{val: val, count: count} }')
+		m.emitter.add_helper_struct('struct PyCycleIterator[T] { items []T mut: idx int }')
+		m.emitter.add_helper_function('fn (mut i PyCycleIterator[T]) next() ?T {
+    if i.items.len == 0 { return none }
+    val := i.items[i.idx]
+    i.idx = (i.idx + 1) % i.items.len
+    return val
+}')
+		m.emitter.add_helper_function('fn py_cycle[T](items []T) PyCycleIterator[T] { return PyCycleIterator[T]{items: items, idx: 0} }')
 	}
 
 	if m.state.imported_modules.values().contains('pathlib') || m.state.used_builtins['py_path_new'] {
