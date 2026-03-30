@@ -174,8 +174,8 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 					}
 					mut res_parts := []string{}
 					mut contains_none := false
-					for p in parts { 
-						if p != '' { res_parts << p } 
+					for p in parts {
+						if p != '' { res_parts << p }
 						else { contains_none = true }
 					}
 					res_type := res_parts.join(' | ')
@@ -261,7 +261,7 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string, allow_union bool, register bool, is_return bool) string {
 	mut actual_struct := if struct_name.len > 0 && struct_name != 'Self' { struct_name } else { t.state.current_class }
 	if actual_struct == '' { actual_struct = 'Self' }
-	
+
 	opts := base.TypeMapOptions{
 		struct_name:        actual_struct
 		allow_union:        allow_union
@@ -293,16 +293,16 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		}
 		return ""
 	}, fn (_ []string) string { return '' }, fn (_ string) string { return '' })
-	
+
 	if !allow_union && res.contains('|') {
 		// Convert "A | B" to "SumType_AB"
 		mut parts := res.split('|').map(it.trim_space())
 		parts.sort()
 		mut name_parts := []string{}
-		for p in parts { 
+		for p in parts {
 			mut part_name := p.capitalize()
 			if part_name == 'Str' { part_name = 'String' }
-			name_parts << part_name 
+			name_parts << part_name
 		}
 		st_name := 'SumType_${name_parts.join("")}'
 		st.generated_sum_types[st_name] = res
@@ -347,13 +347,13 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.model = .unknown
 	t.mutable_locals = map[string]bool{}
 	t.current_function_name = ''
-	
+
 	mut compatibility := analyzer.new_compatibility_layer()
 	preprocessed := compatibility.preprocess_source(source)
 	mut lexer := ast.new_lexer(preprocessed, filename)
 	mut parser := ast.new_parser(lexer)
 	module_node := parser.parse_module()
-	
+
 	// Pre-analyze to fill type map for aliases
 	t.analyzer.analyze(module_node)
 	t.coroutine_handler.scan_module(module_node)

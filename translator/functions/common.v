@@ -194,10 +194,215 @@ pub fn find_captured_vars(
 	scope_stack []map[string]bool,
 	sanitize_fn fn (string, bool) string,
 ) []string {
-	_ = node
-	_ = scope_stack
-	_ = sanitize_fn
-	return []string{}
+	mut captured := []string{}
+	mut local_scope := map[string]bool{}
+
+	if node is ast.Lambda {
+		for arg in node.args.posonlyargs {
+			local_scope[arg.arg] = true
+		}
+		for arg in node.args.args {
+			local_scope[arg.arg] = true
+		}
+		for arg in node.args.kwonlyargs {
+			local_scope[arg.arg] = true
+		}
+		if va := node.args.vararg {
+			local_scope[va.arg] = true
+		}
+		if kw := node.args.kwarg {
+			local_scope[kw.arg] = true
+		}
+
+		scan_captured(node.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+	}
+
+	return captured
+}
+
+fn add_to_scope(node ast.Expression, mut scope map[string]bool) {
+	match node {
+		ast.Name {
+			scope[node.id] = true
+		}
+		ast.Tuple {
+			for el in node.elements {
+				add_to_scope(el, mut scope)
+			}
+		}
+		ast.List {
+			for el in node.elements {
+				add_to_scope(el, mut scope)
+			}
+		}
+		else {}
+	}
+}
+
+fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_stack []map[string]bool, sanitize_fn fn (string, bool) string, mut captured []string) {
+	match node {
+		ast.Name {
+			if node.ctx == .load {
+				if node.id !in local_scope {
+					mut found_in_outer := false
+					for i := scope_stack.len - 1; i >= 0; i-- {
+						if node.id in scope_stack[i] {
+							found_in_outer = true
+							break
+						}
+					}
+					if found_in_outer {
+						sanitized := sanitize_fn(node.id, false)
+						if sanitized !in captured {
+							captured << sanitized
+						}
+					}
+				}
+			}
+		}
+		ast.BinaryOp {
+			scan_captured(node.left, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured(node.right, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.UnaryOp {
+			scan_captured(node.operand, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.Call {
+			scan_captured(node.func, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			for arg in node.args {
+				scan_captured(arg, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+			for kw in node.keywords {
+				scan_captured(kw.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+		}
+		ast.Lambda {
+			mut nested_local := local_scope.clone()
+			for arg in node.args.posonlyargs {
+				nested_local[arg.arg] = true
+			}
+			for arg in node.args.args {
+				nested_local[arg.arg] = true
+			}
+			for arg in node.args.kwonlyargs {
+				nested_local[arg.arg] = true
+			}
+			if va := node.args.vararg {
+				nested_local[va.arg] = true
+			}
+			if kw := node.args.kwarg {
+				nested_local[kw.arg] = true
+			}
+			scan_captured(node.body, mut nested_local, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.Attribute {
+			scan_captured(node.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.Subscript {
+			scan_captured(node.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured(node.slice, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.IfExp {
+			scan_captured(node.test, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured(node.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured(node.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.List {
+			for el in node.elements {
+				scan_captured(el, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+		}
+		ast.Tuple {
+			for el in node.elements {
+				scan_captured(el, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+		}
+		ast.Set {
+			for el in node.elements {
+				scan_captured(el, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+		}
+		ast.Dict {
+			for k in node.keys {
+				if k !is ast.NoneExpr {
+					scan_captured(k, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				}
+			}
+			for v in node.values {
+				scan_captured(v, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+		}
+		ast.JoinedStr {
+			for val in node.values {
+				scan_captured(val, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+		}
+		ast.FormattedValue {
+			scan_captured(node.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			if spec := node.format_spec {
+				scan_captured(spec, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+		}
+		ast.ListComp {
+			mut comp_local := local_scope.clone()
+			for gen in node.generators {
+				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				add_to_scope(gen.target, mut comp_local)
+				for cond in gen.ifs {
+					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut captured)
+				}
+			}
+			scan_captured(node.elt, mut comp_local, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.SetComp {
+			mut comp_local := local_scope.clone()
+			for gen in node.generators {
+				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				add_to_scope(gen.target, mut comp_local)
+				for cond in gen.ifs {
+					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut captured)
+				}
+			}
+			scan_captured(node.elt, mut comp_local, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.DictComp {
+			mut comp_local := local_scope.clone()
+			for gen in node.generators {
+				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				add_to_scope(gen.target, mut comp_local)
+				for cond in gen.ifs {
+					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut captured)
+				}
+			}
+			scan_captured(node.key, mut comp_local, scope_stack, sanitize_fn, mut captured)
+			scan_captured(node.value, mut comp_local, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.GeneratorExp {
+			mut comp_local := local_scope.clone()
+			for gen in node.generators {
+				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				add_to_scope(gen.target, mut comp_local)
+				for cond in gen.ifs {
+					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut captured)
+				}
+			}
+			scan_captured(node.elt, mut comp_local, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.Compare {
+			scan_captured(node.left, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			for comparator in node.comparators {
+				scan_captured(comparator, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
+		}
+		ast.Starred {
+			scan_captured(node.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.NamedExpr {
+			scan_captured(node.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			add_to_scope(node.target, mut local_scope)
+		}
+		else {}
+	}
 }
 
 // is_empty_body checks whether a function body is effectively empty.
