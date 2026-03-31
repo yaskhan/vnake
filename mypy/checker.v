@@ -287,7 +287,7 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 	// Handle different Lvalue variants
 	match mut lvalue {
 		NameExpr {
-			tc.store_type(lvalue as Expression, rvalue_type)
+			tc.store_type(Expression(lvalue), rvalue_type)
 			if mut node := lvalue.node {
 				if mut node is Var {
 					if target_type := node.type_ {
@@ -299,13 +299,21 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			}
 		}
 		MemberExpr {
-			tc.store_type(lvalue as Expression, rvalue_type)
+			tc.store_type(Expression(lvalue), rvalue_type)
 			// TODO: handle member assignment (setting attributes)
 			tc.expr_checker.accept(lvalue.expr)
 		}
-		else {
-			tc.store_type(lvalue as Expression, rvalue_type)
-			// TODO: handle other lvalues (TupleExpr, ListExpr, StarExpr)
+		TupleExpr {
+			tc.store_type(Expression(lvalue), rvalue_type)
+			// TODO: handle tuple assignment
+		}
+		ListExpr {
+			tc.store_type(Expression(lvalue), rvalue_type)
+			// TODO: handle list assignment
+		}
+		StarExpr {
+			tc.store_type(Expression(lvalue), rvalue_type)
+			// TODO: handle star assignment
 		}
 	}
 }
