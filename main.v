@@ -75,7 +75,7 @@ fn should_skip_path(rel_path string, skip_dirs []string) bool {
 	return false
 }
 
-fn run_mypy_analysis(source string, filename string) {
+fn run_mypy_analysis(source string, filename string) analyzer.MypyPluginStore {
 	mut lexer := ast.new_lexer(source, filename)
 	mut parser := ast.new_parser(lexer)
 	mod := parser.parse_module()
@@ -86,12 +86,17 @@ fn run_mypy_analysis(source string, filename string) {
 
 	mut file := mypy.bridge(mod) or {
 		println('Error: Mypy bridge failed.')
-		return
+		return analyzer.new_mypy_plugin_store()
 	}
 
-	api.analyze(mut file, map[string]mypy.MypyFile{}) or {
-		println('Mypy analysis error: ${err}')
+	tc := api.check(mut file, map[string]mypy.MypyFile{}) or {
+		println('Mypy analysis/check error: ${err}')
+		return analyzer.new_mypy_plugin_store()
 	}
+
+	mut plugin_analyzer := analyzer.new_mypy_plugin_analyzer()
+	plugin_analyzer.collect_file_with_checker(file, &tc)
+	return plugin_analyzer.store
 }
 
 pub fn transpile_file(source_file string, config TranspilerConfig, output_path string) bool {
@@ -102,11 +107,8 @@ pub fn transpile_file(source_file string, config TranspilerConfig, output_path s
 		return false
 	}
 
-	println('Running native Mypy analysis...')
-	run_mypy_analysis(source_code, source_file)
-
-	mut transpiler := new_transpiler()
-	v_code := transpiler.transpile(source_code)
+	mut trans := translator.new_translator()
+	v_code := trans.translate(source_code, source_file)
 
 	final_output := if output_path.len > 0 {
 		output_path
