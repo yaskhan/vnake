@@ -83,3 +83,5 @@ tests_active_*.txt
 tests_fix_*.txt
 tests_pass_*.txt
 tests_truly_*.txt
+test_results.txt
+test_results*.txt
