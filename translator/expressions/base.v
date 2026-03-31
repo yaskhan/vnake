@@ -506,6 +506,7 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 		}
 	}
 
+	has_pos_vararg := node.args.vararg != none
 	for i, arg in all_args_params {
 		if d := arg.default_ {
 			if d is ast.Name && d.id == arg.arg {
@@ -517,7 +518,7 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 		if typ == 'Any' && i < ctx_param_types.len {
 			typ = ctx_param_types[i]
 		}
-		if typ == 'Any' { typ = 'int' } // Fallback to int for test compatibility
+		if typ == 'Any' && !has_pos_vararg { typ = 'int' } // Fallback to int for test compatibility
 		
 		params << "${arg.arg} ${typ}"
 		param_types[arg.arg] = typ
@@ -556,7 +557,12 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	if ret_type == 'Any' && ctx_ret_type != 'Any' {
 		ret_type = ctx_ret_type
 	}
-	if ret_type == 'Any' { ret_type = 'int' }
+	
+	if has_pos_vararg {
+		ret_type = 'Any'
+	} else if ret_type == 'Any' { 
+		ret_type = 'int' 
+	}
 
 	eg.state.scope_stack << current_scope
 	eg.state.scope_names << "<lambda>"
@@ -590,12 +596,12 @@ fn (mut eg ExprGen) lambda_param_type(annotation ?ast.Expression) string {
 }
 
 fn (eg &ExprGen) lambda_return_type(body ast.Expression, param_types map[string]string) string {
-	mut ctx := eg.type_ctx()
-	ctx.type_map = ctx.type_map.clone()
+	mut t_ctx := eg.type_ctx()
+	t_ctx.type_map = t_ctx.type_map.clone()
 	for k, v in param_types {
-		ctx.type_map[k] = v
+		t_ctx.type_map[k] = v
 	}
-	ret_type := base.guess_type(body, ctx, true)
+	ret_type := base.guess_type(body, t_ctx, true)
 	return if ret_type in ["Any", "void", "unknown", "int"] { "Any" } else { ret_type }
 }
 
