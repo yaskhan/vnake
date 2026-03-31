@@ -350,6 +350,15 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			return
 		}
 
+		if t.state.indent_level == 0 && id.is_upper() {
+			v_id := base.to_snake_case(id)
+			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
+			t.emit_indented('${pub_prefix}__global ${v_id}')
+			t.emit_indented('${v_id} = ${rhs_text}')
+			t.declare_local(lhs)
+			return
+		}
+
 		if t.is_declared_local(lhs) {
 			if v_lhs_t.starts_with("?") && !rhs_text.starts_with("?") && rhs_text != "none" {
 				inferred := t.guess_type(node.value)
