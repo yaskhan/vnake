@@ -108,10 +108,16 @@ pub mut:
 	cond_optional_var_type       map[string]string
 	typed_dicts                  map[string]bool
 	class_hierarchy_initialized  bool
+	cached_indents               []string
 }
 
 // new_translator_state creates a new TranslatorState instance
 pub fn new_translator_state() &TranslatorState {
+	mut indents := []string{cap: 21}
+	for i in 0 .. 21 {
+		indents << '    '.repeat(i)
+	}
+
 	return &TranslatorState{
 		type_inference:               unsafe { nil }
 		compatibility:                unsafe { nil }
@@ -195,11 +201,16 @@ pub fn new_translator_state() &TranslatorState {
 		cond_optional_var_type:       map[string]string{}
 		typed_dicts:                  map[string]bool{}
 		class_hierarchy_initialized:  false
+		cached_indents:               indents
 	}
 }
 
-// indent returns indentation string
+// indent returns indentation string.
+// This is optimized to use precomputed indentation strings for common levels.
 pub fn (s &TranslatorState) indent() string {
+	if s.indent_level >= 0 && s.indent_level < s.cached_indents.len {
+		return s.cached_indents[s.indent_level]
+	}
 	return '    '.repeat(s.indent_level)
 }
 
