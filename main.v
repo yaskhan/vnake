@@ -16,7 +16,6 @@ pub mut:
 	experimental        bool
 	run                 bool
 	analyze_deps        bool
-	use_mypy            bool
 	skip_dirs           []string
 }
 
@@ -103,10 +102,8 @@ pub fn transpile_file(source_file string, config TranspilerConfig, output_path s
 		return false
 	}
 
-	if config.use_mypy {
-		println('Running native Mypy analysis...')
-		run_mypy_analysis(source_code, source_file)
-	}
+	println('Running native Mypy analysis...')
+	run_mypy_analysis(source_code, source_file)
 
 	mut transpiler := new_transpiler()
 	v_code := transpiler.transpile(source_code)
@@ -262,9 +259,6 @@ fn parse_args() (string, TranspilerConfig, bool) {
 			}
 			'--run' {
 				config.run = true
-			}
-			'--mypy' {
-				config.use_mypy = true
 			}
 			'--skip-dir' {
 				if i + 1 < os.args.len {
