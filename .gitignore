@@ -72,4 +72,14 @@ test_output.txt
 out.txt
 stderr.txt
 full_actual.txt
-full_actual_utf8.txt
+full_actual*.txt
+tests_final.txt
+tests_final*.txt
+tests_full.txt
+tests_full*.txt
+tests_reverted.txt
+tests_reverted*.txt
+tests_active_*.txt
+tests_fix_*.txt
+tests_pass_*.txt
+tests_truly_*.txt
