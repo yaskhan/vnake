@@ -142,7 +142,7 @@ pub fn (mut t NodeTraverser) visit_raise_stmt(mut o RaiseStmt) !AnyNode {
 	if mut e := o.expr {
 		expr_accept(mut e, mut t)!
 	}
-	if mut f := o.from {
+	if mut f := o.from_node {
 		expr_accept(mut f, mut t)!
 	}
 	return AnyNode(MypyNode(o))

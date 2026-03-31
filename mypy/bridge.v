@@ -290,6 +290,14 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 			}
 			return Statement(continue_stmt)
 		}
+		ast.Raise {
+			raise_stmt := RaiseStmt{
+				base: NodeBase{ctx: ctx}
+				expr: if e := stmt.exc { convert_expression(e) } else { none }
+				from_node: if f := stmt.cause { convert_expression(f) } else { none }
+			}
+			return Statement(raise_stmt)
+		}
 		else {
 			return none
 		}

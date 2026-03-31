@@ -743,7 +743,7 @@ pub struct RaiseStmt {
 pub mut:
 	base NodeBase
 	expr ?Expression
-	from ?Expression
+	from_node ?Expression
 }
 
 pub fn (n RaiseStmt) get_context() Context {

@@ -861,7 +861,7 @@ fn (mut b ASTReadBuffer) read_raise_stmt() RaiseStmt {
 	mut node := RaiseStmt{}
 	b.read_loc(mut node.base)
 	if b.read_bool() { node.expr = b.read_expression() }
-	if b.read_bool() { node.from = b.read_expression() }
+	if b.read_bool() { node.from_node = b.read_expression() }
 	return node
 }
 
