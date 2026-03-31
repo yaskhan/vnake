@@ -295,13 +295,13 @@ fn (p PydanticModelProcessor) generate_validate_method(
 		}
 	}
 
+	// Model/Field validators
 	for validator in validators {
-		if validator.is_model_validator {
-			code << '    // validator: ${validator.name}'
-		} else {
-			code << '    // field validator: ${validator.name} (${validator.fields.join(", ")})'
+		mut logic := p.generate_validator_logic(validator, struct_name, fields, mut env)
+		if logic.len > 0 {
+			code << logic
+			has_validation = true
 		}
-		has_validation = true
 	}
 
 	if !has_validation && !config.validate_all {
@@ -310,6 +310,49 @@ fn (p PydanticModelProcessor) generate_validate_method(
 
 	code << '}'
 	return code.join('\n')
+}
+
+fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorInfo, struct_name string, fields []PydanticFieldInfo, mut env PydanticVisitEnv) []string {
+	node := v_info.node
+	mut res := []string{}
+	
+	// Temporarily capture output for validator body
+	old_output := env.state.output
+	env.state.output = []string{}
+	
+	if v_info.is_model_validator {
+		res << '    m = fn (mut self ${struct_name}) !${struct_name} {'
+		for stmt in node.body {
+			env.visit_stmt_fn(stmt)
+		}
+		for line in env.state.output {
+			res << '        ' + line
+		}
+		res << '        return self'
+		res << '    }(mut m) !'
+	} else {
+		for f_name in v_info.fields {
+			mut f_type := 'Any'
+			for f in fields {
+				if f.name == f_name {
+					f_type = f.type_str
+					break
+				}
+			}
+			res << '    m.${f_name} = fn (v ${f_type}) !${f_type} {'
+			for stmt in node.body {
+				env.visit_stmt_fn(stmt)
+			}
+			for line in env.state.output {
+				res << '        ' + line
+			}
+			res << '        return v'
+			res << '    }(m.${f_name}) !'
+		}
+	}
+	
+	env.state.output = old_output
+	return res
 }
 
 fn (p PydanticModelProcessor) generate_factory(

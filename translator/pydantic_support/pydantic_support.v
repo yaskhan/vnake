@@ -6,8 +6,8 @@ import base
 
 pub struct PydanticVisitEnv {
 pub mut:
-	state            base.TranslatorState
-	analyzer         analyzer.Analyzer
+	state            &base.TranslatorState
+	analyzer         &analyzer.Analyzer
 	visit_stmt_fn    fn (ast.Statement) = unsafe { nil }
 	visit_expr_fn    fn (ast.Expression) string = unsafe { nil }
 	emit_struct_fn   fn (string) = unsafe { nil }
@@ -18,8 +18,8 @@ pub mut:
 }
 
 pub fn new_pydantic_visit_env(
-	state base.TranslatorState,
-	analyzer_ref analyzer.Analyzer,
+	state &base.TranslatorState,
+	analyzer_ref &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 	visit_expr_fn fn (ast.Expression) string,
 	emit_struct_fn fn (string),
