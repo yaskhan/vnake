@@ -3,7 +3,8 @@ module main
 import analyzer
 import os
 import translator
-import ast as _
+import ast
+import mypy
 
 pub struct TranspilerConfig {
 pub mut:
@@ -15,6 +16,7 @@ pub mut:
 	experimental        bool
 	run                 bool
 	analyze_deps        bool
+	use_mypy            bool
 	skip_dirs           []string
 }
 
@@ -74,12 +76,36 @@ fn should_skip_path(rel_path string, skip_dirs []string) bool {
 	return false
 }
 
+fn run_mypy_analysis(source string, filename string) {
+	mut lexer := ast.new_lexer(source, filename)
+	mut parser := ast.new_parser(lexer)
+	mod := parser.parse_module()
+
+	mut options := mypy.Options.new()
+	mut errors := mypy.new_errors(*options)
+	mut api := mypy.new_api(options, &errors)
+
+	mut file := mypy.bridge(mod) or {
+		println('Error: Mypy bridge failed.')
+		return
+	}
+
+	api.analyze(mut file, map[string]mypy.MypyFile{}) or {
+		println('Mypy analysis error: ${err}')
+	}
+}
+
 pub fn transpile_file(source_file string, config TranspilerConfig, output_path string) bool {
 	println('Transpiling ${source_file}...')
 
 	source_code := os.read_file(source_file) or {
 		println('Error reading ${source_file}: ${err}')
 		return false
+	}
+
+	if config.use_mypy {
+		println('Running native Mypy analysis...')
+		run_mypy_analysis(source_code, source_file)
 	}
 
 	mut transpiler := new_transpiler()
@@ -236,6 +262,9 @@ fn parse_args() (string, TranspilerConfig, bool) {
 			}
 			'--run' {
 				config.run = true
+			}
+			'--mypy' {
+				config.use_mypy = true
 			}
 			'--skip-dir' {
 				if i + 1 < os.args.len {
