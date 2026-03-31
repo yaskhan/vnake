@@ -261,12 +261,13 @@ pub fn (mut tc TypeChecker) visit_class_def(mut defn ClassDef) !AnyNode {
 
 // visit_assignment_stmt checks assignment
 pub fn (mut tc TypeChecker) visit_assignment_stmt(mut s AssignmentStmt) !AnyNode {
-	tc.msg.set_line(s.base.ctx.line, s.base.ctx.column)
 	rvalue_type := tc.expr_checker.accept(s.rvalue)
 	
 	// Check each lvalue
 	for mut lvalue in s.lvalues {
-		tc.check_assignment(mut lvalue, s.rvalue, rvalue_type)
+		if mut lval := lvalue.as_lvalue() {
+			tc.check_assignment(mut lval, s.rvalue, rvalue_type)
+		}
 	}
 	return ''
 }
@@ -283,11 +284,10 @@ fn (mut tc TypeChecker) check_assignment(mut lvalue Lvalue, rvalue Expression, r
 
 // check_simple_assignment checks simple assignment
 fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expression, rvalue_type MypyTypeNode) {
-	// tc.store_type(lvalue as Expression, rvalue_type) // This might need a match too if Expression is also a sum type
-	
 	// Handle different Lvalue variants
 	match mut lvalue {
 		NameExpr {
+			tc.store_type(lvalue as Expression, rvalue_type)
 			if mut node := lvalue.node {
 				if mut node is Var {
 					if target_type := node.type_ {
@@ -299,10 +299,12 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			}
 		}
 		MemberExpr {
+			tc.store_type(lvalue as Expression, rvalue_type)
 			// TODO: handle member assignment (setting attributes)
 			tc.expr_checker.accept(lvalue.expr)
 		}
 		else {
+			tc.store_type(lvalue as Expression, rvalue_type)
 			// TODO: handle other lvalues (TupleExpr, ListExpr, StarExpr)
 		}
 	}
