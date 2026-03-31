@@ -18,6 +18,7 @@ fn to_snake_case(name string) string {
 	return out.bytestr().replace('__', '_')
 }
 
+@[heap]
 pub struct VCodeEmitter {
 pub mut:
 	module_name     string
