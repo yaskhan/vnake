@@ -286,10 +286,12 @@ pub fn (mut ec ExpressionChecker) check_call(callee MypyTypeNode, args []Express
 pub fn (mut ec ExpressionChecker) check_callable_call(callee CallableType, args []Expression, arg_kinds []ArgKind, context NodeBase) (MypyTypeNode, MypyTypeNode) {
 	for i, arg in args {
 		arg_type := ec.accept(arg)
+		kind := if i < arg_kinds.len { arg_kinds[i] } else { ArgKind.arg_pos }
+
 		if i < callee.arg_types.len {
 			target_type := callee.arg_types[i]
 			ec.chk.check_subtype(arg_type, target_type, arg.get_context(), 'Argument ${i+1} has incompatible type')
-		} else if .arg_star in arg_kinds {
+		} else if kind == .arg_star {
             // TODO: handle *args
         } else {
             ec.chk.fail('Too many arguments for function call', arg.get_context())

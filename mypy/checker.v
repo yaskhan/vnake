@@ -289,11 +289,11 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 	match mut lvalue {
 		NameExpr {
 			if mut node := lvalue.node {
-				if mut v := node as Var {
-					if v.type_ == none {
-						v.type_ = rvalue_type
-					} else if target_type := v.type_ {
+				if mut node is Var {
+					if target_type := node.type_ {
 						tc.check_subtype(rvalue_type, target_type, rvalue.get_context(), 'Incompatible types in assignment')
+					} else {
+						node.type_ = rvalue_type
 					}
 				}
 			}
