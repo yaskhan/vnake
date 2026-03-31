@@ -107,7 +107,8 @@ fn (m &VariablesModule) type_utils_context() base.TypeUtilsContext {
 		scc_files:        m.state.scc_files.keys()
 		used_builtins:    m.state.used_builtins
 		warnings:         m.state.warnings
-		config:           m.state.config
+		include_all_symbols: m.state.include_all_symbols
+		strict_exports:      m.state.strict_exports
 	}
 }
 

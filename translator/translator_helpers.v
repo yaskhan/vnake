@@ -186,4 +186,7 @@ fn (mut t Translator) append_helpers() {
 	if t.state.used_builtins['py_path_new'] || t.state.used_builtins['PyPath'] {
 		t.state.output << 'type PyPath = string\nfn py_path_new(p string) PyPath {\n    return PyPath(p)\n}\nfn (p PyPath) exists() bool {\n    return os.exists(string(p))\n}\nfn (p PyPath) is_file() bool {\n    return os.is_file(string(p))\n}\nfn (p PyPath) is_dir() bool {\n    return os.is_dir(string(p))\n}\nfn (p PyPath) joinpath(other string) PyPath {\n    return PyPath(os.join_path(string(p), other))\n}'
 	}
+	if t.state.used_builtins['py_get_logger'] {
+		t.state.output << 'fn py_get_logger(name string) log.Log {\n    mut l := log.Log{}\n    l.set_level(.info)\n    return l\n}'
+	}
 }

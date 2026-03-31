@@ -410,6 +410,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					}
 					}
 			} else {
+				/* Handled by generation.v
 				mut init_method_opt := ?ast.FunctionDef(none)
 				for m in methods {
 					if m.name == '__init__' {
@@ -466,6 +467,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 						env.emit_constant_fn('pub const ${const_name} = { ${anno_parts.join(", ")} }')
 					}
 				}
+				*/
 			}
 		}
 

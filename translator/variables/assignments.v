@@ -238,13 +238,14 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 	}
 
 	if m.state.in_main {
-		if lhs in m.state.global_vars {
-			m.emitter.add_init_statement('${lhs} = ${rhs}')
+		if target is ast.Name && target.id.is_upper() && base.is_compile_time_evaluable(node.value) {
+			v_id := base.to_snake_case(target.id)
+			pub_prefix := if m.is_exported(target.id) { 'pub ' } else { '' }
+			m.emitter.add_constant('${pub_prefix}const ${v_id} = ${rhs}')
 			return
 		}
-		if target is ast.Name && target.id.is_upper() && m.is_compile_time_evaluable(node.value) {
-			pub_prefix := if m.is_exported(target.id) { 'pub ' } else { '' }
-			m.emitter.add_constant('${pub_prefix}${m.to_snake_case(target.id)} = ${rhs}')
+		if lhs in m.state.global_vars {
+			m.emitter.add_init_statement('${lhs} = ${rhs}')
 			return
 		}
 	}

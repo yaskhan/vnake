@@ -21,7 +21,8 @@ fn (env &ClassVisitEnv) type_utils_context() base.TypeUtilsContext {
 		scc_files:        env.state.scc_files.keys()
 		used_builtins:    env.state.used_builtins
 		warnings:         env.state.warnings
-		config:           env.state.config
+		include_all_symbols: env.state.include_all_symbols
+		strict_exports:      env.state.strict_exports
 	}
 }
 

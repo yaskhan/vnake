@@ -211,6 +211,14 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 			return ctx.type_map[ret_key]
 		}
 	}
+	if node.func is ast.Attribute {
+		if node.func.attr == 'join' || node.func.attr == 'split' || node.func.attr == 'upper' || node.func.attr == 'lower' || node.func.attr == 'strip' {
+			return 'string'
+		}
+		if node.func.attr in ['append', 'extend', 'add', 'update', 'remove', 'pop', 'clear'] {
+			return 'none'
+		}
+	}
 	return 'int'
 }
 

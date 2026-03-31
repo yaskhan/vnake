@@ -159,6 +159,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		return
 	}
 	target := node.targets[0]
+	id := if target is ast.Name { target.id } else { '' }
 	mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
 	mut rhs := ''
 	
@@ -279,7 +280,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	}
 
 	if target is ast.Name {
-		id := target.id
 		is_type_id := id.len > 0 && id[0].is_capital()
 		if is_type_id {
 			mut rhs_name := ''
@@ -297,22 +297,22 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			
 			// High-fidelity type alias resolution
 			mut inferred_found := ''
-			if inf1 := t.analyzer.get_type(target.id) {
-				 // eprintln('DEBUG ALIAS RESOLVE1: id=${target.id} inf1=${inf1}')
+			if inf1 := t.analyzer.get_type(id) {
+				 // eprintln('DEBUG ALIAS RESOLVE1: id=${id} inf1=${inf1}')
 				inferred_found = inf1
 			}
 			
 			if inferred_found == '' || inferred_found == 'int' || inferred_found == 'Any' {
-				qual := t.analyzer.get_qualified_name(target.id)
+				qual := t.analyzer.get_qualified_name(id)
 				if inf2 := t.analyzer.get_type(qual) {
-					 // eprintln('DEBUG ALIAS RESOLVE2: id=${target.id} qual=${qual} inf2=${inf2}')
+					 // eprintln('DEBUG ALIAS RESOLVE2: id=${id} qual=${qual} inf2=${inf2}')
 					if inf2 != 'int' && inf2 != 'Any' {
 						inferred_found = inf2
 					}
 				}
 			}
 
-			if inferred_found != '' && inferred_found != 'Any' && inferred_found != 'unknown' && inferred_found != target.id {
+			if inferred_found != '' && inferred_found != 'Any' && inferred_found != 'unknown' && inferred_found != id {
 				// Use special expansion for collections if we have a better inferred type
 				if ann_text.contains('Any') || ann_text == 'int' || rhs_name == 'list' || rhs_name == 'dict' || (inferred_found.contains('[]') && !ann_text.contains('[]')) {
 					expanded := t.map_annotation_str(inferred_found, '', true, true, false)
@@ -324,27 +324,32 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			is_type_expr := node.value is ast.Name || node.value is ast.Subscript || node.value is ast.Attribute
 			if is_type_expr {
 				if ann_text.contains('|') || ann_text.contains('map[') || ann_text.contains('[]') || ann_text.starts_with('?') || ann_text == 'Any' || rhs_name == 'list' || rhs_name == 'dict' {
-					t.emit_indented('type ${target.id} = ${ann_text}')
-					t.declare_local(target.id)
+					t.emit_indented('type ${id} = ${ann_text}')
+					t.declare_local(id)
 					return
 				}
 			}
 		}
 
-		lhs := base.sanitize_name(target.id, false, map[string]bool{}, '', map[string]bool{})
+		lhs := base.sanitize_name(id, false, map[string]bool{}, '', map[string]bool{})
 		mut rhs_text := rhs
 		if t.state.current_class.ends_with('Task') && rhs == 'r' && lhs in ['h', 'd', 'i', 'w'] {
 			rhs_text = '(${rhs} as ${t.state.current_class}Rec)'
 		}
 		mut lhs_t := t.guess_type(target)
-		target_expr := ast.Expression(target)
-		if target_expr is ast.Name {
-			if target_expr.id in t.analyzer.raw_type_map {
-				lhs_t = t.analyzer.raw_type_map[target_expr.id]
-			}
+		if id in t.analyzer.raw_type_map {
+			lhs_t = t.analyzer.raw_type_map[id]
 		}
 		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
 		
+		if t.state.indent_level == 0 && id.is_upper() && base.is_compile_time_evaluable(node.value) {
+			v_id := base.to_snake_case(id)
+			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
+			t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
+			t.declare_local(lhs)
+			return
+		}
+
 		if t.is_declared_local(lhs) {
 			if v_lhs_t.starts_with("?") && !rhs_text.starts_with("?") && rhs_text != "none" {
 				inferred := t.guess_type(node.value)
@@ -369,12 +374,12 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				rhs_text = 'Any(NoneType{})'
 			}
 			if v_inferred != 'Any' && v_inferred != 'int' {
-				t.analyzer.type_map[target.id] = v_inferred
+				t.analyzer.type_map[id] = v_inferred
 			}
 
 			// Decompose list literal for mutable locals if it has elements (for cap optimization)
 			val := node.value
-			if val is ast.List && (target.id in t.mutable_locals || lhs in t.mutable_locals) {
+			if val is ast.List && (id in t.mutable_locals || lhs in t.mutable_locals) {
 				// Avoid decomposition for dynamic lists (with starred expressions)
 				mut has_starred := false
 				for elt in val.elements { if elt is ast.Starred { has_starred = true; break } }
@@ -393,7 +398,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			}
 
 			is_opt_none := (v_inferred.starts_with('?') || v_inferred == 'Any') && (rhs_text.contains('none') || rhs_text.contains('NoneType'))
-			if target.id in t.mutable_locals || lhs in t.mutable_locals || is_opt_none {
+			if id in t.mutable_locals || lhs in t.mutable_locals || is_opt_none {
 				t.emit_indented('mut ${lhs} := ${rhs_text}')
 			} else {
 				t.emit_indented('${lhs} := ${rhs_text}')
@@ -444,9 +449,13 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			lhs := base.sanitize_name(node.target.id, false, map[string]bool{}, '', map[string]bool{})
 			mut prev_assignment_type := t.state.current_assignment_type
 			t.state.current_assignment_type = t.map_annotation(node.annotation)
+			t.state.current_ann_raw = t.annotation_raw_name(node.annotation)
+			t.state.current_assignment_lhs = lhs
 			mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
 			eg.target_type = t.state.current_assignment_type
 			mut rhs_text := eg.visit(value)
+			t.state.current_assignment_lhs = ''
+			t.state.current_ann_raw = ''
 			if rhs_text == 'none' && !t.state.current_assignment_type.starts_with('?') {
 				t.state.current_assignment_type = '?' + t.state.current_assignment_type
 			}
@@ -455,7 +464,11 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			}
 			ann_raw := t.annotation_raw_name(node.annotation)
 			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
-				t.emit_indented('const ${lhs} = ${rhs_text}')
+				target := node.target
+				id := target.get_token().value
+				v_id := base.to_snake_case(id)
+				pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
+				t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 				t.state.current_assignment_type = prev_assignment_type
 				return
 			}

@@ -31,7 +31,8 @@ pub mut:
 	scc_files        []string
 	used_builtins    map[string]bool
 	warnings         []string
-	config           voidptr
+	include_all_symbols bool
+	strict_exports      bool
 }
 
 pub struct TypeMapOptions {

@@ -33,7 +33,12 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		if annotation_str == 'LiteralString' || annotation_str == 'typing.LiteralString'
 			|| annotation_str == 'typing_extensions.LiteralString' {
 			if !m.is_literal_string_expr(value_expr) {
-				m.emit("//##LLM@@ LiteralString variable '${target_expr}' receives non-literal value.")
+				msg := if value_expr is ast.Call && value_expr.func is ast.Name && value_expr.func.id == 'input' {
+					"LiteralString variable '${target_expr}' receives value from input()"
+				} else {
+					"LiteralString variable '${target_expr}' receives non-literal value."
+				}
+				m.emit("//##LLM@@ ${msg}")
 			}
 		}
 

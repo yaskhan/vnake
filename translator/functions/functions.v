@@ -13,6 +13,10 @@ pub mut:
 	is_deleter      bool
 	is_deprecated   bool
 	deprecated_msg  string
+	is_generator    bool
+	cache_wrapper_needed bool
+	injected_start  []string
+	injected_end    []string
 }
 
 pub struct FunctionsOverloadHandler {}

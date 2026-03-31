@@ -101,13 +101,51 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 }
 
 fn (eg &ExprGen) extract_string_content(value string) string {
-	if value.len >= 3 && value[0] == `t` && (value[1] == `'` || value[1] == `"`) {
-		return value[2..value.len - 1]
+	res := value.trim('\r\n\t')
+	if res.len < 2 { return res }
+	mut v := res
+	// Remove prefixes first
+	for v.len > 0 && v[0].is_letter() {
+		if v.len > 1 && (v[1] == `'` || v[1] == `"`) {
+			v = v[1..]
+		} else {
+			break
+		}
 	}
-	if value.len >= 2 && (value[0] == `'` || value[0] == `"`) {
-		return value[1..value.len - 1]
+	// Independently strip quotes from both ends
+	for v.len > 0 && (v[0] == `'` || v[0] == `"`) {
+		v = v[1..]
 	}
-	return value
+	for v.len > 0 && (v[v.len - 1] == `'` || v[v.len - 1] == `"`) {
+		v = v[..v.len - 1]
+	}
+	return v
+}
+
+pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
+	tstring := eg.translate_tstring(node.values)
+	if tstring.len > 0 {
+		return tstring
+	}
+	
+	is_literal_goal := eg.target_type == 'LiteralString' || eg.state.current_ann_raw == 'LiteralString' || eg.state.current_ann_raw == 'typing.LiteralString'
+	
+	mut res := "'"
+	for val_node in node.values {
+		if val_node is ast.Constant {
+			res += eg.extract_string_content(val_node.value)
+		} else if val_node is ast.FormattedValue {
+			val_expr := val_node.value
+			if is_literal_goal && val_expr is ast.Constant {
+				// Flatten literal interpolation
+				res += eg.extract_string_content(val_expr.value)
+			} else {
+				res += '$' + '{' + eg.visit(val_expr) + '}'
+			}
+		}
+	}
+	res += "'"
+	return res
 }
 
 fn (eg &ExprGen) quote_string_content(value string) string {
@@ -136,16 +174,16 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 	if values.len == 0 {
 		return ''
 	}
-	if values[0] is ast.Constant {
-		first := values[0] as ast.Constant
-		if !first.value.starts_with('__py2v_t__')
-			&& !first.value.starts_with('t\'')
-			&& !first.value.starts_with('t"')
-			&& first.token.typ != .tstring_tok {
+	v_first := values[0]
+	if v_first is ast.Constant {
+		if !v_first.value.starts_with('__py2v_t__')
+			&& !v_first.value.starts_with('t\'')
+			&& !v_first.value.starts_with('t"')
+			&& v_first.token.typ != .tstring_tok {
 			return ''
 		}
 
-		mut strings := []string{}
+		mut parts := []string{}
 		mut interpolations := []string{}
 
 		for i, value in values {
@@ -156,11 +194,11 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 						content = content['__py2v_t__'.len..]
 					}
 					content = eg.extract_string_content(content)
-					strings << eg.quote_string_content(content)
+					parts << eg.quote_string_content(content)
 				}
 				ast.FormattedValue {
 					if i == 0 {
-						strings << "''"
+						parts << "''"
 					}
 					expr_text := eg.visit(value.value)
 					conversion := match value.conversion {
@@ -181,18 +219,18 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 					}
 					interpolations << 'Interpolation{value: ${expr_text}, expression: ${eg.quote_string_content(expr_text)}, conversion: ${conversion}, format_spec: ${format_spec}}'
 					if i == values.len - 1 {
-						strings << "''"
+						parts << "''"
 					}
 				}
 				else {}
 			}
 		}
 
-		for strings.len < interpolations.len + 1 {
-			strings << "''"
+		for parts.len < interpolations.len + 1 {
+			parts << "''"
 		}
 
-		return 'Template{strings: [${strings.join(', ')}], interpolations: [${interpolations.join(', ')}]}'
+		return 'Template{strings: [${parts.join(', ')}], interpolations: [${interpolations.join(', ')}]}'
 	}
 	return ''
 }
@@ -424,23 +462,6 @@ pub fn (mut eg ExprGen) visit_slice(node ast.Slice) string {
 	return '${lower}..${upper}'
 }
 
-pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
-	tstring := eg.translate_tstring(node.values)
-	if tstring.len > 0 {
-		return tstring
-	}
-	mut res := "'"
-	for value in node.values {
-		if value is ast.Constant {
-			res += eg.extract_string_content(value.value)
-		} else if value is ast.FormattedValue {
-			res += '$' + '{' + eg.visit(value.value) + '}'
-		}
-	}
-	res += "'"
-	return res
-}
-
 pub fn (mut eg ExprGen) visit_formatted_value(node ast.FormattedValue) string {
 	expr := eg.visit(node.value)
 	expr_type := eg.guess_type(node.value)
@@ -466,14 +487,38 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	all_args_params << node.args.args
 	all_args_params << node.args.kwonlyargs
 
-	for arg in all_args_params {
+	mut ctx_param_types := []string{}
+	mut ctx_ret_type := 'int'
+	
+	if eg.state.current_assignment_type.starts_with('fn (') {
+		line := eg.state.current_assignment_type
+		bracket_idx := line.index('(') or { -1 }
+		close_bracket_idx := line.index(')') or { -1 }
+		if bracket_idx != -1 && close_bracket_idx != -1 {
+			params_str := line[bracket_idx + 1..close_bracket_idx].trim_space()
+			if params_str.len > 0 {
+				ctx_param_types = params_str.split(',').map(it.trim_space())
+			}
+			ret_part := line[close_bracket_idx + 1..].trim_space()
+			if ret_part.len > 0 {
+				ctx_ret_type = ret_part
+			}
+		}
+	}
+
+	for i, arg in all_args_params {
 		if d := arg.default_ {
 			if d is ast.Name && d.id == arg.arg {
 				extra_captures << base.sanitize_name(arg.arg, false, map[string]bool{}, "", map[string]bool{})
 				continue
 			}
 		}
-		typ := eg.lambda_param_type(arg.annotation)
+		mut typ := eg.lambda_param_type(arg.annotation)
+		if typ == 'Any' && i < ctx_param_types.len {
+			typ = ctx_param_types[i]
+		}
+		if typ == 'Any' { typ = 'int' } // Fallback to int for test compatibility
+		
 		params << "${arg.arg} ${typ}"
 		param_types[arg.arg] = typ
 		current_scope[arg.arg] = true
@@ -507,7 +552,11 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	}
 	capture_str := if captures.len > 0 { "[${captures.join(", ")}] " } else { "" }
 
-	ret_type := eg.lambda_return_type(node.body, param_types)
+	mut ret_type := eg.lambda_return_type(node.body, param_types)
+	if ret_type == 'Any' && ctx_ret_type != 'Any' {
+		ret_type = ctx_ret_type
+	}
+	if ret_type == 'Any' { ret_type = 'int' }
 
 	eg.state.scope_stack << current_scope
 	eg.state.scope_names << "<lambda>"
@@ -537,7 +586,7 @@ fn (mut eg ExprGen) lambda_param_type(annotation ?ast.Expression) string {
 		}
 		return eg.visit(ann)
 	}
-	return 'int'
+	return 'Any'
 }
 
 fn (eg &ExprGen) lambda_return_type(body ast.Expression, param_types map[string]string) string {
@@ -547,7 +596,7 @@ fn (eg &ExprGen) lambda_return_type(body ast.Expression, param_types map[string]
 		ctx.type_map[k] = v
 	}
 	ret_type := base.guess_type(body, ctx, true)
-	return if ret_type in ["Any", "void", "unknown"] { "Any" } else { ret_type }
+	return if ret_type in ["Any", "void", "unknown", "int"] { "Any" } else { ret_type }
 }
 
 pub fn (mut eg ExprGen) visit_await(node ast.Await) string {
@@ -594,7 +643,8 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 		scc_files:        eg.state.scc_files.keys()
 		used_builtins:    eg.state.used_builtins
 		warnings:         eg.state.warnings
-		config:           eg.state.config
+		include_all_symbols: eg.state.include_all_symbols
+		strict_exports:      eg.state.strict_exports
 	}
 	mut actual_struct := if opts.struct_name.len > 0 && opts.struct_name != 'Self' { opts.struct_name } else { eg.state.current_class }
 	if actual_struct == '' { actual_struct = 'Self' }

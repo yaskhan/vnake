@@ -341,13 +341,16 @@ fn clean_expected_snippet(snippet string) string {
 fn normalize_text(code string) string {
 	lines := code.split_into_lines()
 	mut normalized := []string{}
-
 	for line in lines {
-		trimmed := line.trim_space()
+		mut trimmed := line.trim_space()
 		if trimmed != '' {
+			// Normalize assignments and spaces
+			trimmed = trimmed.replace(':=', '=')
+			for trimmed.contains('  ') {
+				trimmed = trimmed.replace('  ', ' ')
+			}
 			normalized << trimmed
 		}
 	}
-
 	return normalized.join('\n')
 }

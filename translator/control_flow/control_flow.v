@@ -150,7 +150,8 @@ pub fn (m &ControlFlowModule) map_python_type(type_str string, is_return bool) s
 		scc_files:        m.env.state.scc_files.keys()
 		used_builtins:    m.env.state.used_builtins
 		warnings:         m.env.state.warnings
-		config:           m.env.state.config
+		include_all_symbols: m.env.state.include_all_symbols
+		strict_exports:      m.env.state.strict_exports
 	}
 	return base.map_type(type_str, opts, mut ctx, fn (_ string) string { return '' },
 		fn (_ []string) string { return '' }, fn (_ string) string { return '' })
@@ -169,7 +170,8 @@ pub fn (m &ControlFlowModule) register_sum_type(types_str string) string {
 		scc_files:        m.env.state.scc_files.keys()
 		used_builtins:    m.env.state.used_builtins
 		warnings:         m.env.state.warnings
-		config:           m.env.state.config
+		include_all_symbols: m.env.state.include_all_symbols
+		strict_exports:      m.env.state.strict_exports
 	}
 	mut st := m.env.state
 	return base.map_type(types_str, opts, mut ctx, fn [mut st] (name string) string {

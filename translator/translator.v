@@ -38,6 +38,8 @@ pub fn new_translator() &Translator {
 	}
 	println("TRANSLATOR_CREATED")
 	t.state.mapper = stdlib_map.new_stdlib_mapper()
+	t.state.include_all_symbols = false
+	t.state.strict_exports = false
 	t.state.coroutine_handler = &t.coroutine_handler
 	t.control_flow_module.env = t.get_control_flow_env()
 	t.analyzer.guess_type_handler = fn (e ast.Expression, ctx models.TypeGuessingContext) string {
@@ -111,7 +113,7 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				'bool' { 'bool' }
 				'int', 'i64' { 'int' }
 				'float', 'f64' { 'f64' }
-				'str', 'string' { 'string' }
+				'str', 'string', 'LiteralString' { 'string' }
 				'list', 'List' { '[]Any' }
 				'Self' {
 					struct_name := t.state.current_class
@@ -127,7 +129,11 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				}
 				'dict', 'Dict' { 'map[string]Any' }
 				'set', 'Set' { 'datatypes.Set[Any]' }
-				else { t.state.imported_symbols[node.id] or { node.id } }
+				else {
+					full_sym := t.state.imported_symbols[node.id] or { node.id }
+					if full_sym in ['LiteralString', 'typing.LiteralString', 'typing_extensions.LiteralString'] { return 'string' }
+					full_sym
+				}
 			}
 			if node.id == 'list' || node.id == 'OrderedCollection' {
 			}
@@ -143,13 +149,14 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 			full_name := t.annotation_raw_name(node)
 			if full_name in ['NoReturn', 'typing.NoReturn'] { return 'noreturn' }
 			if full_name in ['Any', 'typing.Any'] { return 'Any' }
+			if full_name in ['LiteralString', 'typing.LiteralString', 'typing_extensions.LiteralString'] { return 'string' }
 			if full_name in ['Self', 'typing.Self'] {
 				gen_s := if t.state.current_class_generics.len > 0 {
 					'[${t.state.current_class_generics.join(", ")}]'
 				} else { '' }
 				return '&${t.state.current_class}${gen_s}'
 			}
-			return t.map_annotation(node.value)
+			return t.map_annotation_str(full_name, t.state.current_class, true, true, false)
 		}
 		ast.Subscript {
 			base_raw := t.annotation_raw_name(node.value)
@@ -275,7 +282,8 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		scc_files:        t.state.scc_files.keys()
 		used_builtins:    t.state.used_builtins
 		warnings:         t.state.warnings
-		config:           t.state.config
+		include_all_symbols: t.state.include_all_symbols
+		strict_exports:      t.state.strict_exports
 	}
 	mut st := t.state
 	res := base.map_type(type_str, opts, mut ctx, fn [mut t, actual_struct] (name string) string {
@@ -353,6 +361,30 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	mut lexer := ast.new_lexer(preprocessed, filename)
 	mut parser := ast.new_parser(lexer)
 	module_node := parser.parse_module()
+
+	// Pre-scan for __all__
+	t.state.module_all = []string{}
+	for stmt in module_node.body {
+		if stmt is ast.Assign {
+			for target in stmt.targets {
+				if target is ast.Name && target.id == '__all__' {
+					if stmt.value is ast.List {
+						for elt in stmt.value.elements {
+							if elt is ast.Constant {
+								t.state.module_all << elt.value.trim('\'" ')
+							}
+						}
+					} else if stmt.value is ast.Tuple {
+						for elt in stmt.value.elements {
+							if elt is ast.Constant {
+								t.state.module_all << elt.value.trim('\'" ')
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 
 	// Pre-analyze to fill type map for aliases
 	t.analyzer.analyze(module_node)

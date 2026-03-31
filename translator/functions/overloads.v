@@ -107,7 +107,7 @@ pub fn generate_overload_variants(
 		pub_pfx_final := if is_operator { '' } else { pub_pfx }
 		
 		mut sig_ret := sig['return']
-		if (is_operator || dec_info.is_classmethod || dec_info.is_staticmethod) && sig_ret.len > 0 && sig_ret[0].is_capital() && sig_ret !in ['Any', 'LiteralString', 'bool', 'int', 'f64'] {
+		if (dec_info.is_classmethod || dec_info.is_staticmethod) && sig_ret.len > 0 && sig_ret[0].is_capital() && sig_ret !in ['Any', 'LiteralString', 'bool', 'int', 'f64'] {
 			if !sig_ret.starts_with('&') {
 				sig_ret = '&' + sig_ret
 			}

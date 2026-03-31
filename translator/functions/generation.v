@@ -17,254 +17,227 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		m.overload_handler.handle_overloads(node, struct_name, h.get_decorator_info(node, struct_name, env), mut env, mut m)
 		return
 	}
+
 	is_method := struct_name.len > 0
-	mut annotations_data := map[string]string{}
-	mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
-	is_generator := if env.state.coroutine_handler != unsafe { nil } { coroutine_handler.is_generator(node.name) } else { false }
-	yield_type := if is_generator { coroutine_handler.get_yield_type(node) } else { 'int' }
-	if is_generator { env.state.used_builtins['PyGenerator'] = true }
-	
-	mut output := []string{}
-	
-	// Decorators
-	// Decorators Analysis
-	mut is_static := false
-	mut is_deprecated := false
-	mut deprecated_message := ''
-	mut cache_wrapper_needed := false
-	mut injected_start := []string{}
-	mut injected_end := []string{}
-	
-	dec_info := h.get_decorator_info(node, struct_name, env)
-	
-	mut name_remap_revert := map[string]string{}
-	defer {
-		for k, v in name_remap_revert {
-			if v == '__DELETED__' {
-				env.state.name_remap.delete(k)
-			} else {
-				env.state.name_remap[k] = v
-			}
+	mut is_abstract := false
+	for base_name in env.state.current_class_bases {
+		if node.name in env.state.abstract_methods[base_name] {
+			is_abstract = true
+			break
 		}
 	}
-	
-	if dec_info.is_classmethod {
-		if 'cls' in env.state.name_remap {
-			name_remap_revert['cls'] = env.state.name_remap['cls']
-		} else {
-			name_remap_revert['cls'] = '__DELETED__'
-		}
-		env.state.name_remap['cls'] = struct_name
+	if is_abstract && struct_name != env.state.current_class {
+		return
 	}
 
-	mut func_name := sanitize_name(node.name, false)
-	mut is_property := dec_info.is_property
-	_ = is_property
-	mut is_setter := false
+	is_nested := env.state.scope_stack.len > 0 && !is_method
+	mut annotations_data := map[string]string{}
 	
+	dec_info := h.get_decorator_info(node, struct_name, env)
+	mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
+	is_generator := dec_info.is_generator
+	
+	mut output := []string{}
+	if env.state.include_all_symbols {
+		if env.source_mapping {
+			output << '// @line: ${env.state.get_source_info(node.token)}'
+		}
+	}
+
 	for decorator in node.decorator_list {
-		mut dec_name := ''
+		mut dec_str := ''
 		if decorator is ast.Call {
-			dec_name = env.visit_expr_fn(decorator.func)
+			func_str := env.visit_expr_fn(decorator.func)
+			mut args_list := []string{}
+			for arg in decorator.args {
+				args_list << env.visit_expr_fn(arg)
+			}
+			for kw in decorator.keywords {
+				args_list << '${kw.arg}=${env.visit_expr_fn(kw.value)}'
+			}
+			dec_str = '${func_str}(${args_list.join(", ")})'
 		} else {
-			dec_name = env.visit_expr_fn(decorator)
+			dec_str = env.visit_expr_fn(decorator)
 		}
-		
-		output << '// @${dec_name}'
-		
-		if dec_name.ends_with('.setter') {
-			func_name = 'set_${func_name}'
-			is_setter = true
-		}
-		
-		if dec_name.ends_with('property') {
-			is_property = true
-		}
-		
-		if dec_name.ends_with('staticmethod') {
-			is_static = true
-		} else if dec_name.ends_with('classmethod') {
-			is_static = true
-		} else if dec_name.ends_with('lru_cache') {
-			cache_wrapper_needed = true
-		} else if dec_name in ['timer', 'log'] {
-			injected_start << "println('Start ${node.name}...')"
-			injected_end << "defer { println('End ${node.name}...') }"
-		} else if dec_name.ends_with('deprecated') {
-			is_deprecated = true
-			if decorator is ast.Call && decorator.args.len > 0 {
-				deprecated_message = env.visit_expr_fn(decorator.args[0]).trim("'\"")
+		output << '// @${dec_str}'
+	}
+
+	mut args_str_list := []string{}
+	mut args_names := []string{}
+	mut receiver_str := ''
+
+	// Generics handling
+	mut py_func_generics := []string{}
+	if node.type_params.len > 0 {
+		for param in node.type_params {
+			py_func_generics << param.name
+			if def := param.default_ {
+				type_str := env.visit_expr_fn(def)
+				env.state.generic_defaults[param.name] = env.map_type_fn(type_str, struct_name, true, true, false)
 			}
 		}
+		full_func_name := if is_method && struct_name.len > 0 { '${struct_name}_${sanitize_name(node.name, false)}' } else { sanitize_name(node.name, false) }
+		env.state.type_params_map[full_func_name] = py_func_generics.clone()
+	}
+
+	if py_func_generics.len == 0 {
+		implicit_generics := extract_implicit_generics(node, env.state.type_vars, env.state.constrained_typevars, env.state.current_class_generics, base.sanitize_name_helper)
+		if implicit_generics.len > 0 {
+			py_func_generics = implicit_generics.clone()
+			full_func_name := if is_method && struct_name.len > 0 { '${struct_name}_${sanitize_name(node.name, false)}' } else { sanitize_name(node.name, false) }
+			env.state.type_params_map[full_func_name] = py_func_generics.clone()
+		}
+	}
+
+	env.state.generic_scopes << base.get_generic_map(py_func_generics, [env.state.current_class_generic_map])
+	defer { env.state.generic_scopes.pop() }
+
+	v_gens_to_declare := base.get_all_active_v_generics(env.state.generic_scopes)
+	func_generics_str := base.get_generics_with_variance_str(v_gens_to_declare, env.state.generic_scopes.last(), env.state.generic_variance, env.state.generic_defaults)
+
+	if is_generator {
+		yield_type := coroutine_handler.get_yield_type(node)
+		args_str_list << 'ch_out chan ${yield_type}'
+		args_str_list << 'ch_in chan PyGeneratorInput'
 	}
 
 	mut args := node.args.posonlyargs.clone()
 	args << node.args.args
 	args << node.args.kwonlyargs
 
-	mut receiver_str := ''
-	orig_name := node.name
-	is_operator := orig_name in base.op_methods_to_symbols
-	
-	// Name mangling for static/class methods
-	if is_method && is_static {
-		func_name = '${struct_name}_${func_name}'
-	}
+	mut func_name := sanitize_name(node.name, false)
 
 	// Receiver handling
-	mut receiver_name := ''
 	if is_method && args.len > 0 && args[0].arg in ['self', 'cls'] {
-		if !is_static {
-			mut mut_pfx := ''
-			if h.is_mutating_method(node, struct_name, &env) {
-				mut_pfx = 'mut '
+		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
+			mut is_mutated := h.is_mutating_method(node, struct_name, &env)
+			p_key := '${struct_name}.${node.name}.self'
+			if m_info_self := env.analyzer.get_mutability(p_key) {
+				is_mutated = is_mutated || m_info_self.is_mutated
 			}
-			mut v_gens := []string{}
-			for py_name in env.state.current_class_generics {
-				v_gens << env.state.current_class_generic_map[py_name] or { py_name }
-			}
-			gen_s := if v_gens.len > 0 { '[${v_gens.join(", ")}]' } else { '' }
-			receiver_name = 'self' // ALWAYS use self in V methods
-			receiver_str = '(${mut_pfx}${receiver_name} ${struct_name}${gen_s}) '
+
+			if dec_info.is_property { is_mutated = false }
+
+			mut mut_pfx := if dec_info.is_setter || is_mutated { 'mut ' } else { '' }
+			gen_s := if env.state.current_class_generics.len > 0 {
+				mut v_gens := []string{}
+				for g in env.state.current_class_generics {
+					v_gens << env.state.current_class_generic_map[g] or { g }
+				}
+				'[${v_gens.join(", ")}]'
+			} else { '' }
+			receiver_str = '(${mut_pfx}${args[0].arg} ${struct_name}${gen_s}) '
 		}
+		args = args[1..].clone()
+	} else if env.state.current_class_is_unittest && args.len > 0 && args[0].arg == 'self' {
 		args = args[1..].clone()
 	}
 
-	// Unittest special handling
-	if env.state.current_class_is_unittest {
-		if node.name.starts_with('test_') {
-			func_name = '${node.name}_${struct_name}'
-			receiver_str = ''
-		} else if node.name in ['setUp', 'tearDown'] {
-			output << '// ${node.name} method in unittest ignored'
-			env.emit_fn(output.join('\n'))
-			return
-		}
+	// Default arguments map
+	mut defaults_map := map[string]ast.Expression{}
+	mut all_params_for_defaults := node.args.posonlyargs.clone()
+	all_params_for_defaults << node.args.args
+	all_params_for_defaults << node.args.kwonlyargs
+	for p in all_params_for_defaults {
+		d := p.default_ or { continue }
+		defaults_map[p.arg] = d
 	}
 
-	// Dunder renames
-	if orig_name == '__init__' {
-		func_name = 'init'
-	} else if orig_name == '__post_init__' {
-		func_name = 'post_init'
-	} else if orig_name == '__str__' {
-		func_name = 'str'
-	} else if orig_name == '__repr__' {
-		func_name = 'str' // fallback
-	} else if orig_name == '__len__' {
-		func_name = 'len'
-	} else if orig_name == '__getitem__' {
-		func_name = 'idx'
-	} else if orig_name == '__setitem__' {
-		func_name = 'set'
-	} else if orig_name == '__next__' {
-		func_name = 'next'
-	} else if orig_name == '__iter__' {
-		func_name = 'iter'
-	}
-	// Args processing
-	mut args_str_list := []string{}
-	mut args_names := []string{}
+	mut local_mut_copies := [][]string{}
 	for arg in args {
-		name := sanitize_name(arg.arg, false)
-		args_names << name
-		mut a_type := if node.args.vararg == none && node.args.kwarg == none { 'int' } else { 'Any' }
+		arg_name := sanitize_name(arg.arg, false)
+		mut arg_type := 'int'
 		if ann := arg.annotation {
-			a_type = env.map_annotation_fn(ann)
-		} else if is_setter {
-			// In V, setters must match the getter's return type.
-			mut prop_name := node.name
-			// The decorator is `@x.setter`, so we look for property `x`
-			for decorator in node.decorator_list {
-				dec_name := env.visit_expr_fn(decorator)
-				if dec_name.ends_with('.setter') {
-					prop_name = dec_name.replace('.setter', '')
-					break
-				}
+			arg_type = env.map_annotation_fn(ann)
+		} else {
+			p_key_arg := if struct_name.len > 0 { '${struct_name}.${node.name}.${arg.arg}' } else { '${node.name}.${arg.arg}' }
+			mut inf_t_arg := env.analyzer.get_type(p_key_arg) or { 'int' }
+			if inf_t_arg == 'Any' {
+				inf_t_arg = 'int'
 			}
-			
-			lookup_name := if struct_name.len > 0 { '${struct_name}.${prop_name}' } else { prop_name }
-			mut final_inferred := ''
-			if inf1 := env.analyzer.get_type(lookup_name) {
-				if inf1 != 'Any' && inf1 != 'unknown' && !inf1.contains('Callable') {
-					final_inferred = inf1
-				}
-			}
-			if final_inferred == '' {
-				if inf2 := env.analyzer.get_type('${lookup_name}@return') {
-					if inf2 != 'Any' && inf2 != 'unknown' {
-						final_inferred = inf2
-					}
-				}
-			}
-			
-			if final_inferred != '' {
-				can_use_union := false
-				a_type = env.map_type_fn(final_inferred, struct_name, can_use_union, true, false)
-			}
-			if a_type.contains('fn (') {
-				a_type = 'int'
-			}
-		}
-		
-		mut final_a_type := a_type
-		if (final_a_type in env.state.defined_classes || (final_a_type.len > 0 && final_a_type[0].is_capital() && final_a_type !in ['Any', 'LiteralString', 'NoneType', 'LiteralEnum_'] && !final_a_type.starts_with('SumType_') && final_a_type.len > 1)) && !final_a_type.starts_with('&') {
-			final_a_type = '&' + final_a_type
-		}
-		
-		mut mut_prefix := ''
-		p_key := if struct_name.len > 0 { '${struct_name}.${orig_name}.${arg.arg}' } else { '${orig_name}.${arg.arg}' }
-		if (env.analyzer.get_mutability(p_key) or { analyzer.MutabilityInfo{} }).is_mutated {
-			// In V, basic types like int/f64/bool can't be mut parameters normally,
-			// but we add it anyway for consistency if the analyzer says so (usually for pointer structs, arrays, maps)
-			if final_a_type != 'int' && final_a_type != 'f64' && final_a_type != 'bool' {
-				mut_prefix = 'mut '
-			}
+			arg_type = env.map_type_fn(inf_t_arg, struct_name, true, true, false)
 		}
 
-		args_str_list << '${mut_prefix}${name} ${final_a_type}'
-		annotations_data[name] = final_a_type
+		a_clean := arg_type.trim_left('?!')
+		if (a_clean.len > 0 && a_clean[0].is_capital() && a_clean !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !a_clean.starts_with('SumType_') && a_clean !in v_gens_to_declare) && !arg_type.starts_with('&') {
+			arg_type = '&' + arg_type
+		}
+
+		annotations_data[arg_name] = arg_type
+		args_names << arg_name
+
+		mut is_reassigned := false
+		mut is_mut := false
+		p_key_mut := if struct_name.len > 0 { '${struct_name}.${node.name}.${arg.arg}' } else { '${node.name}.${arg.arg}' }
+		if m_info := env.analyzer.get_mutability(p_key_mut) {
+			is_reassigned = m_info.is_reassigned
+			is_mut = m_info.is_reassigned || m_info.is_mutated
+		}
+
+		clean_type_arg := arg_type.trim_left('?')
+		is_primitive_arg := clean_type_arg in ['int', 'string', 'bool', 'f32', 'f64', 'i64', 'i16', 'i8', 'u8', 'u16', 'u32', 'u64', 'byte', 'rune', 'void', 'any']
+		
+		if (arg.arg in defaults_map && is_mut) || (is_primitive_arg && is_reassigned) {
+			local_mut_copies << [arg_name, arg_name]
+			is_mut = false
+		}
+		if is_mut && is_primitive_arg {
+			is_mut = false
+		}
+
+		args_str_list << '${if is_mut { "mut " } else { "" }}${arg_name} ${arg_type}'
 	}
 
 	if vararg := node.args.vararg {
-		name := sanitize_name(vararg.arg, false)
-		args_names << '...${name}'
-		mut a_type := 'Any'
-		if ann := vararg.annotation {
-			a_type = env.map_annotation_fn(ann)
+		arg_name_raw := sanitize_name(vararg.arg, false)
+		mut arg_type := 'Any'
+		if ann_var := vararg.annotation {
+			arg_type = env.map_annotation_fn(ann_var)
 		}
-		// V varargs use the element type: ...T
-		if a_type.starts_with('[]') {
-			a_type = a_type[2..]
+		if is_nested {
+			if !arg_type.starts_with('[]') { arg_type = '[]' + arg_type }
+			args_str_list << '${arg_name_raw} ${arg_type}'
+		} else {
+			if arg_type.starts_with('[]') { arg_type = arg_type[2..] }
+			args_str_list << '${arg_name_raw} ...${arg_type}'
 		}
-		args_str_list << '${name} ...${a_type}'
-		annotations_data[name] = a_type
+		args_names << arg_name_raw
+		annotations_data[arg_name_raw] = arg_type
+	}
+
+	if kwarg := node.args.kwarg {
+		arg_name_raw := sanitize_name(kwarg.arg, false)
+		mut arg_type := 'map[string]Any'
+		if ann_kw := kwarg.annotation {
+			arg_type = env.map_annotation_fn(ann_kw)
+		}
+		args_str_list << '${arg_name_raw} ${arg_type}'
+		args_names << arg_name_raw
+		annotations_data[arg_name_raw] = arg_type
 	}
 
 	mut ret_type := 'void'
-	if ann := node.returns {
-		ret_type = env.map_annotation_fn(ann)
-	}
-	if func_name in ['str', 'repr'] {
-		ret_type = 'string'
-	}
-	if (ret_type == 'void' || ret_type == '') && func_name == 'iter' {
-		ret_type = struct_name
-	}
-	if ret_type != 'void' { annotations_data['return'] = ret_type }
-	env.state.current_function_return_type = ret_type
-
-	if ret_type == 'noreturn' {
-		// Handled via attr_pfx below
-	}
-	
-	if is_deprecated {
-		if deprecated_message.len > 0 {
-			output << '@[deprecated: \'${deprecated_message}\']'
+	if !is_generator {
+		if ann_ret := node.returns {
+			ret_type = env.map_annotation_fn(ann_ret)
 		} else {
-			output << '@[deprecated]'
+			p_key_ret := if struct_name.len > 0 { '${struct_name}.${node.name}@return' } else { '${node.name}@return' }
+			inf_ret := env.analyzer.get_type(p_key_ret) or { 'void' }
+			ret_type = env.map_type_fn(inf_ret, struct_name, true, false, false)
+		}
+
+		if ret_type == 'Self' || (node.name == '__enter__' && ret_type == 'void') {
+			ret_type = base.get_full_self_type(struct_name, env.state.current_class, env.state.current_class_generics)
+		}
+
+		r_clean_ptr := ret_type.trim_left('?!')
+		is_v_native_method := node.name in ['__str__', '__repr__', 'str', 'repr', '__iter__', 'iter', '__next__', 'next', '__len__', 'len', '__getitem__', 'idx', '__setitem__', 'set', '__enter__', 'enter', '__exit__', 'exit']
+		if !is_v_native_method && r_clean_ptr.len > 0 && r_clean_ptr[0].is_capital() && r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !r_clean_ptr.starts_with('SumType_') && r_clean_ptr !in v_gens_to_declare && !ret_type.starts_with('&') {
+			ret_type = '&' + ret_type
 		}
 	}
+
+	if dec_info.is_setter { ret_type = 'void' }
 
 	mut is_noreturn := false
 	if ret_type == 'noreturn' {
@@ -272,105 +245,160 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		ret_type = 'void'
 	}
 
-	real_func_name := base.op_methods_to_symbols[orig_name] or {
-		if cache_wrapper_needed { '${func_name}__impl' } else { func_name }
-	}
-	mut final_ret_type := ret_type
-	if (is_operator || is_static || dec_info.is_classmethod) && final_ret_type.len > 0 && final_ret_type[0].is_capital() && final_ret_type !in ['Any', 'LiteralString', 'bool', 'int', 'f64'] {
-		if !final_ret_type.starts_with('&') {
-			final_ret_type = '&' + final_ret_type
+	// Rename logic and return type overrides
+	mut is_init := false
+	match node.name {
+		'__init__' {
+			if struct_name.len > 0 && env.state.defined_classes[struct_name]['has_new'] {
+				func_name = 'init'
+			} else {
+				is_init = true
+				func_name = base.get_factory_name(struct_name, env.state.class_hierarchy)
+				receiver_str = ''
+				ret_type = '&' + struct_name
+				if env.state.current_class_generics.len > 0 {
+					ret_type += '[${env.state.current_class_generics.join(", ")}]'
+				}
+				if env.state.defined_classes[struct_name]['is_pydantic'] {
+					ret_type = '!' + ret_type
+				}
+			}
+		}
+		'__new__' {
+			func_name = base.get_factory_name(struct_name, env.state.class_hierarchy)
+		}
+		'__next__', 'next' {
+			func_name = 'next'
+			if !ret_type.starts_with('?') && ret_type != 'void' {
+				ret_type = '?' + ret_type
+			}
+		}
+		'__str__', 'str', '__repr__', 'repr' {
+			func_name = if node.name in ['__str__', 'str'] { 'str' } else { 'repr' }
+			ret_type = 'string'
+		}
+		'__len__', 'len' { func_name = 'len' }
+		'__getitem__', 'idx' { func_name = 'idx' }
+		'__setitem__', 'set' { func_name = 'set' }
+		'__iter__', 'iter' {
+			func_name = 'iter'
+			if (ret_type == 'void' || ret_type == '') && struct_name.len > 0 {
+				ret_type = base.get_full_self_type(struct_name, env.state.current_class, env.state.current_class_generics)
+			}
+		}
+		'__enter__', '__aenter__', 'enter' { func_name = 'enter' }
+		'__exit__', '__aexit__', 'exit' { func_name = 'exit' }
+		'__post_init__', 'post_init' { func_name = 'post_init' }
+		else {
+			if dec_info.is_classmethod || dec_info.is_staticmethod {
+				func_name = '${struct_name}_${func_name}'
+			}
+			if env.state.current_class_is_unittest && node.name.starts_with('test_') {
+				func_name = '${node.name}_${struct_name}'
+				receiver_str = ''
+			}
 		}
 	}
+
+	if dec_info.is_setter {
+		func_name = 'set_${func_name}'
+		if struct_name.len > 0 {
+			if struct_name !in env.state.property_setters {
+				env.state.property_setters[struct_name] = map[string]bool{}
+			}
+			env.state.property_setters[struct_name][node.name] = true
+		}
+	}
+
+	if ret_type != 'void' { annotations_data['return'] = ret_type }
 
 	pub_pfx := if env.state.is_exported(node.name) { 'pub ' } else { '' }
-	ret_suffix := if final_ret_type != 'void' && final_ret_type != '' && !is_noreturn { ' ${final_ret_type}' } else { '' }
-	attr_pfx := if is_noreturn { '[noreturn]\n' } else { '' }
-	
-	mut func_generics := extract_implicit_generics(node, env.analyzer.type_vars, map[string]bool{},
-		env.state.current_class_generics, base.sanitize_name_helper)
-	
-	if is_method && (is_static || dec_info.is_classmethod) {
-		for cg in env.state.current_class_generics {
-			if cg !in func_generics { func_generics << cg }
-		}
-	}
-	
-	v_gen_map := base.get_generic_map(func_generics, [env.state.current_class_generic_map])
-	mut combined_gen_map := env.state.current_class_generic_map.clone()
-	for k, v in v_gen_map { combined_gen_map[k] = v }
-	
-	mut v_gens_to_declare := []string{}
-	for py_name in func_generics {
-		v_gens_to_declare << combined_gen_map[py_name] or { py_name }
-	}
-	
-	gen_s := base.get_generics_with_variance_str(v_gens_to_declare, combined_gen_map, env.state.generic_variance, env.state.generic_defaults)
-	
-	op_space := if is_operator { ' ' } else { '' }
-	if is_generator {
-		args_str_list.insert(0, 'ch_out chan ${yield_type}')
-		args_str_list.insert(1, 'ch_in chan PyGeneratorInput')
-	}
-	output << '${attr_pfx}${pub_pfx}fn ${receiver_str}${real_func_name}${op_space}${gen_s}(${args_str_list.join(", ")})${ret_suffix} {'
-	for start_stmt in injected_start {
-		output << '    ${start_stmt}'
-	}
-	for end_stmt in injected_end {
-		output << '    ${end_stmt}'
+	mut dep_attr := if dec_info.is_deprecated {
+		if dec_info.deprecated_msg.len > 0 { '@[deprecated: \'${dec_info.deprecated_msg}\']\n' } else { '@[deprecated]\n' }
+	} else { '' }
+	nor_attr := if is_noreturn { '@[noreturn]\n' } else { '' }
+
+	mut decl := ''
+	if node.name in base.op_methods_to_symbols && is_method {
+		op := base.op_methods_to_symbols[node.name]
+		ret_s_op := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
+		decl = '${dep_attr}fn ${receiver_str}${op} (${args_str_list.join(", ")})${ret_s_op} {'
+	} else if is_nested {
+		captures := find_captured_vars(node, env.state.scope_stack, base.sanitize_name_helper)
+		c_str := if captures.len > 0 { '[${captures.join(", ")}] ' } else { '' }
+		ret_s_nested := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
+		decl = 'mut ${func_name} := fn ${c_str}(${args_str_list.join(", ")})${ret_s_nested} {'
+	} else {
+		ret_s_def := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
+		decl = '${nor_attr}${dep_attr}${pub_pfx}fn ${receiver_str}${func_name}${func_generics_str}(${args_str_list.join(", ")})${ret_s_def} {'
 	}
 
+	output << decl
 	env.emit_fn(output.join('\n'))
-
+	
 	env.state.indent_level++
+	for line in dec_info.injected_start { env.emit_fn(env.state.indent() + line) }
+	
+	prev_in_init := env.state.in_init
+	if is_init {
+		env.state.in_init = true
+		alloc_type := if ret_type.starts_with('!') { ret_type[2..] } else { ret_type[1..] } // trim !& or &
+		env.emit_fn(env.state.indent() + 'mut self := ${alloc_type}{}')
+	}
+
+	prev_ret_type_state := env.state.current_function_return_type
+	env.state.current_function_return_type = ret_type
+	
 	env.push_scope_fn()
+	for name_arg in args_names { env.declare_local_fn(name_arg) }
+	if is_nested { env.state.scope_stack.last()[func_name] = true }
+
 	if is_generator {
+		env.emit_fn(env.state.indent() + '_ = <-ch_in')
 		coroutine_handler.enter_generator('ch_out', 'ch_in')
-		env.emit_fn('    _ = <-ch_in')
 	}
 
-	for stmt in node.body {
-		env.visit_stmt_fn(stmt)
+	for copy in local_mut_copies {
+		env.emit_fn(env.state.indent() + 'mut ${copy[1]} := ${copy[0]}')
 	}
 
-	if is_generator { coroutine_handler.exit_generator() }
-	env.pop_scope_fn()
-	env.state.indent_level--
-	if is_generator { env.emit_fn('    ch_out.close()') }
-	env.emit_fn('}')
+	is_empty := if node.body.len == 0 { true } else if node.body.len == 1 && node.body[0] is ast.Pass { true } else { false }
 
-	if cache_wrapper_needed {
-		cache_name := if is_method { '${struct_name.to_lower()}_${func_name}_cache' } else { '${func_name}_cache' }
-		env.emit_constant_fn('mut ${cache_name} := map[string]${if ret_type == "void" { "int" } else { ret_type }}{}')
-		
-		mut key_parts := []string{}
-		if receiver_name.len > 0 { key_parts << '\${${receiver_name}}' }
-		for name in args_names { key_parts << '\${${name}}' }
-		key_expr := if key_parts.len == 0 { "'__no_args__'" } else { "'${key_parts.join("_")}'" }
-		
-		call_prefix := if receiver_name.len > 0 { '${receiver_name}.' } else { '' }
-		
-		mut wrapper := []string{}
-		wrapper << 'fn ${receiver_str}${func_name}(${args_str_list.join(", ")})${ret_suffix} {'
-		wrapper << '    key := ${key_expr}'
-		wrapper << '    if key in ${cache_name} {'
-		wrapper << '        return ${cache_name}[key]'
-		wrapper << '    }'
-		wrapper << '    res := ${call_prefix}${real_func_name}(${args_names.join(", ")})'
-		wrapper << '    ${cache_name}[key] = res'
-		wrapper << '    return res'
-		wrapper << '}'
-		env.emit_fn(wrapper.join('\n'))
-	}
-
-	// Metadata (__annotations__)
-	if annotations_data.len > 0 {
-		mut anno_parts := []string{}
-		for k, v in annotations_data {
-			anno_parts << "'${k}': '${v}'"
+	if is_empty && ret_type != 'void' && !is_init {
+		env.emit_fn(env.state.indent() + 'return // TODO: default value for ${ret_type}')
+	} else {
+		for stmt in node.body {
+			env.visit_stmt_fn(stmt)
 		}
-		_ = struct_name
+	}
+
+	if is_generator {
+		coroutine_handler.exit_generator()
+		env.emit_fn(env.state.indent() + 'ch_out.close()')
+	}
+
+	if is_init {
+		if env.state.defined_classes[struct_name]['is_pydantic'] {
+			env.emit_fn(env.state.indent() + 'self.validate() or { return err }')
+		}
+		env.emit_fn(env.state.indent() + 'return &self')
+	}
+
+	env.pop_scope_fn()
+	env.state.in_init = prev_in_init
+	env.state.current_function_return_type = prev_ret_type_state
+	for line in dec_info.injected_end { env.emit_fn(env.state.indent() + line) }
+	
+	env.state.indent_level--
+	env.emit_fn(env.state.indent() + '}')
+
+	if annotations_data.len > 0 {
+		mut anno_list := []string{}
+		for k, v in annotations_data {
+			anno_list << "'${k}': '${v}'"
+		}
 		const_name := base.to_snake_case('${struct_name}_${func_name}_annotations')
-		env.emit_constant_fn('pub const ${const_name} = { ${anno_parts.join(", ")} }')
+		env.emit_constant_fn('${if pub_pfx.len > 0 { "pub " } else { "" }}const ${const_name} = { ${anno_list.join(", ")} }')
 	}
 }
 
@@ -390,7 +418,6 @@ fn (h FunctionsGenerationHandler) is_mutating_method(node &ast.FunctionDef, clas
 		}
 	}
 	
-	// Scan body for assignments to self
 	for stmt in node.body {
 		if stmt is ast.Assign {
 			for tgt in stmt.targets {
@@ -417,6 +444,11 @@ fn (h FunctionsGenerationHandler) is_mutating_method(node &ast.FunctionDef, clas
 
 fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, struct_name string, env FunctionVisitEnv) DecoratorInfo {
 	mut info := DecoratorInfo{}
+	mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
+	if env.state.coroutine_handler != unsafe { nil } {
+		info.is_generator = coroutine_handler.is_generator(node.name)
+	}
+
 	for dec in node.decorator_list {
 		mut dec_name := ''
 		if dec is ast.Call {
@@ -424,7 +456,7 @@ fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, stru
 		} else {
 			dec_name = env.visit_expr_fn(dec)
 		}
-		
+
 		if dec_name.ends_with('classmethod') {
 			info.is_classmethod = true
 		} else if dec_name.ends_with('staticmethod') {
@@ -435,6 +467,11 @@ fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, stru
 			info.is_setter = true
 		} else if dec_name.ends_with('deleter') {
 			info.is_deleter = true
+		} else if dec_name.ends_with('lru_cache') {
+			info.cache_wrapper_needed = true
+		} else if dec_name in ['timer', 'log'] {
+			info.injected_start << "println('Start ${node.name}...')"
+			info.injected_end << "defer { println('End ${node.name}...') }"
 		} else if dec_name.ends_with('deprecated') {
 			info.is_deprecated = true
 			if dec is ast.Call && dec.args.len > 0 {

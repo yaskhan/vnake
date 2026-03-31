@@ -427,6 +427,10 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	if func_name_str == 'input' {
 		prompt := if args.len > 0 { args[0] } else { "''" }
 		eg.state.used_builtins['os'] = true
+		if eg.state.current_ann_raw == 'LiteralString' || eg.state.current_ann_raw == 'typing.LiteralString' {
+			lhs := eg.state.current_assignment_lhs
+			eg.state.pending_llm_call_comments << "//##LLM@@ LiteralString variable '${lhs}' receives value from input()"
+		}
 		return 'os.input(${prompt})'
 	}
 	
@@ -678,6 +682,10 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		}
 	}
 
+	if (module_name == 'logging' || func_name_str.starts_with('logging.')) && (func_name == 'basicConfig' || func_name == 'basic_config') {
+		return '/* logging.basicConfig ignored */'
+	}
+	
 	if func_name_str == 'round' {
 		if args.len == 1 {
 			return 'int(math.round(${args[0]}))'
@@ -711,9 +719,24 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	}
 
 	if func_name_str == 'list' && args.len == 0 { return '[]Any{}' }
+	
+	if func_name_str == 'set' && args.len == 0 {
+		mut item_type := 'string'
+		expected := eg.state.current_assignment_type
+		if expected.starts_with('datatypes.Set[') {
+			item_type = expected.all_after('datatypes.Set[').all_before(']')
+		}
+		return 'datatypes.Set[${item_type}]{}'
+	}
 
 	if func_name_str == 'dict' {
-		if args.len == 0 && keyword_args.len == 0 { return '{}' }
+		if args.len == 0 && keyword_args.len == 0 {
+			expected := eg.state.current_assignment_type
+			if expected.starts_with('map[') {
+				return '${expected}{}'
+			}
+			return 'map[string]Any{}'
+		}
 		if args.len == 0 && keyword_args.len > 0 {
 			mut items := []string{}
 			for k, v in keyword_args { items << "'${k}': ${v}" }
@@ -1126,13 +1149,13 @@ fn (eg &ExprGen) map_assert_type_name(type_name string) string {
 pub fn (mut eg ExprGen) resolve_module_and_func(node ast.Call, func_name_str string) (string, string) {
 	if node.func is ast.Attribute {
 		attr := node.func
-		if attr.value is ast.Name {
-			name := attr.value.id
-			if name in eg.state.imported_modules {
-				return name, attr.attr
+		full_prefix := eg.extract_receiver_path(attr.value)
+		if full_prefix.len > 0 {
+			if full_mod := eg.state.imported_modules[full_prefix] {
+				return full_mod, attr.attr
 			}
-			if name in eg.state.imported_symbols {
-				return name, attr.attr
+			if full_prefix in eg.state.imported_symbols {
+				return full_prefix, attr.attr
 			}
 		}
 	}
@@ -1145,7 +1168,25 @@ pub fn (mut eg ExprGen) resolve_module_and_func(node ast.Call, func_name_str str
 			}
 		}
 	}
+	if func_name_str.contains('.') {
+		last_dot := func_name_str.last_index('.') or { -1 }
+		return func_name_str[..last_dot], func_name_str[last_dot+1..]
+	}
 	return '', func_name_str
+}
+
+fn (eg &ExprGen) extract_receiver_path(node ast.Expression) string {
+	match node {
+		ast.Name { return node.id }
+		ast.Attribute {
+			base_path := eg.extract_receiver_path(node.value)
+			if base_path.len > 0 {
+				return '${base_path}.${node.attr}'
+			}
+			return node.attr
+		}
+		else { return '' }
+	}
 }
 
 

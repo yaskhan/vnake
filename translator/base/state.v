@@ -6,7 +6,8 @@ struct SourceTokenCarrier {
 	token ast.Token
 }
 
-struct ExportConfigLike {
+pub struct ExportConfigLike {
+pub:
 	include_all_symbols bool
 }
 
@@ -26,7 +27,8 @@ pub mut:
 	coroutine_handler   voidptr
 	emitter             voidptr
 	mapper              voidptr
-	config              voidptr
+	include_all_symbols bool
+	strict_exports      bool
 
 	output                       []string
 	tail                         []string
@@ -96,6 +98,8 @@ pub mut:
 	constrained_typevars         map[string]bool
 	current_function_return_type string
 	current_assignment_type      string
+	current_assignment_lhs       string
+	current_ann_raw              string
 	in_pydantic_validator        bool
 	in_init                      bool
 	in_assignment_lhs            bool
@@ -115,7 +119,8 @@ pub fn new_translator_state() &TranslatorState {
 		coroutine_handler:            unsafe { nil }
 		emitter:                      unsafe { nil }
 		mapper:                       unsafe { nil }
-		config:                       unsafe { nil }
+		include_all_symbols:          false
+		strict_exports:               false
 		output:                       []string{}
 		known_v_types:                map[string]string{}
 		indent_level:                 0
@@ -259,19 +264,32 @@ pub fn (s &TranslatorState) is_top_level_symbol(name string) bool {
 	return true
 }
 
+// is_compile_time_evaluable checks if expression is compile-time evaluable
+pub fn is_compile_time_evaluable(node ast.Expression) bool {
+	if node is ast.Constant {
+		return true
+	}
+	if node is ast.UnaryOp {
+		return is_compile_time_evaluable(node.operand)
+	}
+	if node is ast.List {
+		if node.elements.len == 0 { return true }
+	}
+	return false
+}
+
 // is_exported checks if symbol should be public
 pub fn (s &TranslatorState) is_exported(name string) bool {
-	if s.config == unsafe { nil } {
-		return false
-	}
-	cfg := unsafe { &ExportConfigLike(s.config) }
-	if cfg.include_all_symbols {
+	if s.include_all_symbols {
 		return true
+	}
+	if name.starts_with('_') {
+		return false
 	}
 	if s.module_all.len > 0 {
 		return name in s.module_all
 	}
-	return !name.starts_with('_')
+	return false
 }
 
 // collect_assigned_vars collects names of all assigned variables

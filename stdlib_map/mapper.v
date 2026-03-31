@@ -137,6 +137,8 @@ fn (mut m StdLibMapper) init_mappings() {
 
 	// Logging
 	m.mappings['logging'] = {
+		'getLogger': 'py_get_logger'
+		'get_logger': 'py_get_logger'
 		'info': 'log.info'
 		'warning': 'log.warn'
 		'error': 'log.error'

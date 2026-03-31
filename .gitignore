@@ -67,3 +67,9 @@ v/
 vnake
 vnake.exe
 *.v.orig
+/tmp
+test_output.txt
+out.txt
+stderr.txt
+full_actual.txt
+full_actual_utf8.txt

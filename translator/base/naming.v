@@ -14,8 +14,8 @@ pub fn to_snake_case(name string) string {
 		return name
 	}
 
-	// Handle UPPER_CASE constants and TypeVars
-	if name.len >= 1 && name.is_upper() {
+	// Handle TypeVars only if they are single letters (V generic parameters)
+	if name.len == 1 && name.is_upper() {
 		return name
 	}
 

@@ -554,8 +554,10 @@ pub fn (mut sa SemanticAnalyzer) visit_expression_stmt(mut s ExpressionStmt) !An
 // visit_name_expr handles name
 pub fn (mut sa SemanticAnalyzer) visit_name_expr(mut expr NameExpr) !AnyNode {
 	n := sa.lookup(expr.name, expr.base)
-	if n != none {
-		sa.bind_name_expr(mut expr, n)
+	if node := n {
+		sa.bind_name_expr(mut expr, node)
+	} else {
+		sa.msg.fail('Name "${expr.name}" is not defined', expr.get_context(), false, false, none)
 	}
 	return ''
 }
@@ -957,15 +959,33 @@ fn (mut sa SemanticAnalyzer) bind_name_expr(mut expr NameExpr, sym SymbolTableNo
 
 // analyze_lvalue analyzes lvalue
 pub fn (mut sa SemanticAnalyzer) analyze_lvalue(mut lval Lvalue, nested bool, explicit_type bool) !AnyNode {
-	if mut lval is NameExpr {
-		// TODO: analyze lvalue
-	} else if mut lval is MemberExpr {
-		lval.accept(mut sa)!
-	} else if mut lval is TupleExpr {
-		for mut item in lval.items {
-			if mut l := item.as_lvalue() {
-				sa.analyze_lvalue(mut l, true, explicit_type)!
+	match mut lval {
+		NameExpr {
+			sym := sa.lookup(lval.name, lval.base)
+			if sym == none {
+				// Define new variable
+				mut v := Var{
+					name:     lval.name
+					fullname: sa.qualified_name(lval.name)
+				}
+				sa.add_symbol(lval.name, SymbolNodeRef(v), lval.get_context(), true, false, true)
+				sa.bind_name_expr(mut lval, sa.lookup(lval.name, lval.base) or { SymbolTableNode{} })
+			} else if node := sym {
+				sa.bind_name_expr(mut lval, node)
 			}
+		}
+		MemberExpr {
+			lval.accept(mut sa)!
+		}
+		TupleExpr {
+			for mut item in lval.items {
+				if mut l := item.as_lvalue() {
+					sa.analyze_lvalue(mut l, true, explicit_type)!
+				}
+			}
+		}
+		else {
+			// TODO: handle other lvalues (ListExpr, StarExpr)
 		}
 	}
 	return ''

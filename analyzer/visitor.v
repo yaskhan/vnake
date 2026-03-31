@@ -1144,6 +1144,9 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 						t.store_type(target.id, value_type)
 					}
 				}
+				if node.value is ast.Lambda {
+					t.register_lambda_signature(target.id, node.value)
+				}
 			}
 			ast.Attribute {
 				t.mark_mutated_expr(target)
@@ -1432,4 +1435,48 @@ fn (mut t TypeInferenceVisitorMixin) visit_pattern(node ast.Pattern) {
 		ast.MatchOr { t.visit_match_or(node) }
 		else {}
 	}
+}
+
+pub fn (mut t TypeInferenceVisitorMixin) register_lambda_signature(name string, lambda_node ast.Lambda) {
+	mut args := []string{}
+	mut arg_names := []string{}
+	mut defaults := map[string]string{}
+	
+	mut all_py_args := []ast.Parameter{}
+	all_py_args << lambda_node.args.posonlyargs
+	all_py_args << lambda_node.args.args
+	all_py_args << lambda_node.args.kwonlyargs
+	
+	for p in all_py_args {
+		if d := p.default_ {
+			if d is ast.Name && d.id == p.arg {
+				continue
+			}
+		}
+		arg_names << p.arg
+		mut py_type := 'Any'
+		if ann := p.annotation {
+			py_type = t.render_expr(ann)
+		}
+		args << map_python_type_to_v(py_type)
+		if d := p.default_ {
+			defaults[p.arg] = t.render_expr(d)
+		}
+	}
+	
+	mut return_type := 'Any'
+	py_ret := t.guess_expr_type(lambda_node.body)
+	return_type = map_python_type_to_v(py_ret)
+
+	sig := CallSignature{
+		args:        args
+		arg_names:   arg_names
+		defaults:    defaults
+		return_type: return_type
+		is_class:    false
+		has_init:    false
+		has_vararg:  lambda_node.args.vararg != none
+		has_kwarg:   lambda_node.args.kwarg != none
+	}
+	t.store_call_signature(name, sig)
 }
