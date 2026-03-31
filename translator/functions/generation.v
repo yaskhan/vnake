@@ -198,6 +198,10 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		args_str_list << '${if is_mut { "mut " } else { "" }}${arg_name} ${arg_type}'
 	}
 
+	if node.args.vararg != none && node.args.kwarg != none {
+		output << '//##LLM@@ Function `${node.name}` has both *args and **kwargs. V requires the variadic parameter (...args) to be the final parameter. Please reorder the parameters so that the variadic parameter is last, and update all calls to this function accordingly.'
+	}
+
 	if vararg := node.args.vararg {
 		arg_name_raw := sanitize_name(vararg.arg, false)
 		mut arg_type := 'Any'
@@ -224,6 +228,17 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		args_str_list << '${arg_name_raw} ${arg_type}'
 		args_names << arg_name_raw
 		annotations_data[arg_name_raw] = arg_type
+	}
+
+	if kwarg := node.args.kwarg {
+		name := sanitize_name(kwarg.arg, false)
+		args_names << name
+		mut a_type := 'map[string]Any'
+		if ann := kwarg.annotation {
+			a_type = env.map_annotation_fn(ann)
+		}
+		args_str_list << '${name} ${a_type}'
+		annotations_data[name] = a_type
 	}
 
 	mut ret_type := 'void'
