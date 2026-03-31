@@ -65,7 +65,10 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 		ast.UnaryOp {
 			return t.guess_expr_type(node.operand)
 		}
-		ast.Name { res := t.get_type(node.id); return if res == 'Any' { 'int' } else { res } }
+		ast.Name { 
+			res := t.get_type(node.id)
+			return if res == 'Any' { 'int' } else { res }
+		}
 		ast.Call {
 			if node.func is ast.Name {
 				fid := node.func.id
