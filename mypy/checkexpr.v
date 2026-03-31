@@ -420,8 +420,8 @@ pub fn (mut ec ExpressionChecker) visit_comparison_expr(e ComparisonExpr) MypyTy
 
 pub fn (mut ec ExpressionChecker) visit_assignment_expr(e AssignmentExpr) MypyTypeNode {
 	value := ec.accept(e.value)
-	if lval := e.target.as_lvalue() {
-		ec.chk.check_assignment(lval, e.value)
+	if mut lval := e.target.as_lvalue() {
+		ec.chk.check_assignment(mut lval, e.value, value)
 	}
 	ec.chk.store_type(e.target, value)
 	return value
