@@ -27,7 +27,7 @@ pub const future_imports = {
 }
 
 // CORE_BUILTIN_CLASSES — basic builtins classes
-pub const core_builtin_classes = ['object', 'bool', 'function']
+pub const core_builtin_classes = ['object', 'type', 'list', 'dict', 'str', 'int', 'float', 'bool', 'bytes', 'tuple', 'set']
 
 // SemanticAnalyzer — mypy semantic analyzer
 pub struct SemanticAnalyzer {
@@ -235,9 +235,9 @@ pub fn (mut sa SemanticAnalyzer) visit_mypy_file(mut file_node MypyFile) !AnyNod
 pub fn (mut sa SemanticAnalyzer) visit_func_def(mut defn FuncDef) !AnyNode {
 	sa.statement = Statement(defn)
 
-	for arg in defn.arguments {
-		if arg.initializer != none {
-			// TODO: accept arg.initializer
+	for mut arg in defn.arguments {
+		if mut init := arg.initializer {
+			init.accept(mut sa)!
 		}
 	}
 
@@ -555,7 +555,7 @@ pub fn (mut sa SemanticAnalyzer) visit_expression_stmt(mut s ExpressionStmt) !An
 pub fn (mut sa SemanticAnalyzer) visit_name_expr(mut expr NameExpr) !AnyNode {
 	n := sa.lookup(expr.name, expr.base)
 	if node := n {
-		sa.bind_name_expr(mut expr, node)
+		sa.bind_ref_expr(mut expr, node)
 	} else {
 		sa.msg.fail('Name "${expr.name}" is not defined', expr.get_context(), false, false, none)
 	}
@@ -565,7 +565,21 @@ pub fn (mut sa SemanticAnalyzer) visit_name_expr(mut expr NameExpr) !AnyNode {
 // visit_member_expr handles member access
 pub fn (mut sa SemanticAnalyzer) visit_member_expr(mut expr MemberExpr) !AnyNode {
 	expr.expr.accept(mut sa)!
-	// TODO: handle member access
+	
+	// Handle qualified names (e.g. module.name)
+	if expr.expr is NameExpr {
+		node := expr.expr as NameExpr
+		if sym := sa.lookup(node.name, node.base) {
+			if msym_node := sym.node {
+				if msym_node is MypyFile {
+					if msym := msym_node.names.symbols[expr.name] {
+						sa.bind_ref_expr(mut expr, msym)
+					}
+				}
+			}
+		}
+	}
+	
 	return ''
 }
 
@@ -644,10 +658,15 @@ pub fn (mut sa SemanticAnalyzer) visit_yield_expr(mut o YieldExpr) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_op_expr(mut o OpExpr) !AnyNode {
+	o.left.accept(mut sa)!
+	o.right.accept(mut sa)!
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_comparison_expr(mut o ComparisonExpr) !AnyNode {
+	for mut operand in o.operands {
+		operand.accept(mut sa)!
+	}
 	return ''
 }
 
@@ -668,14 +687,21 @@ pub fn (mut sa SemanticAnalyzer) visit_super_expr(mut o SuperExpr) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_unary_expr(mut o UnaryExpr) !AnyNode {
+	o.expr.accept(mut sa)!
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_assignment_expr(mut o AssignmentExpr) !AnyNode {
+	o.value.accept(mut sa)!
+	if mut lval := o.target.as_lvalue() {
+		sa.analyze_lvalue(mut lval, false, false)!
+	}
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_index_expr(mut o IndexExpr) !AnyNode {
+	o.base_.accept(mut sa)!
+	o.index.accept(mut sa)!
 	return ''
 }
 
@@ -688,26 +714,58 @@ pub fn (mut sa SemanticAnalyzer) visit_lambda_expr(mut o LambdaExpr) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_list_comprehension(mut o ListComprehension) !AnyNode {
+	o.generator.accept(mut sa)!
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_set_comprehension(mut o SetComprehension) !AnyNode {
+	o.generator.accept(mut sa)!
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_dictionary_comprehension(mut o DictionaryComprehension) !AnyNode {
+	o.key.accept(mut sa)!
+	o.value.accept(mut sa)!
+	for i in 0 .. o.indices.len {
+		if mut lval := o.indices[i].as_lvalue() {
+			sa.analyze_lvalue(mut lval, false, false)!
+		}
+		o.sequences[i].accept(mut sa)!
+		for mut cond in o.condlists[i] {
+			cond.accept(mut sa)!
+		}
+	}
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_generator_expr(mut o GeneratorExpr) !AnyNode {
+	o.left_expr.accept(mut sa)!
+	for i in 0 .. o.indices.len {
+		if mut lval := o.indices[i].as_lvalue() {
+			sa.analyze_lvalue(mut lval, false, false)!
+		}
+		o.sequences[i].accept(mut sa)!
+		for mut cond in o.condlists[i] {
+			cond.accept(mut sa)!
+		}
+	}
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_list_expr(mut o ListExpr) !AnyNode {
+	for mut item in o.items {
+		item.accept(mut sa)!
+	}
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_dict_expr(mut o DictExpr) !AnyNode {
+	for i in 0 .. o.items.len {
+		if mut k := o.items[i].key {
+			k.accept(mut sa)!
+		}
+		o.items[i].value.accept(mut sa)!
+	}
 	return ''
 }
 
@@ -716,10 +774,16 @@ pub fn (mut sa SemanticAnalyzer) visit_template_str_expr(mut o TemplateStrExpr) 
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_tuple_expr(mut o TupleExpr) !AnyNode {
+	for mut item in o.items {
+		item.accept(mut sa)!
+	}
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_set_expr(mut o SetExpr) !AnyNode {
+	for mut item in o.items {
+		item.accept(mut sa)!
+	}
 	return ''
 }
 
@@ -728,6 +792,9 @@ pub fn (mut sa SemanticAnalyzer) visit_slice_expr(mut o SliceExpr) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_conditional_expr(mut o ConditionalExpr) !AnyNode {
+	o.cond.accept(mut sa)!
+	o.if_expr.accept(mut sa)!
+	o.else_expr.accept(mut sa)!
 	return ''
 }
 
@@ -949,11 +1016,20 @@ pub fn (mut sa SemanticAnalyzer) lookup_qualified(name string, ctx NodeBase, sup
 	return current
 }
 
-fn (mut sa SemanticAnalyzer) bind_name_expr(mut expr NameExpr, sym SymbolTableNode) {
-	expr.kind = sym.kind
-	if node := sym.node {
-		expr.node = node.as_mypy_node()
-		// expr.fullname = node.fullname() // fullname() is currently removed to avoid panic
+fn (mut sa SemanticAnalyzer) bind_ref_expr(mut expr RefExpr, sym SymbolTableNode) {
+	match mut expr {
+		NameExpr {
+			expr.kind = sym.kind
+			if node := sym.node {
+				expr.node = node.as_mypy_node()
+			}
+		}
+		MemberExpr {
+			expr.kind = sym.kind
+			if node := sym.node {
+				expr.node = node.as_mypy_node()
+			}
+		}
 	}
 }
 
@@ -969,9 +1045,9 @@ pub fn (mut sa SemanticAnalyzer) analyze_lvalue(mut lval Lvalue, nested bool, ex
 					fullname: sa.qualified_name(lval.name)
 				}
 				sa.add_symbol(lval.name, SymbolNodeRef(v), lval.get_context(), true, false, true)
-				sa.bind_name_expr(mut lval, sa.lookup(lval.name, lval.base) or { SymbolTableNode{} })
+				sa.bind_ref_expr(mut lval, sa.lookup(lval.name, lval.base) or { SymbolTableNode{} })
 			} else if node := sym {
-				sa.bind_name_expr(mut lval, node)
+				sa.bind_ref_expr(mut lval, node)
 			}
 		}
 		MemberExpr {
@@ -984,8 +1060,17 @@ pub fn (mut sa SemanticAnalyzer) analyze_lvalue(mut lval Lvalue, nested bool, ex
 				}
 			}
 		}
-		else {
-			// TODO: handle other lvalues (ListExpr, StarExpr)
+		ListExpr {
+			for mut item in lval.items {
+				if mut l := item.as_lvalue() {
+					sa.analyze_lvalue(mut l, true, explicit_type)!
+				}
+			}
+		}
+		StarExpr {
+			if mut l := lval.expr.as_lvalue() {
+				sa.analyze_lvalue(mut l, true, explicit_type)!
+			}
 		}
 	}
 	return ''
