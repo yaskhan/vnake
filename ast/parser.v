@@ -1360,12 +1360,38 @@ fn (mut p Parser) parse_binary_expr(precedence int, allow_in bool, allow_ternary
 		}
 
 		op_tok := op
-		right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
-		left = BinaryOp{
-			token: op_tok
-			left:  left
-			op:    op_tok
-			right: right
+		if op_tok.value in ['and', 'or'] {
+			right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
+			mut values := [left]
+			values << right
+			// Collect chained bool ops
+			for {
+				next_prec2 := token_precedence(p.current_token)
+				if next_prec2 <= next_prec {
+					break
+				}
+				mut next_op := p.current_token
+				if next_op.value in ['and', 'or'] {
+					p.advance()
+					next_right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
+					values << next_right
+				} else {
+					break
+				}
+			}
+			left = BoolOp{
+				token: op_tok
+				op:    op_tok
+				values: values
+			}
+		} else {
+			right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
+			left = BinaryOp{
+				token: op_tok
+				left:  left
+				op:    op_tok
+				right: right
+			}
 		}
 	}
 	return left

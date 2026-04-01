@@ -354,6 +354,24 @@ fn op_to_ast(tok Token) string {
 	}
 }
 
+fn (mut p Printer) visit_bool_op(node &BoolOp) {
+	p.write('BoolOp(\n')
+	p.indent_level++
+	p.write(p.indent() + 'op=${node.op.value}(),\n')
+	p.write(p.indent() + 'values=[\n')
+	p.indent_level++
+	for i, v in node.values {
+		p.write(p.indent())
+		walk_expr(mut p, v)
+		if i < node.values.len - 1 {
+			p.write(',\n')
+		}
+	}
+	p.indent_level--
+	p.write('\n' + p.indent() + '])')
+	p.indent_level--
+}
+
 fn (mut p Printer) visit_binary_op(node &BinaryOp) {
 	p.write('BinOp(\n')
 	p.indent_level++

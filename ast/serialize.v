@@ -715,6 +715,18 @@ pub fn (mut s Serializer) write_expression(node Expression) {
 			s.write_loc(node.token)
 			s.write_tag(end_tag)
 		}
+		BoolOp {
+			s.write_tag(nodes_bool_op_expr)
+			idx := bool_ops.index(node.op.value)
+			s.write_int(if idx >= 0 { idx } else { 0 })
+			s.write_tag(list_gen)
+			s.write_int_bare(node.values.len)
+			for v in node.values {
+				s.write_expression(v)
+			}
+			s.write_loc(node.token)
+			s.write_tag(end_tag)
+		}
 		Compare {
 			s.write_tag(nodes_compare_expr)
 			s.write_expression(node.left)
