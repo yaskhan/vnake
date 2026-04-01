@@ -302,22 +302,38 @@ pub fn process_directory(path string, mut config TranspilerConfig, recursive boo
 
 pub fn run_v_code(v_file string, helpers_file string) bool {
 	v_file_abs := os.abs_path(v_file)
+	base_name := os.file_name(v_file_abs).all_before_last('.')
+	
+	// Create isolated temp directory for compilation
+	tmp_dir := os.join_path(os.temp_dir(), 'vnake_run_${base_name}')
+	os.mkdir(tmp_dir) or { }
+	
+	// Copy main file and helpers to temp dir
+	v_content := os.read_file(v_file_abs) or { '' }
+	out_v := os.join_path(tmp_dir, '${base_name}.v')
+	os.write_file(out_v, v_content) or { }
+	
+	if helpers_file.len > 0 && os.exists(helpers_file) {
+		h_content := os.read_file(helpers_file) or { '' }
+		out_h := os.join_path(tmp_dir, '${base_name}_helpers.v')
+		os.write_file(out_h, h_content) or { }
+	}
+	
 	println('Compiling and running: ${os.file_name(v_file_abs)}')
 	println('-'.repeat(50))
 
-	mut cmd := 'v -enable-globals run "${v_file_abs}"'
-	if helpers_file.len > 0 {
-		cmd = 'v -enable-globals run "${os.dir(v_file_abs)}"'
-	}
-
+	// Run only our files from temp directory (isolated)
+	mut cmd := 'v -enable-globals run "${tmp_dir}"'
+	
 	result := os.execute(cmd)
-
+	
+	// Clean up temp directory
+	os.rmdir_all(tmp_dir) or { }
+	
+	println(result.output)
 	println('-'.repeat(50))
 	if result.exit_code != 0 {
 		println('V compilation/execution failed with exit code: ${result.exit_code}')
-		if result.output.len > 0 {
-			println(result.output)
-		}
 		return false
 	}
 	return true
