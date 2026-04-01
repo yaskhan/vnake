@@ -72,6 +72,7 @@ pub mut:
 	visit_expr_fn     fn (ast.Expression) string = unsafe { nil }
 	emit_fn           fn (string) = unsafe { nil }
 	emit_constant_fn  fn (string) = unsafe { nil }
+	emit_function_fn  fn (string) = unsafe { nil }
 	indent_fn         fn () string = unsafe { nil }
 	push_scope_fn     fn () = unsafe { nil }
 	pop_scope_fn      fn () = unsafe { nil }
@@ -88,6 +89,7 @@ pub fn new_function_visit_env(
 	visit_expr_fn fn (ast.Expression) string,
 	emit_fn fn (string),
 	emit_constant_fn fn (string),
+	emit_function_fn fn (string),
 	indent_fn fn () string,
 	push_scope_fn fn (),
 	pop_scope_fn fn (),
@@ -103,6 +105,7 @@ pub fn new_function_visit_env(
 		visit_expr_fn:     visit_expr_fn
 		emit_fn:           emit_fn
 		emit_constant_fn:  emit_constant_fn
+		emit_function_fn:  emit_function_fn
 		indent_fn:         indent_fn
 		push_scope_fn:     push_scope_fn
 		pop_scope_fn:      pop_scope_fn

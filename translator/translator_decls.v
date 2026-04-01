@@ -29,6 +29,9 @@ fn (mut t Translator) visit_function_def(node &ast.FunctionDef) {
 		fn [mut t] (line string) {
 			t.emit_constant_code(line)
 		},
+		fn [mut t] (line string) {
+			t.emit_function_code(line)
+		},
 		fn [mut t] () string {
 			return t.indent()
 		},

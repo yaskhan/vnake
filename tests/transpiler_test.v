@@ -329,7 +329,7 @@ fn clean_expected_snippet(snippet string) string {
 }
 
 fn normalize_text(code string) string {
-	res := code.replace(':=', '=').replace('"', "'")
+	res := code.replace(':=', '=').replace('"', "'").replace('__global', '').replace('mut', '').replace('pub', '')
 	mut out := []u8{cap: res.len}
 	for ch in res {
 		if !ch.is_space() {
