@@ -15,6 +15,7 @@ pub mut:
 	deprecated_msg  string
 	is_generator    bool
 	cache_wrapper_needed bool
+	implementation_name  string
 	injected_start  []string
 	injected_end    []string
 }

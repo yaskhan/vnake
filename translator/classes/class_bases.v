@@ -67,21 +67,22 @@ pub fn (h ClassBasesHandler) process_bases(node ast.ClassDef, struct_name string
 			}
 			
 			if b_name !in env.analyzer.mixin_to_main {
-				type_str := env.visit_expr_fn(base_expr)
+				type_str := env.map_annotation_fn(base_expr)
 				v_type := map_python_type(type_str, struct_name, false, mut env)
+				env.state.current_class_generic_bases[b_name] = v_type
 				if !v_type.starts_with('[]') && !v_type.starts_with('map[') {
 					if !b_name.ends_with('Mixin') {
 						is_split := b_name in env.state.known_interfaces
 						sanitized_base := sanitize_name(b_name, true)
 						if is_split {
 							fields << FieldDefInfo{
-								name: ''
+								name: '${b_name}_Impl'
 								def:  '    ${v_type.replace(sanitized_base, sanitized_base + "_Impl")}'
 								is_mutated: false
 							}
 						} else {
 							fields << FieldDefInfo{
-								name: ''
+								name: '${b_name}'
 								def:  '    ${v_type}'
 								is_mutated: false
 							}
@@ -98,13 +99,13 @@ pub fn (h ClassBasesHandler) process_bases(node ast.ClassDef, struct_name string
 				sanitized_base := sanitize_name(b_name, true)
 				if is_split {
 					fields << FieldDefInfo{
-						name: ''
+						name: '${b_name}_Impl'
 						def:  '    ${sanitized_base}_Impl'
 						is_mutated: false
 					}
 				} else if b_name !in env.analyzer.mixin_to_main {
 					fields << FieldDefInfo{
-						name: ''
+						name: '${b_name}'
 						def:  '    ${sanitized_base}'
 						is_mutated: false
 					}

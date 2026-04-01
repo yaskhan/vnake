@@ -64,8 +64,6 @@ fn (mut t Translator) visit_class_def(node &ast.ClassDef) {
 	old_output := t.state.output
 	t.state.output = []string{}
 	
-	mut class_funcs := []string{}
-	
 	mut env := classes.new_class_visit_env(
 		t.state,
 		t.analyzer,
@@ -78,8 +76,8 @@ fn (mut t Translator) visit_class_def(node &ast.ClassDef) {
 		fn [mut t] (s string) {
 			t.state.output << s
 		},
-		fn [mut class_funcs] (s string) {
-			class_funcs << s
+		fn [mut t] (s string) {
+			t.emit_function_code(s)
 		},
 		fn [mut t] (s string) {
 			t.emit_constant_code(s)
@@ -99,11 +97,6 @@ fn (mut t Translator) visit_class_def(node &ast.ClassDef) {
 	
 	if class_struct_code.len > 0 {
 		t.emit_struct_code(class_struct_code)
-	}
-	if class_funcs.len > 0 {
-		for f in class_funcs {
-			t.emit_function_code(f)
-		}
 	}
 }
 

@@ -183,6 +183,7 @@ pub fn transpile_file(source_file string, config TranspilerConfig, mut global_he
 	trans.state.strict_exports = config.strict_exports
 	trans.state.current_module_name = current_module
 	trans.state.current_file_name = os.file_name(source_file)
+	trans.state.is_full_module = true
 	for f in scc_files {
 		trans.state.scc_files[f] = true
 	}

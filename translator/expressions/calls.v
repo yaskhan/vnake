@@ -1095,13 +1095,61 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 		if attr == 'get' && args.len >= 1 {
 			mut get_args := args.clone()
 			if get_args.len == 1 { get_args << 'none' }
-			return '${obj}.get(${get_args.join(', ')})'
+			return '${obj}[${get_args[0]}] or { ${get_args[1]} }'
 		}
 	}
 
 
 	// String methods
 	mut current_type := obj_type
+
+	// File methods
+	is_file := (current_type == 'os.File' ||
+		(receiver_expr is ast.Name && (receiver_expr as ast.Name).id in ['f', 'fp', 'file']) ||
+		(attr in ['read', 'write', 'close'] && receiver_expr is ast.Call && (receiver_expr as ast.Call).func is ast.Name && ((receiver_expr as ast.Call).func as ast.Name).id == 'open'))
+
+	if is_file {
+		if attr == 'read' {
+			if args.len == 0 {
+				eg.state.used_builtins['py_file_read_all'] = true
+				return 'py_file_read_all(mut ${recv})'
+			} else if args.len == 1 {
+				return '${recv}.read_bytes(${args[0]}).bytestr()'
+			}
+		} else if attr == 'readline' {
+			eg.state.used_builtins['py_file_read_line'] = true
+			return 'py_file_read_line(mut ${recv})'
+		} else if attr == 'readlines' {
+			eg.state.used_builtins['py_file_read_line'] = true
+			eg.state.used_builtins['py_file_read_lines'] = true
+			return 'py_file_read_lines(mut ${recv})'
+		} else if attr == 'write' {
+			if args.len == 1 {
+				// Guess if it's a string write or byte write
+				arg_type := eg.guess_type(node.args[0])
+				if arg_type == 'string' || arg_type == 'LiteralString' {
+					return '${recv}.write_string(${args[0]}) or { panic(err) }'
+				}
+				return '${recv}.write(${args[0]}) or { panic(err) }'
+			}
+		} else if attr == 'close' {
+			return '${recv}.close()'
+		} else if attr == 'flush' {
+			return '${recv}.flush()'
+		} else if attr == 'seek' {
+			if args.len == 1 {
+				return '${recv}.seek(${args[0]}, .start)'
+			} else if args.len == 2 {
+				mut mode := '.start'
+				if args[1] == '1' { mode = '.current' }
+				else if args[1] == '2' { mode = '.end' }
+				return '${recv}.seek(${args[0]}, ${mode})'
+			}
+		} else if attr == 'tell' {
+			return '${recv}.tell() or { 0 }'
+		}
+	}
+
 	if current_type == 'string' || current_type == 'Any' {
 		if attr == 'lower' { return '${recv}.to_lower()' }
 		if attr == 'upper' { return '${recv}.to_upper()' }

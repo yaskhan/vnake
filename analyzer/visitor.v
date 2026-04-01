@@ -935,9 +935,9 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 		mut py_type := 'Any'
 		if annotation := param.annotation {
 			py_type = t.expr_to_type_string(annotation)
-		}
-		if py_type == 'Any' || py_type == 'typing.Any' || py_type == 'typing_extensions.Any' {
-			t.store_explicit_any(param.arg, '${param.token.line}:${param.token.column}')
+			if py_type == 'Any' || py_type == 'typing.Any' || py_type == 'typing_extensions.Any' {
+				t.store_explicit_any(param.arg, '${param.token.line}:${param.token.column}')
+			}
 		}
 		v_type := map_python_type_to_v(py_type)
 		if v_type == 'LiteralString' {

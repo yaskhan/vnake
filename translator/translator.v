@@ -272,6 +272,13 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 			}
 			return t.map_annotation(node.value) + '[${t.map_annotation(node.slice)}]'
 		}
+		ast.Tuple {
+			mut parts := []string{}
+			for elt in node.elements {
+				parts << t.map_annotation(elt)
+			}
+			return parts.join(', ')
+		}
 		ast.Constant {
 			if node.value == 'None' { return '' }
 			if node.value.starts_with("'") || node.value.starts_with('"') {
@@ -475,6 +482,8 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 		t.visit_stmt(stmt)
 	}
 
+	t.append_helpers()
+
 	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
 
 	if t.state.used_builtins['math.pow'] || t.state.used_builtins['math.floor'] {
@@ -488,6 +497,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	}
 	if t.state.used_builtins['datatypes'] {
 		e.add_import('datatypes')
+	}
+	if t.state.used_builtins['vexc'] {
+		e.add_import('div72.vexc')
 	}
 	
 	mut uses_os := false
@@ -514,5 +526,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 		}
 	}
 
-	return e.emit()
+	if t.state.is_full_module {
+		return e.emit()
+	} else {
+		return e.raw_emit()
+	}
 }

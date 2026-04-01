@@ -187,6 +187,7 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			m.env.state.indent_level--
 			m.emit('}')
 			m.pop_loop_ctx()
+			m.emit_for_else(node, flag_name)
 			return
 		}
 	}
@@ -207,6 +208,7 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			m.env.state.indent_level--
 			m.emit('}')
 			m.pop_loop_ctx()
+			m.emit_for_else(node, flag_name)
 			return
 		}
 		start := if range_args.len == 2 { m.visit_expr(range_args[0]) } else { '0' }
@@ -250,6 +252,7 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			m.env.state.indent_level--
 			m.emit('}')
 			m.pop_loop_ctx()
+			m.emit_for_else(node, flag_name)
 			return
 		}
 	}
@@ -301,6 +304,10 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 	m.emit('}')
 	m.pop_loop_ctx()
 
+	m.emit_for_else(node, flag_name)
+}
+
+fn (mut m ControlFlowModule) emit_for_else(node ast.For, flag_name string) {
 	if node.orelse.len > 0 {
 		if flag_name.len > 0 {
 			m.emit('if ${flag_name} {')

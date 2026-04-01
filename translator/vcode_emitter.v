@@ -177,6 +177,28 @@ pub fn (e &VCodeEmitter) emit() string {
 	return lines.join('\n')
 }
 
+pub fn (e &VCodeEmitter) raw_emit() string {
+	mut lines := []string{}
+	if e.imports.len > 0 {
+		mut imps := e.imports.clone()
+		imps.sort()
+		for i in imps { lines << 'import ${i}' }
+		lines << ''
+	}
+	if e.structs.len > 0 { lines << e.structs.join('\n\n'); lines << '' }
+	if e.globals.len > 0 {
+		for g in e.globals { lines << '__global ${g.replace("pub ", "")}' }
+		lines << ''
+	}
+	if e.constants.len > 0 {
+		for c in e.constants { lines << c }
+		lines << ''
+	}
+	if e.functions.len > 0 { lines << e.functions.join('\n\n'); lines << '' }
+	if e.main_body.len > 0 { for m in e.main_body { lines << m } }
+	return lines.join('\n').trim_space()
+}
+
 pub fn (e &VCodeEmitter) emit_helpers() string {
 	return VCodeEmitter.emit_global_helpers(e.helper_imports, e.helper_structs, e.helper_functions, 'main')
 }

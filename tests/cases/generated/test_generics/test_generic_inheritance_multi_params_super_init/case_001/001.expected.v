@@ -1,4 +1,3 @@
 @@in# "struct Derived {"
-@@in# "base_Base"
 @@in# "Base_Impl[string, int]"
-@@in# "new_base_impl(k, v)"
+@@in# "self.Base_Impl = *new_base_impl[string, int](k, v)"

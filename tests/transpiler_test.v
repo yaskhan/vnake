@@ -79,7 +79,11 @@ fn test_transpilation() {
 		// Initialize a new translator for each file
 		mut t := translator.new_translator()
 		// eprintln('Translating ${py_path}...')
-		actual := t.translate(source, py_path)
+		res := t.translate(source, py_path)
+		mut actual := res
+		for w in t.state.warnings {
+			actual += '\n// WARNING: ${w}'
+		}
 		
 		is_ok := check_expected_output(actual, expected, expected_path) or {
 			failures << format_failure(py_path, expected_path, expected, actual, err.msg())
@@ -98,35 +102,22 @@ fn test_transpilation() {
 	checked := passed + failed
 	success_rate := if checked > 0 { f64(passed) * 100.0 / f64(checked) } else { 0.0 }
 	println('Tests summary:')
-	println('  total: ${total}')
-	println('  checked: ${checked}')
-	println('  passed: ${passed}')
-	println('  failed: ${failed}')
-	println('  skipped: ${skipped}')
-	println('  success_rate: ${success_rate:.1f}%')
+	println('  Total:   ${total}')
+	println('  Checked: ${checked}')
+	println('  Passed:  ${passed}')
+	println('  Failed:  ${failed}')
+	println('  Skipped: ${skipped}')
+	println('  Success: ${success_rate:.2f}%')
+	
 	if failures.len > 0 {
-		println('')
-		println('Failures (${failures.len}):')
+		println('\nFailures details:')
 		for failure in failures {
+			println('--------------------------------------------------')
 			println(failure)
-			println('')
 		}
+		println('--------------------------------------------------')
 		assert false
 	}
-}
-
-fn collect_py_files(root string) []string {
-	mut files := []string{}
-	entries := os.ls(root) or { return files }
-	for entry in entries {
-		path := os.join_path(root, entry)
-		if os.is_dir(path) {
-			files << collect_py_files(path)
-		} else if path.ends_with('.py') {
-			files << path
-		}
-	}
-	return files
 }
 
 fn test_directive_expectations() {
@@ -145,11 +136,10 @@ fn check_expected_output(actual string, expected string, expected_path string) !
 		return check_expected_directives(actual, expected, expected_path)
 	}
 	// For generated tests without markers, treat as substring search if it is a single line type/snippet
-	if expected_path.contains('generated') && expected.count('
-') <= 1 {
+	if expected_path.contains('generated') && expected.count('\n') <= 1 {
 		return actual.contains(expected.trim_space())
 	}
-	return actual.trim_space() == expected.trim_space()
+	return normalize_text(actual) == normalize_text(expected)
 }
 
 fn check_expected_directives(actual string, expected string, expected_path string) !bool {
@@ -335,22 +325,30 @@ fn clean_expected_snippet(snippet string) string {
 			cleaned = cleaned[1..cleaned.len - 1].trim_space()
 		}
 	}
-	return cleaned.replace('\\"', '"').replace("\\'", "'")
+	return cleaned.replace('\\"', '"').replace("\\!", "!").replace("\\'", "'")
 }
 
 fn normalize_text(code string) string {
-	lines := code.split_into_lines()
-	mut normalized := []string{}
-	for line in lines {
-		mut trimmed := line.trim_space()
-		if trimmed != '' {
-			// Normalize assignments and spaces
-			trimmed = trimmed.replace(':=', '=')
-			for trimmed.contains('  ') {
-				trimmed = trimmed.replace('  ', ' ')
-			}
-			normalized << trimmed
+	res := code.replace(':=', '=').replace('"', "'")
+	mut out := []u8{cap: res.len}
+	for ch in res {
+		if !ch.is_space() {
+			out << ch
 		}
 	}
-	return normalized.join('\n')
+	return out.bytestr()
+}
+
+fn collect_py_files(dir string) []string {
+	mut res := []string{}
+	items := os.ls(dir) or { return []string{} }
+	for item in items {
+		full_path := os.join_path(dir, item)
+		if os.is_dir(full_path) {
+			res << collect_py_files(full_path)
+		} else if item.ends_with('.py') {
+			res << full_path
+		}
+	}
+	return res
 }

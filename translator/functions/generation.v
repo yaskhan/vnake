@@ -230,17 +230,6 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		annotations_data[arg_name_raw] = arg_type
 	}
 
-	if kwarg := node.args.kwarg {
-		name := sanitize_name(kwarg.arg, false)
-		args_names << name
-		mut a_type := 'map[string]Any'
-		if ann := kwarg.annotation {
-			a_type = env.map_annotation_fn(ann)
-		}
-		args_str_list << '${name} ${a_type}'
-		annotations_data[name] = a_type
-	}
-
 	mut ret_type := 'void'
 	if !is_generator {
 		if ann_ret := node.returns {
@@ -362,6 +351,12 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	env.emit_fn(output.join('\n'))
 	
 	env.state.indent_level++
+	
+	if dec_info.cache_wrapper_needed {
+		cache_name := '${node.name}_cache'
+		env.emit_constant_fn('__global ${cache_name} = map[string]Any{}')
+	}
+
 	for line in dec_info.injected_start { env.emit_fn(env.state.indent() + line) }
 	
 	prev_in_init := env.state.in_init

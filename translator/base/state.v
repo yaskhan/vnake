@@ -109,6 +109,7 @@ pub mut:
 	typed_dicts                  map[string]bool
 	class_hierarchy_initialized  bool
 	cached_indents               []string
+	is_full_module               bool
 }
 
 // new_translator_state creates a new TranslatorState instance
@@ -202,6 +203,7 @@ pub fn new_translator_state() &TranslatorState {
 		typed_dicts:                  map[string]bool{}
 		class_hierarchy_initialized:  false
 		cached_indents:               indents
+		is_full_module:               false
 	}
 }
 

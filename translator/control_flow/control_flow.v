@@ -15,6 +15,7 @@ pub mut:
 	declare_local_fn     ?fn (string)
 	is_declared_local_fn ?fn (string) bool
 	guess_type_fn        ?fn (ast.Expression) string
+	map_annotation_fn    ?fn (ast.Expression) string
 }
 
 pub struct ControlFlowModule {
@@ -43,6 +44,7 @@ pub fn new_control_flow_visit_env(
 	declare_local_fn fn (string),
 	is_declared_local_fn fn (string) bool,
 	guess_type_fn fn (ast.Expression) string,
+	map_annotation_fn fn (ast.Expression) string,
 ) ControlFlowVisitEnv {
 	return ControlFlowVisitEnv{
 		state:                state
@@ -54,6 +56,7 @@ pub fn new_control_flow_visit_env(
 		declare_local_fn:     declare_local_fn
 		is_declared_local_fn: is_declared_local_fn
 		guess_type_fn:        guess_type_fn
+		map_annotation_fn:    map_annotation_fn
 	}
 }
 
@@ -71,6 +74,7 @@ pub fn new_control_flow_module() ControlFlowModule {
 			declare_local_fn:     none
 			is_declared_local_fn: none
 			guess_type_fn:        none
+			map_annotation_fn:    none
 		}
 		loop_flag_stack: []string{}
 		loop_depth_stack: []int{}
@@ -111,6 +115,13 @@ pub fn (mut m ControlFlowModule) guess_type(node ast.Expression) string {
 		return f(node)
 	}
 	return 'Any'
+}
+
+pub fn (mut m ControlFlowModule) map_annotation(node ast.Expression) string {
+	if f := m.env.map_annotation_fn {
+		return f(node)
+	}
+	return ''
 }
 
 pub fn (mut m ControlFlowModule) declare_local(name string) {
