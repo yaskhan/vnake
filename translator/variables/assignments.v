@@ -242,26 +242,28 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			v_id := base.to_snake_case(target.id)
 			pub_prefix := if m.is_exported(target.id) { 'pub ' } else { '' }
 			// Sanitize ord/chr calls for compile-time constants
+			// Use V's native .u32() / rune().str() which work with constants
 			mut sanitized_rhs := rhs
 			if sanitized_rhs.starts_with('ord(') && sanitized_rhs.ends_with(')') {
 				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
-				sanitized_rhs = 'u32(${inner})'
+				sanitized_rhs = '(${inner}).u32()'
 			} else if sanitized_rhs.starts_with('chr(') && sanitized_rhs.ends_with(')') {
 				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
 				sanitized_rhs = 'rune(${inner}).str()'
-			} else if sanitized_rhs.contains('ord(') {
-				for i := 0; i < sanitized_rhs.len - 3; i++ {
-					if sanitized_rhs[i..i+4] == 'ord(' {
+			} else if sanitized_rhs.contains('.u32(') && sanitized_rhs.contains(')') {
+				// Already converted ord call like u32('A') - needs .u32() syntax
+				for i := 0; i < sanitized_rhs.len - 4; i++ {
+					if sanitized_rhs[i..i+5] == 'u32(' {
 						close_idx := -1
 						depth := 1
-						for j := i + 4; j < sanitized_rhs.len; j++ {
+						for j := i + 5; j < sanitized_rhs.len; j++ {
 							if sanitized_rhs[j] == `[` || sanitized_rhs[j] == `(` { depth++ }
 							if sanitized_rhs[j] == `]` || sanitized_rhs[j] == `)` { depth-- }
 							if depth == 0 { close_idx = j; break }
 						}
 						if close_idx > 0 {
-							inner_part := sanitized_rhs[i+4..close_idx]
-							sanitized_rhs = '${sanitized_rhs[..i]}u32(${inner_part})${sanitized_rhs[close_idx+1..]}'
+							inner_part := sanitized_rhs[i+5..close_idx]
+							sanitized_rhs = '${sanitized_rhs[..i]}(${inner_part}).u32()${sanitized_rhs[close_idx+1..]}'
 							break
 						}
 					}
