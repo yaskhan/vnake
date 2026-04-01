@@ -241,7 +241,41 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 		if target is ast.Name && target.id.is_upper() && base.is_compile_time_evaluable(node.value) {
 			v_id := base.to_snake_case(target.id)
 			pub_prefix := if m.is_exported(target.id) { 'pub ' } else { '' }
-			m.emitter.add_constant('${pub_prefix}const ${v_id} = ${rhs}')
+			// Sanitize ord/chr calls for compile-time constants
+			mut sanitized_rhs := rhs
+			if sanitized_rhs.starts_with('ord(') && sanitized_rhs.ends_with(')') {
+				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
+				sanitized_rhs = 'u32(${inner})'
+			} else if sanitized_rhs.starts_with('chr(') && sanitized_rhs.ends_with(')') {
+				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
+				sanitized_rhs = 'rune(${inner}).str()'
+			} else if sanitized_rhs.contains('ord(') {
+				for i := 0; i < sanitized_rhs.len - 3; i++ {
+					if sanitized_rhs[i..i+4] == 'ord(' {
+						close_idx := -1
+						depth := 1
+						for j := i + 4; j < sanitized_rhs.len; j++ {
+							if sanitized_rhs[j] == `[` || sanitized_rhs[j] == `(` { depth++ }
+							if sanitized_rhs[j] == `]` || sanitized_rhs[j] == `)` { depth-- }
+							if depth == 0 { close_idx = j; break }
+						}
+						if close_idx > 0 {
+							inner_part := sanitized_rhs[i+4..close_idx]
+							sanitized_rhs = '${sanitized_rhs[..i]}u32(${inner_part})${sanitized_rhs[close_idx+1..]}'
+							break
+						}
+					}
+				}
+			}
+			m.emitter.add_constant('${pub_prefix}const ${v_id} = ${sanitized_rhs}')
+			return
+		}
+		// For UPPER_CASE names that are not compile-time evaluable, use 'mut' variable
+		if target is ast.Name && target.id.is_upper() {
+			pub_prefix := if m.is_exported(target.id) { 'pub ' } else { '' }
+			v_id := base.to_snake_case(target.id)
+			m.emit('${pub_prefix}mut ${v_id} := ${rhs}')
+			m.local_vars_in_scope[v_id] = true
 			return
 		}
 		if lhs in m.state.global_vars {

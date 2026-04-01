@@ -35,6 +35,38 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 		generic_map:        env.state.current_class_generic_map
 	}
 	mut ctx := env.type_utils_context()
+	
+	// Check if this is a self-referential type (e.g., Packet -> Optional['Packet'])
+	// We need to detect this BEFORE mapping, so we can return a pointer type
+	is_optional := type_str.starts_with('?') || type_str.starts_with('Optional[') || type_str.contains('typing.Optional')
+	mut clean_type := type_str.trim_left('?')
+	if clean_type.starts_with('Optional[') && clean_type.ends_with(']') {
+		clean_type = clean_type['Optional['.len..clean_type.len-1]
+	}
+	if clean_type.starts_with('typing.Optional[') && clean_type.ends_with(']') {
+		clean_type = clean_type['typing.Optional['.len..clean_type.len-1]
+	}
+	// Check if clean_type refers to the current struct (self-reference)
+	if clean_type == struct_name || clean_type.replace('_Impl', '') == struct_name || clean_type == struct_name.replace('_Impl', '') {
+		// Self-referential type: use pointer type ?&StructName or &StructName
+		real_name := struct_name.replace('_Impl', '')
+		if is_optional {
+			return '?&${real_name}'
+		} else {
+			return '&${real_name}'
+		}
+	}
+	// Also check for the non-_Impl version
+	if clean_type.len > 0 && clean_type[0].is_capital() && clean_type in env.state.defined_classes {
+		if is_optional {
+			// Check if this type is defined and is not the current struct
+			if clean_type != struct_name && clean_type != struct_name.replace('_Impl', '') {
+				// It's a different struct, might still need a pointer
+				// But for now only handle self-references
+			}
+		}
+	}
+	
 	return base.map_type(type_str, opts, mut ctx, fn [mut env] (name string) string {
 		env.state.generated_sum_types[name] = ''
 		return name

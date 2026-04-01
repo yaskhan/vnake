@@ -803,6 +803,14 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		return 'rand.uuid_v4()'
 	}
 
+	if func_name_str == 'ord' && args.len == 1 {
+		return 'u32(${args[0]})'
+	}
+	
+	if func_name_str == 'chr' && args.len == 1 {
+		return 'rune(${args[0]}).str()'
+	}
+
 	if func_name_str == 'range' {
 		eg.state.used_builtins['py_range'] = true
 		return 'py_range(${args.join(', ')})'
