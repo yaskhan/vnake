@@ -302,6 +302,12 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 		return
 	}
 
+	// If variable was already declared with an optional type, wrap the new value
+	if !m.state.in_main && lhs in m.local_vars_in_scope && v_type.starts_with('?') {
+		m.emit('${lhs} = ${v_type}(${rhs})')
+		return
+	}
+
 	if !m.state.in_main && lhs in m.local_vars_in_scope {
 		if lhs in m.state.cond_optional_var_type && rhs != 'none' && !rhs.starts_with('?') {
 			opt_type := m.state.cond_optional_var_type[lhs]
