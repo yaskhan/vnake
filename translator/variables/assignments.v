@@ -291,6 +291,17 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 		rhs = '${rhs}.clone()'
 	}
 
+	// For Optional[SomeClass] assignments with a concrete value, use the optional type
+	if v_type.starts_with('?') && rhs != 'none' && !rhs.contains('unsafe { nil }') {
+		if v_type in m.local_vars_in_scope {
+			m.emit('${lhs} = ${v_type}(${rhs})')
+		} else {
+			m.emit('mut ${lhs} := ${v_type}(${rhs})')
+			m.local_vars_in_scope[lhs] = true
+		}
+		return
+	}
+
 	if !m.state.in_main && lhs in m.local_vars_in_scope {
 		if lhs in m.state.cond_optional_var_type && rhs != 'none' && !rhs.starts_with('?') {
 			opt_type := m.state.cond_optional_var_type[lhs]
