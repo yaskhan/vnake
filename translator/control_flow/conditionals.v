@@ -306,6 +306,48 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 			return
 		}
 
+		// Generate unwrap pattern for Option types: var_opt := var or { return ... }
+		// For: if x is None: return some_value  (with optional type variable x)
+		if node.test is ast.Compare && node.test.ops[0].value == 'is' && node.test.comparators.len == 1 {
+			right := node.test.comparators[0]
+			is_none_lit := (right is ast.Constant && right.value == 'None') || 
+						   (right is ast.Name && right.id in ['None', 'none']) || 
+						   right is ast.NoneExpr
+			if is_none_lit && node.test.left is ast.Name && node.orelse.len == 0 {
+				var_name := node.test.left.id
+				base_type := m.guess_type(ast.Name{id: var_name})
+				if base_type.starts_with('?') {
+					mut ret_stmts := []string{}
+					mut has_only_returns := true
+					for stmt in node.body {
+						if stmt is ast.Return {
+							if ret_val := stmt.value {
+								ret_stmts << m.visit_expr(ret_val)
+							} else {
+								ret_stmts << ''
+							}
+						} else {
+							has_only_returns = false
+							break
+						}
+					}
+					if has_only_returns && ret_stmts.len > 0 {
+						sanit_var := m.sanitize_name(var_name, false)
+						unwrap_var := '${sanit_var}_opt'
+						mut ret_expr := ret_stmts[0]
+						if ret_stmts.len > 1 { ret_expr = ret_stmts.join(', ') }
+						if ret_expr == '' { ret_expr = 'none' }
+						m.env.analyzer.type_map[unwrap_var] = base_type[1..]
+						m.emit('${unwrap_var} := ${sanit_var} or { return ${ret_expr} }')
+						m.declare_local(unwrap_var)
+						// Persist name_remap for subsequent statements in the function
+						m.env.state.name_remap[var_name] = unwrap_var
+						return
+					}
+				}
+			}
+		}
+
 		// Pre-declare conditionally initialized variables
 		if_vars := m.collect_assigned_vars(node.body)
 		else_vars := if node.orelse.len > 0 { m.collect_assigned_vars(node.orelse) } else { map[string]bool{} }
