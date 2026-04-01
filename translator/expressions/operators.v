@@ -255,11 +255,64 @@ pub fn (mut eg ExprGen) visit_unary_op(node ast.UnaryOp) string {
 	return "${node.op.value}${operand}"
 }
 
-pub fn (mut eg ExprGen) visit_bool_op(node ast.Expression) string {
-	if node is ast.BinaryOp && node.op.value in ['and', 'or'] {
-		return eg.build_pythonic_bool_op(node, node.op.value == 'and')
+pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
+	if node.values.len < 2 {
+		if node.values.len == 1 {
+			return eg.visit(node.values[0])
+		}
+		return 'true'
 	}
-	return eg.visit(node)
+	
+	op := node.op.value
+	is_and := op == 'and'
+	
+	// Handle 2-value case
+	if node.values.len == 2 {
+		mut left := eg.visit(node.values[0])
+		mut right := eg.visit(node.values[1])
+		left_type := eg.guess_type(node.values[0])
+		right_type := eg.guess_type(node.values[1])
+		
+		if left_type == 'bool' && right_type == 'bool' {
+			return if is_and { "(${left}) && (${right})" } else { "(${left}) || (${right})" }
+		}
+		
+		l_cond := eg.wrap_bool(node.values[0], false)
+		mut l_val := left
+		mut r_val := right
+		
+		if eg.state.current_assignment_type == 'Any' {
+			if !l_val.starts_with('Any(') && left_type != 'Any' {
+				l_val = if left_type.starts_with('?') { "Any(${l_val}!)" } else { "Any(${l_val})" }
+			}
+			if !r_val.starts_with('Any(') && right_type != 'Any' {
+				r_val = if right_type.starts_with('?') { "Any(${r_val}!)" } else { "Any(${r_val})" }
+			}
+		}
+		
+		if is_and { return "(if ${l_cond} { ${r_val} } else { ${l_val} })" }
+		else { return "(if ${l_cond} { ${l_val} } else { ${r_val} })" }
+	}
+	
+	// Handle 3+ values using short-circuit pattern
+	mut result := eg.visit(node.values[node.values.len - 1])
+	for i := node.values.len - 2; i >= 0; i-- {
+		v := node.values[i]
+		v_type := eg.guess_type(v)
+		cond := eg.wrap_bool(v, false)
+		mut v_val := eg.visit(v)
+		if eg.state.current_assignment_type == 'Any' {
+			if !v_val.starts_with('Any(') && v_type != 'Any' {
+				v_val = if v_type.starts_with('?') { "Any(${v_val}!)" } else { "Any(${v_val})" }
+			}
+		}
+		if is_and {
+			result = "(if ${cond} { ${result} } else { ${v_val} })"
+		} else {
+			result = "(if ${cond} { ${v_val} } else { ${result} })"
+		}
+	}
+	return result
 }
 
 pub fn (mut eg ExprGen) visit_compare(node ast.Compare) string {

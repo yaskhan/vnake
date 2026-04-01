@@ -70,6 +70,7 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 		ast.Set { return eg.visit_set(node) }
 		ast.BinaryOp { return eg.visit_bin_op(node) }
 		ast.UnaryOp { return eg.visit_unary_op(node) }
+		ast.BoolOp { return eg.visit_bool_op(node) }
 		ast.Compare { return eg.visit_compare(node) }
 		ast.Call { return eg.visit_call(node) }
 		ast.Attribute { return eg.visit_attribute(node) }

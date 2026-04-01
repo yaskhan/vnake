@@ -36,7 +36,7 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		}
 		return guess_type(node.operand, ctx, use_location)
 	}
-	if node is ast.Compare {
+	if node is ast.Compare || node is ast.BoolOp {
 		return 'bool'
 	}
 	if node is ast.Call {
