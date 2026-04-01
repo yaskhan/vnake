@@ -164,6 +164,28 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 			return
 		}
 
+		// For Optional/union types, declare with the optional type so None can be assigned later
+		is_optional_annotation := v_type.starts_with('?')
+		// Also check raw annotation string for Optional[...]
+		if !is_optional_annotation {
+			is_optional_annotation = annotation_str.starts_with('Optional[') || 
+				annotation_str.starts_with('typing.Optional[')
+		}
+		
+		if is_optional_annotation {
+			mut opt_type := if v_type.starts_with('?') { v_type } else { '?${v_type}' }
+			mut init_rhs := rhs
+			// Wrap with optional type for non-none values
+			if init_rhs != 'none' && !init_rhs.starts_with('?') {
+				init_rhs = '${opt_type}(${rhs})'
+			}
+			is_mut := m.is_mutable_target(node.target, target_expr)
+			mut_prefix := if is_mut { 'mut ' } else { '' }
+			m.emit('${mut_prefix}${target_expr} := ${init_rhs}')
+			m.local_vars_in_scope[target_expr] = true
+			return
+		}
+
 		is_mut := m.is_mutable_target(node.target, target_expr)
 		mut_prefix := if is_mut { 'mut ' } else { '' }
 		m.emit('${mut_prefix}${target_expr} := ${rhs}')
