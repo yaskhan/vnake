@@ -82,6 +82,9 @@ fn (mut t Translator) get_control_flow_env() control_flow.ControlFlowVisitEnv {
 		},
 		fn [mut t] (node ast.Expression) string {
 			return t.guess_type(node)
+		},
+		fn [mut t] (node ast.Expression) string {
+			return t.map_annotation(node)
 		}
 	)
 }

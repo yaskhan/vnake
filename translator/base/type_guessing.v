@@ -124,7 +124,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 			return 'string'
 		}
 		if fid in ['int', 'len'] {
-			return 'Any'
+			return 'int'
 		}
 		if fid == 'float' {
 			return 'f64'

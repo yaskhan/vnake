@@ -65,12 +65,52 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	mut args_str_list := []string{}
 	mut args_names := []string{}
 	mut receiver_str := ''
+	mut receiver_name := 'self'
+	
+	mut args := node.args.posonlyargs.clone()
+	args << node.args.args
+	args << node.args.kwonlyargs
 
+	// Receiver handling
+	if is_method && args.len > 0 && args[0].arg in ['self', 'cls'] {
+		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
+			mut is_mutated := h.is_mutating_method(node, struct_name, &env)
+			p_key := '${struct_name}.${node.name}.self'
+			if m_info_self := env.analyzer.get_mutability(p_key) {
+				is_mutated = is_mutated || m_info_self.is_mutated
+			}
+
+			if dec_info.is_property { is_mutated = false }
+
+			mut mut_pfx := if dec_info.is_setter || is_mutated { 'mut ' } else { '' }
+			gen_s := if env.state.current_class_generics.len > 0 {
+				mut v_gens := []string{}
+				for g in env.state.current_class_generics {
+					v_gens << env.state.current_class_generic_map[g] or { g }
+				}
+				'[${v_gens.join(", ")}]'
+			} else { '' }
+			receiver_str = '(${mut_pfx}${args[0].arg} ${struct_name}${gen_s}) '
+			receiver_name = args[0].arg
+		}
+		args = args[1..].clone()
+	} else if env.state.current_class_is_unittest && args.len > 0 && args[0].arg == 'self' {
+		args = args[1..].clone()
+	}
+	
 	// Generics handling
 	mut py_func_generics := []string{}
+	
+	// Classmethod factories on generic classes MUST declare class generics
+	if dec_info.is_classmethod && struct_name.len > 0 && receiver_str == '' {
+		for g in env.state.current_class_generics {
+			if g !in py_func_generics { py_func_generics << g }
+		}
+	}
+
 	if node.type_params.len > 0 {
 		for param in node.type_params {
-			py_func_generics << param.name
+			if param.name !in py_func_generics { py_func_generics << param.name }
 			if def := param.default_ {
 				type_str := env.visit_expr_fn(def)
 				env.state.generic_defaults[param.name] = env.map_type_fn(type_str, struct_name, true, true, false)
@@ -101,37 +141,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		args_str_list << 'ch_in chan PyGeneratorInput'
 	}
 
-	mut args := node.args.posonlyargs.clone()
-	args << node.args.args
-	args << node.args.kwonlyargs
-
-	mut func_name := sanitize_name(node.name, false)
-
-	// Receiver handling
-	if is_method && args.len > 0 && args[0].arg in ['self', 'cls'] {
-		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
-			mut is_mutated := h.is_mutating_method(node, struct_name, &env)
-			p_key := '${struct_name}.${node.name}.self'
-			if m_info_self := env.analyzer.get_mutability(p_key) {
-				is_mutated = is_mutated || m_info_self.is_mutated
-			}
-
-			if dec_info.is_property { is_mutated = false }
-
-			mut mut_pfx := if dec_info.is_setter || is_mutated { 'mut ' } else { '' }
-			gen_s := if env.state.current_class_generics.len > 0 {
-				mut v_gens := []string{}
-				for g in env.state.current_class_generics {
-					v_gens << env.state.current_class_generic_map[g] or { g }
-				}
-				'[${v_gens.join(", ")}]'
-			} else { '' }
-			receiver_str = '(${mut_pfx}${args[0].arg} ${struct_name}${gen_s}) '
-		}
-		args = args[1..].clone()
-	} else if env.state.current_class_is_unittest && args.len > 0 && args[0].arg == 'self' {
-		args = args[1..].clone()
-	}
+	mut func_name := if dec_info.implementation_name.len > 0 { dec_info.implementation_name } else { sanitize_name(node.name, false) }
 
 	// Default arguments map
 	mut defaults_map := map[string]ast.Expression{}
@@ -228,17 +238,6 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		args_str_list << '${arg_name_raw} ${arg_type}'
 		args_names << arg_name_raw
 		annotations_data[arg_name_raw] = arg_type
-	}
-
-	if kwarg := node.args.kwarg {
-		name := sanitize_name(kwarg.arg, false)
-		args_names << name
-		mut a_type := 'map[string]Any'
-		if ann := kwarg.annotation {
-			a_type = env.map_annotation_fn(ann)
-		}
-		args_str_list << '${name} ${a_type}'
-		annotations_data[name] = a_type
 	}
 
 	mut ret_type := 'void'
@@ -362,6 +361,16 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	env.emit_fn(output.join('\n'))
 	
 	env.state.indent_level++
+	
+	if dec_info.cache_wrapper_needed {
+		cache_name := if struct_name.len > 0 { base.to_snake_case('${struct_name}_${node.name}_cache') } else { base.to_snake_case('${node.name}_cache') }
+		if ret_type.len > 0 && !ret_type.contains('|') {
+			env.emit_constant_fn('__global ${cache_name} = map[string]${ret_type}{}')
+		} else {
+			env.emit_constant_fn('__global ${cache_name} = map[string]Any{}')
+		}
+	}
+
 	for line in dec_info.injected_start { env.emit_fn(env.state.indent() + line) }
 	
 	prev_in_init := env.state.in_init
@@ -416,6 +425,33 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	
 	env.state.indent_level--
 	env.emit_fn(env.state.indent() + '}')
+
+	if dec_info.cache_wrapper_needed && dec_info.implementation_name.len > 0 {
+		wrapper_name := node.name
+		impl_name := dec_info.implementation_name
+		cache_var := if struct_name.len > 0 { base.to_snake_case('${struct_name}_${wrapper_name}_cache') } else { base.to_snake_case('${wrapper_name}_cache') }
+		
+		mut wrapper_lines := []string{}
+		mut wrapper_decl := '${pub_pfx}fn ${receiver_str}${wrapper_name}(${args_str_list.join(", ")}) ${ret_type} {'
+		wrapper_lines << wrapper_decl
+		
+		// Generate key: '${self}_${arg1}_${arg2}'
+		mut key_parts := []string{}
+		if struct_name.len > 0 { key_parts << '${receiver_name}' }
+		for arg in args_names { key_parts << '${arg}' }
+		key_expr := if key_parts.len > 0 { "'\${" + key_parts.join("}_\${") + "}'" } else { "''" }
+		
+		wrapper_lines << '    key := ${key_expr}'
+		wrapper_lines << '    if key in ${cache_var} { return ${cache_var}[key] as ${ret_type} }'
+		
+		call_prefix := if struct_name.len > 0 { '${receiver_name}.' } else { '' }
+		wrapper_lines << '    res := ${call_prefix}${impl_name}(${args_names.join(", ")})'
+		wrapper_lines << '    ${cache_var}[key] = res'
+		wrapper_lines << '    return res'
+		wrapper_lines << '}'
+		
+		env.emit_function_fn(wrapper_lines.join('\n'))
+	}
 
 	if annotations_data.len > 0 {
 		mut anno_list := []string{}
@@ -494,6 +530,7 @@ fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, stru
 			info.is_deleter = true
 		} else if dec_name.ends_with('lru_cache') {
 			info.cache_wrapper_needed = true
+			info.implementation_name = '${node.name}__impl'
 		} else if dec_name in ['timer', 'log'] {
 			info.injected_start << "println('Start ${node.name}...')"
 			info.injected_end << "defer { println('End ${node.name}...') }"

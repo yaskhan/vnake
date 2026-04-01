@@ -36,7 +36,6 @@ pub fn new_translator() &Translator {
 		coroutine_handler: analyzer.new_coroutine_handler()
 		control_flow_module: control_flow.new_control_flow_module()
 	}
-	println("TRANSLATOR_CREATED")
 	t.state.mapper = stdlib_map.new_stdlib_mapper()
 	t.state.include_all_symbols = false
 	t.state.strict_exports = false
@@ -45,7 +44,38 @@ pub fn new_translator() &Translator {
 	t.analyzer.guess_type_handler = fn (e ast.Expression, ctx models.TypeGuessingContext) string {
 		return base.guess_type(e, ctx, true)
 	}
+
+	mut e := &VCodeEmitter{
+		module_name:      'main'
+		imports:          []string{}
+		structs:          []string{}
+		functions:        []string{}
+		main_body:        []string{}
+		init_body:        []string{}
+		globals:          []string{}
+		constants:        []string{}
+		helper_imports:   []string{}
+		helper_structs:   []string{}
+		helper_functions: []string{}
+	}
+	t.state.emitter = voidptr(e)
+
 	return t
+}
+
+pub fn (t &Translator) get_helper_imports() []string {
+	e := unsafe { &VCodeEmitter(t.state.emitter) }
+	return e.helper_imports.clone()
+}
+
+pub fn (t &Translator) get_helper_structs() []string {
+	e := unsafe { &VCodeEmitter(t.state.emitter) }
+	return e.helper_structs.clone()
+}
+
+pub fn (t &Translator) get_helper_functions() []string {
+	e := unsafe { &VCodeEmitter(t.state.emitter) }
+	return e.helper_functions.clone()
 }
 
 fn (mut t Translator) emit(line string) {
@@ -242,6 +272,13 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 			}
 			return t.map_annotation(node.value) + '[${t.map_annotation(node.slice)}]'
 		}
+		ast.Tuple {
+			mut parts := []string{}
+			for elt in node.elements {
+				parts << t.map_annotation(elt)
+			}
+			return parts.join(', ')
+		}
 		ast.Constant {
 			if node.value == 'None' { return '' }
 			if node.value.starts_with("'") || node.value.starts_with('"') {
@@ -344,10 +381,15 @@ fn (t &Translator) annotation_raw_name(node ast.Expression) string {
 }
 
 pub fn (mut t Translator) translate(source string, filename string) string {
+	old_emitter := t.state.emitter
+	old_mapper := t.state.mapper
+	
 	t.state = base.new_translator_state()
+	t.state.emitter = old_emitter
+	t.state.mapper = old_mapper
+	
 	t.coroutine_handler = analyzer.new_coroutine_handler()
 	t.state.coroutine_handler = &t.coroutine_handler
-	t.state.mapper = stdlib_map.new_stdlib_mapper()
 	t.state.current_file_name = filename
 	t.analyzer = analyzer.new_analyzer(map[string]string{})
 	t.state.output = []string{}
@@ -442,31 +484,51 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	t.append_helpers()
 
+	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
+
 	if t.state.used_builtins['math.pow'] || t.state.used_builtins['math.floor'] {
-		t.state.output.insert(0, 'import math')
+		e.add_import('math')
 	}
 	if t.state.used_builtins['encoding.base64'] {
-		t.state.output.insert(0, 'import encoding.base64')
+		e.add_import('encoding.base64')
 	}
 	if t.state.used_builtins['compress.zlib'] {
-		t.state.output.insert(0, 'import compress.zlib')
+		e.add_import('compress.zlib')
 	}
 	if t.state.used_builtins['datatypes'] {
-		t.state.output.insert(0, 'import datatypes')
+		e.add_import('datatypes')
 	}
+	if t.state.used_builtins['vexc'] {
+		e.add_import('div72.vexc')
+	}
+	
 	mut uses_os := false
 	for line in t.state.output {
 		if line.contains('os.') { uses_os = true; break }
 	}
 	if uses_os {
-		t.state.output.insert(0, 'import os')
+		e.add_import('os')
 	}
+	
 	mut uses_binary := false
 	for k, v in t.state.used_builtins {
 		if k.starts_with('py_struct_') && v { uses_binary = true; break }
 	}
 	if uses_binary {
-		t.state.output.insert(0, 'import binary')
+		e.add_import('binary')
 	}
-	return t.state.output.join('\n')
+
+	for line in t.state.output {
+		if line.starts_with('import ') {
+			e.add_import(line[7..].trim_space())
+		} else if line.len > 0 {
+			e.add_main_statement(line)
+		}
+	}
+
+	if t.state.is_full_module {
+		return e.emit()
+	} else {
+		return e.raw_emit()
+	}
 }

@@ -26,7 +26,7 @@ fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
 	if typ.starts_with('SumType_') { return true }
 	if typ.starts_with('map[') && typ.ends_with(']Any') { return true }
 	if typ == 'Any' {
-		return true
+		return eg.is_explicit_any(node, typ)
 	}
 	return false
 }

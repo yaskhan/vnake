@@ -135,7 +135,15 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 							for arg in val.args {
 								arg_strs << t.visit_expr(arg)
 							}
-							t.emit_indented('self.${parent_name}_Impl = *new_${base.to_snake_case(parent_name)}_impl(${arg_strs.join(', ')})')
+							mut factory_name := base.get_factory_name(parent_name, t.state.class_hierarchy)
+							if parent_name in t.state.current_class_generic_bases {
+								base_type := t.state.current_class_generic_bases[parent_name]
+								if bracket_idx := base_type.index('[') {
+									factory_name += base_type[bracket_idx..]
+								}
+							}
+							target_name := if parent_name in t.state.known_interfaces { '${parent_name}_Impl' } else { parent_name }
+							t.emit_indented('self.${target_name} = *${factory_name}(${arg_strs.join(', ')})')
 							return
 						}
 					}

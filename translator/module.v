@@ -1514,6 +1514,17 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 			m.state.in_main = false
 			m.visit_stmt_fn(stmt)
 			m.state.in_main = true
+			
+			// Extract handled functions/structs from VCodeEmitter
+			mut ve := unsafe { &VCodeEmitter(m.state.emitter) }
+			for f in ve.functions {
+				m.emitter.add_helper_function(f)
+			}
+			ve.functions.clear()
+			for s in ve.structs {
+				m.emitter.add_helper_struct(s)
+			}
+			ve.structs.clear()
 		} else {
 			m.visit_stmt_fn(stmt)
 		}

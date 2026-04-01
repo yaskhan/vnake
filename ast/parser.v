@@ -751,7 +751,7 @@ fn (mut p Parser) parse_try() ?Statement {
 		mut typ := ?Expression(none)
 		mut hname := ?string(none)
 		if !p.current_is(.colon) {
-			typ = p.parse_expression()
+			typ = p.parse_expression_list(false, true)
 			if p.current_is_keyword('as') {
 				p.advance()
 				hname = p.current_token.value
@@ -2203,15 +2203,20 @@ fn (mut p Parser) parse_pattern_atom() Pattern {
 
 	// Capture variable
 	if p.current_is(.identifier) {
-		name := tok.value
+		mut cls := Expression(Name{
+			token: tok
+			id:    tok.value
+			ctx:   .load
+		})
 		p.advance()
+
+		// Handle generic class pattern: Box[int](...)
+		if p.current_is(.lbracket) {
+			cls = p.parse_subscript(cls)
+		}
+
 		// Class pattern: Name(...)
 		if p.current_is(.lparen) {
-			cls := Name{
-				token: tok
-				id:    name
-				ctx:   .load
-			}
 			p.advance()
 			mut patterns := []Pattern{}
 			mut kwd_attrs := []string{}
@@ -2245,7 +2250,7 @@ fn (mut p Parser) parse_pattern_atom() Pattern {
 		if p.current_is(.dot) {
 			mut expr := Expression(Name{
 				token: tok
-				id:    name
+				id:    tok.value
 				ctx:   .load
 			})
 			for p.current_is(.dot) {
@@ -2267,7 +2272,7 @@ fn (mut p Parser) parse_pattern_atom() Pattern {
 		return MatchAs{
 			token:   tok
 			pattern: none
-			name:    name
+			name:    tok.value
 		}
 	}
 

@@ -197,6 +197,18 @@ fn (mut m StdLibMapper) init_mappings() {
 		'xor': 'py_op_xor'
 	}
 
+	// Logging
+	m.mappings['logging'] = {
+		'getLogger': 'py_get_logger'
+		'get_logger': 'py_get_logger'
+		'info': 'log.info'
+		'error': 'log.error'
+		'warning': 'log.warn'
+		'warn': 'log.warn'
+		'debug': 'log.debug'
+		'critical': 'log.error'
+	}
+
 	// Threading
 	m.mappings['threading'] = {
 		'Thread': 'PyThread'
@@ -357,6 +369,7 @@ fn (mut m StdLibMapper) init_mappings() {
 
 // init_imports initializes imports
 fn (mut m StdLibMapper) init_imports() {
+	m.v_imports['logging'] = ['log']
 	m.v_imports['math'] = ['math']
 	m.v_imports['random'] = ['rand']
 	m.v_imports['json'] = ['json']
