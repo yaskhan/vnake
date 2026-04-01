@@ -415,6 +415,7 @@ pub fn (mut e NodeEvaluator) visit_lvalue(mut o Lvalue) !AnyNode {
 		NameExpr { return e.visit_name_expr(mut o) }
 		StarExpr { return e.visit_star_expr(mut o) }
 		TupleExpr { return e.visit_tuple_expr(mut o) }
+		IndexExpr { return e.visit_index_expr(mut o) }
 	}
 }
 

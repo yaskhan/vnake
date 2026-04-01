@@ -208,7 +208,7 @@ pub fn (mut v VariableRenameVisitor) visit_name_expr(mut expr NameExpr) {
 pub fn (mut v VariableRenameVisitor) visit_assignment_stmt(mut stmt AssignmentStmt) {
 	for mut lval in stmt.lvalues {
 		match mut lval {
-			NameExpr, MemberExpr, ListExpr, TupleExpr, StarExpr {
+			NameExpr, MemberExpr, ListExpr, TupleExpr, StarExpr, IndexExpr {
 				v.visit_lvalue(mut lval)
 			}
 			else {}
@@ -226,7 +226,7 @@ fn (mut v VariableRenameVisitor) visit_lvalue(mut lval Lvalue) {
 		TupleExpr, ListExpr {
 			for mut item in lval.items {
 				match mut item {
-					NameExpr, MemberExpr, TupleExpr, ListExpr, StarExpr {
+					NameExpr, MemberExpr, TupleExpr, ListExpr, StarExpr, IndexExpr {
 						v.visit_lvalue(mut Lvalue(item))
 					}
 					else {}
@@ -238,11 +238,14 @@ fn (mut v VariableRenameVisitor) visit_lvalue(mut lval Lvalue) {
 		}
 		StarExpr {
 			match mut lval.expr {
-				NameExpr, MemberExpr, TupleExpr, ListExpr, StarExpr {
+				NameExpr, MemberExpr, TupleExpr, ListExpr, StarExpr, IndexExpr {
 					v.visit_lvalue(mut Lvalue(lval.expr))
 				}
 				else {}
 			}
+		}
+		IndexExpr {
+			v.visit_expression(mut Expression(lval))
 		}
 	}
 }
@@ -363,7 +366,7 @@ fn (mut v VariableRenameVisitor) visit_statement(mut stmt Statement) {
 		ForStmt {
 			v.visit_expression(mut stmt.expr)
 			match mut stmt.index {
-				NameExpr, MemberExpr, ListExpr, TupleExpr, StarExpr {
+				NameExpr, MemberExpr, ListExpr, TupleExpr, StarExpr, IndexExpr {
 					v.visit_lvalue(mut stmt.index)
 				}
 				else {}

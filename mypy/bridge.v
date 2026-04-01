@@ -115,6 +115,7 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 			args, names, kinds := convert_arguments(stmt.args)
 			func_def := FuncDef{
 				name: stmt.name
+				fullname: stmt.name
 				base: NodeBase{ctx: ctx}
 				body: convert_block(stmt.body)
 				arguments: args
@@ -126,6 +127,7 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 		ast.ClassDef {
 			class_def := ClassDef{
 				name: stmt.name
+				fullname: stmt.name
 				base: NodeBase{ctx: ctx}
 				defs: convert_block(stmt.body)
 				// TODO: bases

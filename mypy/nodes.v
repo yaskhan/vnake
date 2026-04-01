@@ -328,6 +328,13 @@ pub fn (n MypyNode) as_statement() ?Statement {
 	}
 }
 
+pub fn (e Expression) as_name_expr() ?&NameExpr {
+	if e is NameExpr {
+		return &e
+	}
+	return none
+}
+
 pub fn (n MypyNode) as_expression() ?Expression {
 	match n {
 		AssignmentExpr, AwaitExpr, BytesExpr, CallExpr, CastExpr, ComparisonExpr, ComplexExpr,
@@ -506,7 +513,7 @@ pub type Expression = AssignmentExpr
 	| YieldExpr
 	| YieldFromExpr
 
-pub type Lvalue = ListExpr | MemberExpr | NameExpr | StarExpr | TupleExpr
+pub type Lvalue = ListExpr | MemberExpr | NameExpr | StarExpr | TupleExpr | IndexExpr
 
 pub fn (e Expression) as_lvalue() ?Lvalue {
 	return match e {
@@ -515,6 +522,7 @@ pub fn (e Expression) as_lvalue() ?Lvalue {
 		NameExpr { Lvalue(e) }
 		StarExpr { Lvalue(e) }
 		TupleExpr { Lvalue(e) }
+		IndexExpr { Lvalue(e) }
 		else { none }
 	}
 }
@@ -582,6 +590,9 @@ pub fn (lval Lvalue) accept(mut v NodeVisitor) !AnyNode {
 				v.visit_lvalue(mut l)!
 			}
 			return AnyNode(string(''))
+		}
+		IndexExpr {
+			return v.visit_index_expr(mut it_lval)
 		}
 	}
 }
@@ -2018,7 +2029,7 @@ pub fn (n SymbolNodeRef) as_mypy_node() MypyNode {
 		TypeAlias { MypyNode(n) }
 		TypeInfo { MypyNode(n) }
 		Var { MypyNode(n) }
-		else { panic('unreachable') }
+		else { panic('unreachable as_mypy_node for ' + typeof(n).name) }
 	}
 }
 

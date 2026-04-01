@@ -40,7 +40,6 @@ pub fn (mut s MypyPluginStore) collect_type(name string, loc string, typ string)
 		s.collected_types['@'] = map[string]string{}
 	}
 	s.collected_types['@'][loc] = typ
-	s.collected_types['${name}@${loc}'] = {'${loc}': typ}
 }
 
 pub fn (mut s MypyPluginStore) collect_signature(name string, loc string, sig map[string]string) {
@@ -52,10 +51,6 @@ pub fn (mut s MypyPluginStore) collect_signature(name string, loc string, sig ma
 		s.collected_sigs[name] = map[string]string{}
 	}
 	s.collected_sigs[name][loc] = encoded
-	if loc !in s.collected_sigs {
-		s.collected_sigs[loc] = map[string]string{}
-	}
-	s.collected_sigs[loc][loc] = encoded
 }
 
 pub fn (mut s MypyPluginStore) collect_mutability(name string, loc string, info MypyCollectedMutability) {
@@ -74,6 +69,7 @@ pub mut:
 	mutating_methods []string
 	visited          map[string]bool
 	checker          ?&mypy.TypeChecker
+	depth            int
 }
 
 pub fn new_mypy_plugin_analyzer() MypyPluginAnalyzer {
@@ -83,6 +79,7 @@ pub fn new_mypy_plugin_analyzer() MypyPluginAnalyzer {
 			'delete', 'add', 'discard', 'intersection_update']
 		visited:          map[string]bool{}
 		checker:          none
+		depth:            0
 	}
 }
 
@@ -124,13 +121,6 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 	return plugin_analyzer.store
 }
 
-fn bool_string(value bool) string {
-	if value {
-		return 'true'
-	}
-	return 'false'
-}
-
 fn ctx_key(ctx mypy.Context, tag string) string {
 	return '${ctx.line}:${ctx.column}:${tag}'
 }
@@ -165,7 +155,8 @@ fn (mut a MypyPluginAnalyzer) visit_mypy_file(mut file mypy.MypyFile) {
 }
 
 fn (mut a MypyPluginAnalyzer) visit_symbol_table(mut table mypy.SymbolTable) {
-	for _, mut sym in table.symbols {
+	for name, mut sym in table.symbols {
+		if name.len == 0 { continue }
 		if mut node := sym.node {
 			mut mn := node.as_mypy_node()
 			a.visit_mypy_node(mut mn)
@@ -174,6 +165,10 @@ fn (mut a MypyPluginAnalyzer) visit_symbol_table(mut table mypy.SymbolTable) {
 }
 
 fn (mut a MypyPluginAnalyzer) visit_mypy_node(mut node mypy.MypyNode) {
+	if a.depth > 50 { return }
+	a.depth++
+	defer { a.depth-- }
+
 	match mut node {
 		mypy.Var { a.visit_var(node) }
 		mypy.FuncDef { a.visit_func_def(mut node) }
@@ -191,27 +186,27 @@ fn (mut a MypyPluginAnalyzer) visit_mypy_node(mut node mypy.MypyNode) {
 fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 	match mut stmt {
 		mypy.Block {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'Block')
 			if !a.remember(key) { return }
 			a.visit_block(mut stmt)
 		}
 		mypy.ExpressionStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'ExpressionStmt')
 			if !a.remember(key) { return }
 			a.visit_expr(mut stmt.expr)
 		}
 		mypy.AssignmentStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'AssignmentStmt')
 			if !a.remember(key) { return }
 			a.visit_assignment_stmt(mut stmt)
 		}
 		mypy.OperatorAssignmentStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'OperatorAssignmentStmt')
 			if !a.remember(key) { return }
 			a.visit_operator_assignment_stmt(mut stmt)
 		}
 		mypy.WhileStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'WhileStmt')
 			if !a.remember(key) { return }
 			a.visit_expr(mut stmt.expr)
 			a.visit_block(mut stmt.body)
@@ -220,7 +215,7 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 			}
 		}
 		mypy.ForStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'ForStmt')
 			if !a.remember(key) { return }
 			a.visit_expr(mut stmt.index)
 			a.visit_expr(mut stmt.expr)
@@ -230,7 +225,7 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 			}
 		}
 		mypy.IfStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'IfStmt')
 			if !a.remember(key) { return }
 			for mut expr in stmt.expr {
 				a.visit_expr(mut expr)
@@ -243,14 +238,14 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 			}
 		}
 		mypy.ReturnStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'ReturnStmt')
 			if !a.remember(key) { return }
 			if mut expr := stmt.expr {
 				a.visit_expr(mut expr)
 			}
 		}
 		mypy.AssertStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'AssertStmt')
 			if !a.remember(key) { return }
 			a.visit_expr(mut stmt.expr)
 			if mut msg := stmt.msg {
@@ -258,7 +253,7 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 			}
 		}
 		mypy.RaiseStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'RaiseStmt')
 			if !a.remember(key) { return }
 			if mut expr := stmt.expr {
 				a.visit_expr(mut expr)
@@ -268,7 +263,7 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 			}
 		}
 		mypy.TryStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'TryStmt')
 			if !a.remember(key) { return }
 			a.visit_block(mut stmt.body)
 			for i in 0 .. stmt.handlers.len {
@@ -290,7 +285,7 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 			}
 		}
 		mypy.WithStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'WithStmt')
 			if !a.remember(key) { return }
 			for i in 0 .. stmt.expr.len {
 				mut expr := stmt.expr[i]
@@ -303,38 +298,38 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 			a.visit_block(mut stmt.body)
 		}
 		mypy.DelStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'DelStmt')
 			if !a.remember(key) { return }
 			a.visit_expr(mut stmt.expr)
-			a.mark_mutated(stmt.expr)
+			a.mark_mutated(mut stmt.expr)
 		}
 		mypy.GlobalDecl {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'GlobalDecl')
 			if !a.remember(key) { return }
 		}
 		mypy.NonlocalDecl {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'NonlocalDecl')
 			if !a.remember(key) { return }
 		}
 		mypy.BreakStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'BreakStmt')
 			if !a.remember(key) { return }
 		}
 		mypy.ContinueStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'ContinueStmt')
 			if !a.remember(key) { return }
 		}
 		mypy.PassStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'PassStmt')
 			if !a.remember(key) { return }
 		}
 		mypy.TypeAliasStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'TypeAliasStmt')
 			if !a.remember(key) { return }
 			a.visit_expr(mut stmt.value)
 		}
 		mypy.MatchStmt {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'MatchStmt')
 			if !a.remember(key) { return }
 			a.visit_expr(mut stmt.subject)
 			for i in 0 .. stmt.bodies.len {
@@ -346,42 +341,42 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 			}
 		}
 		mypy.FuncDef {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name + ':' + stmt.fullname)
+			key := ctx_key(stmt.get_context(), 'FuncDef:${stmt.fullname}')
 			if !a.remember(key) { return }
 			a.visit_func_def(mut stmt)
 		}
 		mypy.OverloadedFuncDef {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'OverloadedFuncDef')
 			if !a.remember(key) { return }
 			a.visit_overloaded_func_def(mut stmt)
 		}
 		mypy.Decorator {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'Decorator')
 			if !a.remember(key) { return }
 			a.visit_decorator(mut stmt)
 		}
 		mypy.ClassDef {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name + ':' + stmt.fullname)
+			key := ctx_key(stmt.get_context(), 'ClassDef:${stmt.fullname}')
 			if !a.remember(key) { return }
 			a.visit_class_def(mut stmt)
 		}
 		mypy.Import {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'Import')
 			if !a.remember(key) { return }
 		}
 		mypy.ImportFrom {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'ImportFrom')
 			if !a.remember(key) { return }
 		}
 		mypy.ImportAll {
-			key := ctx_key(stmt.get_context(), typeof(stmt).name)
+			key := ctx_key(stmt.get_context(), 'ImportAll')
 			if !a.remember(key) { return }
 		}
 	}
 }
 
 fn (mut a MypyPluginAnalyzer) visit_block(mut block mypy.Block) {
-	key := ctx_key(block.get_context(), typeof(block).name)
+	key := ctx_key(block.get_context(), 'Block')
 	if !a.remember(key) {
 		return
 	}
@@ -500,9 +495,6 @@ fn (mut a MypyPluginAnalyzer) visit_expr(mut expr mypy.Expression) {
 		}
 		mypy.TypeApplication {
 			a.visit_expr(mut expr.expr)
-			for arg in expr.types {
-				a.visit_type_node(arg)
-			}
 		}
 		mypy.YieldExpr {
 			if mut value := expr.expr {
@@ -517,14 +509,6 @@ fn (mut a MypyPluginAnalyzer) visit_expr(mut expr mypy.Expression) {
 		}
 		else {}
 	}
-}
-
-fn (mut a MypyPluginAnalyzer) visit_type_node(typ mypy.MypyTypeNode) {
-	key := typ.type_str()
-	if key.len == 0 {
-		return
-	}
-	_ = key
 }
 
 fn (mut a MypyPluginAnalyzer) visit_name_expr(mut expr mypy.NameExpr) {
@@ -549,7 +533,7 @@ fn (mut a MypyPluginAnalyzer) visit_index_expr(mut expr mypy.IndexExpr) {
 fn (mut a MypyPluginAnalyzer) visit_call_expr(mut expr mypy.CallExpr) {
 	if mut expr.callee is mypy.MemberExpr {
 		if expr.callee.name in a.mutating_methods {
-			a.mark_mutated(expr.callee.expr)
+			a.mark_mutated(mut expr.callee.expr)
 		}
 	}
 	a.visit_expr(mut expr.callee)
@@ -636,10 +620,10 @@ fn (mut a MypyPluginAnalyzer) visit_decorator(mut node mypy.Decorator) {
 
 fn (mut a MypyPluginAnalyzer) visit_class_def(mut node mypy.ClassDef) {
 	key := ctx_key(node.get_context(), 'ClassDef:${node.fullname}')
+	loc := '${node.get_context().line}:${node.get_context().column}'
 	if !a.remember(key) {
 		return
 	}
-	loc := '${node.get_context().line}:${node.get_context().column}'
 	sig := a.build_class_signature(node)
 	a.store.collect_signature(node.fullname, loc, sig)
 	if node.name.len > 0 && node.name != node.fullname {
@@ -684,213 +668,92 @@ fn (mut a MypyPluginAnalyzer) visit_type_info(mut info mypy.TypeInfo) {
 
 fn (mut a MypyPluginAnalyzer) visit_type_alias(node mypy.TypeAlias) {
 	loc := '${node.get_context().line}:${node.get_context().column}'
-	a.store.collect_type(node.fullname, loc, node.target.type_str())
-	if node.name.len > 0 && node.name != node.fullname {
-		a.store.collect_type(node.name, loc, node.target.type_str())
-	}
-	for alias_tvar in node.alias_tvars {
-		a.visit_type_node(alias_tvar)
-	}
+	a.store.collect_type(node.fullname, loc, 'TypeAlias')
 }
 
-fn (mut a MypyPluginAnalyzer) visit_assignment_stmt(mut node mypy.AssignmentStmt) {
-	loc := '${node.get_context().line}:${node.get_context().column}'
-	if typ := node.type_annotation {
-		for lvalue in node.lvalues {
-			a.collect_annotation_for_lvalue(lvalue, typ, loc)
+fn (mut a MypyPluginAnalyzer) build_function_signature(node mypy.FuncDef) map[string]string {
+	mut sig := map[string]string{}
+	mut args := []string{}
+	for arg in node.arguments {
+		mut typ := 'Any'
+		if t := arg.type_annotation {
+			typ = t.type_str()
+		} else if vt := arg.variable.type_ {
+			typ = vt.type_str()
 		}
+		args << typ
 	}
-	for lv in node.lvalues {
-		if nested := lv.as_lvalue() {
-			mut l := nested
-			a.visit_lvalue(mut l, true)
-		}
-	}
-	a.visit_expr(mut node.rvalue)
+	sig['args'] = json.encode(args)
+	sig['return'] = if ret := node.type_ { ret.type_str() } else { 'Any' }
+	sig['has_vararg'] = 'false'
+	sig['has_kwarg'] = 'false'
+	sig['arg_names'] = json.encode(node.arg_names)
+	sig['defaults'] = '{}'
+	return sig
 }
 
-fn (mut a MypyPluginAnalyzer) visit_operator_assignment_stmt(mut node mypy.OperatorAssignmentStmt) {
-	a.visit_lvalue(mut node.lvalue, true)
-	a.visit_expr(mut node.rvalue)
-}
-
-fn (mut a MypyPluginAnalyzer) visit_lvalue(mut lvalue mypy.Lvalue, is_store bool) {
-	match mut lvalue {
-		mypy.NameExpr {
-			a.mark_name_mutability(lvalue.name, lvalue.fullname, lvalue.get_context(), true, false)
-			if mut node_ := lvalue.node {
-				a.visit_mypy_node(mut node_)
-			}
-			a.record_checker_type(lvalue)
-		}
-		mypy.MemberExpr {
-			if is_store {
-				a.mark_mutated(lvalue.expr)
-			}
-			a.visit_expr(mut lvalue.expr)
-			a.record_checker_type(lvalue)
-		}
-		mypy.TupleExpr {
-			for mut item in lvalue.items {
-				if nested := item.as_lvalue() {
-					mut l := nested
-					a.visit_lvalue(mut l, is_store)
-				}
-			}
-			a.record_checker_type(lvalue)
-		}
-		mypy.ListExpr {
-			for mut item in lvalue.items {
-				if nested := item.as_lvalue() {
-					mut l := nested
-					a.visit_lvalue(mut l, is_store)
-				}
-			}
-			a.record_checker_type(lvalue)
-		}
-		mypy.StarExpr {
-			if nested := lvalue.expr.as_lvalue() {
-				mut l := nested
-				a.visit_lvalue(mut l, is_store)
-			}
-			a.record_checker_type(lvalue)
-		}
-	}
-}
-
-fn (mut a MypyPluginAnalyzer) collect_annotation_for_lvalue(lvalue mypy.Expression, typ mypy.MypyTypeNode, loc string) {
-	if name_lvalue := lvalue.as_lvalue() {
-		match name_lvalue {
-			mypy.NameExpr {
-				a.store.collect_type(name_lvalue.fullname, loc, typ.type_str())
-				if name_lvalue.name.len > 0 && name_lvalue.name != name_lvalue.fullname {
-					a.store.collect_type(name_lvalue.name, loc, typ.type_str())
-				}
-			}
-			mypy.TupleExpr {
-				for item in name_lvalue.items {
-					a.collect_annotation_for_lvalue(item, typ, loc)
-				}
-			}
-			mypy.ListExpr {
-				for item in name_lvalue.items {
-					a.collect_annotation_for_lvalue(item, typ, loc)
-				}
-			}
-			mypy.StarExpr {
-				a.collect_annotation_for_lvalue(name_lvalue.expr, typ, loc)
-			}
-			else {}
-		}
-	}
+fn (mut a MypyPluginAnalyzer) build_class_signature(node mypy.ClassDef) map[string]string {
+	mut sig := map[string]string{}
+	sig['args'] = '[]'
+	sig['return'] = node.fullname
+	sig['is_class'] = 'true'
+	sig['has_init'] = 'false' // Will be updated in visit_type_info
+	sig['has_vararg'] = 'false'
+	sig['has_kwarg'] = 'false'
+	sig['arg_names'] = '[]'
+	sig['defaults'] = '{}'
+	return sig
 }
 
 fn (mut a MypyPluginAnalyzer) mark_name_mutability(name string, fullname string, ctx mypy.Context, is_reassigned bool, is_mutated bool) {
-	if name.len == 0 && fullname.len == 0 {
-		return
-	}
 	loc := '${ctx.line}:${ctx.column}'
-	key := if fullname.len > 0 { fullname } else { name }
-	mut info := a.store.collected_mutability[key][loc] or {
-		MypyCollectedMutability{
-			is_reassigned: false
-			is_final:      false
-			is_mutated:    false
-		}
+	info := MypyCollectedMutability{
+		is_reassigned: is_reassigned
+		is_final: false
+		is_mutated: is_mutated
 	}
-	info.is_reassigned = info.is_reassigned || is_reassigned
-	info.is_mutated = info.is_mutated || is_mutated
-	a.store.collect_mutability(key, loc, info)
-	if fullname.len > 0 && fullname != name {
+	a.store.collect_mutability(fullname, loc, info)
+	if name.len > 0 && name != fullname {
 		a.store.collect_mutability(name, loc, info)
 	}
 }
 
-fn (mut a MypyPluginAnalyzer) mark_mutated(expr mypy.Expression) {
-	match expr {
-		mypy.NameExpr {
-			a.mark_name_mutability(expr.name, expr.fullname, expr.get_context(), false, true)
-		}
-		mypy.MemberExpr {
-			a.mark_mutated(expr.expr)
-		}
-		mypy.TupleExpr {
-			for item in expr.items {
-				a.mark_mutated(item)
-			}
-		}
-		mypy.ListExpr {
-			for item in expr.items {
-				a.mark_mutated(item)
-			}
-		}
+fn (mut a MypyPluginAnalyzer) mark_mutated(mut expr mypy.Expression) {
+	if mut expr is mypy.NameExpr {
+		a.mark_name_mutability(expr.name, expr.fullname, expr.get_context(), false, true)
+	}
+}
+
+fn (mut a MypyPluginAnalyzer) visit_lvalue(mut lval mypy.Lvalue) {
+	match mut lval {
+		mypy.NameExpr { a.visit_name_expr(mut lval) }
+		mypy.MemberExpr { a.visit_member_expr(mut lval) }
+		mypy.IndexExpr { a.visit_index_expr(mut lval) }
+		mypy.TupleExpr { for mut item in lval.items { a.visit_expr(mut item) } }
+		mypy.ListExpr { for mut item in lval.items { a.visit_expr(mut item) } }
 		else {}
 	}
 }
 
-fn (a &MypyPluginAnalyzer) build_function_signature(node mypy.FuncDef) map[string]string {
-	mut args := []string{}
-	mut callable_args := []string{}
-	if typ := node.type_ {
-		if typ is mypy.CallableType {
-			c_typ := typ as mypy.CallableType
-			for at in c_typ.arg_types {
-				callable_args << at.type_str()
-			}
-		}
-	}
-	
-	mut arg_names := []string{}
-	mut defaults := map[string]string{}
-	for i, arg in node.arguments {
-		arg_names << arg.variable.name
-		if i < callable_args.len {
-			args << callable_args[i]
-		} else if typ := arg.type_annotation {
-			args << typ.type_str()
-		} else if var_typ := arg.variable.type_ {
-			args << var_typ.type_str()
-		} else {
-			args << 'Any'
-		}
-		if arg.initializer != none {
-			defaults[arg.variable.name] = 'default'
-		}
-	}
-	ret_type := if typ := node.type_ {
-		if typ is mypy.CallableType {
-			typ.ret_type.type_str()
-		} else {
-			typ.type_str()
-		}
-	} else {
-		'Any'
-	}
-	return {
-		'args':       json.encode(args)
-		'return':     ret_type
-		'is_class':   bool_string(node.is_class)
-		'has_init':   'false'
-		'has_vararg': bool_string(false)
-		'has_kwarg':  bool_string(false)
-		'arg_names':  json.encode(arg_names)
-		'defaults':   json.encode(defaults)
+fn (mut a MypyPluginAnalyzer) mark_lvalue_mutated(mut lval mypy.Lvalue) {
+	if mut lval is mypy.NameExpr {
+		a.mark_name_mutability(lval.name, lval.fullname, lval.get_context(), false, true)
 	}
 }
 
-fn (a &MypyPluginAnalyzer) build_class_signature(node mypy.ClassDef) map[string]string {
-	mut has_init := false
-	if info := node.info {
-		has_init = '__init__' in info.names.symbols
-	}
-	return {
-		'args':       '[]'
-		'return':     node.fullname
-		'is_class':   'true'
-		'has_init':   bool_string(has_init)
-		'has_vararg': 'false'
-		'has_kwarg':  'false'
-		'arg_names':  '[]'
-		'defaults':   '{}'
+fn (mut a MypyPluginAnalyzer) visit_operator_assignment_stmt(mut stmt mypy.OperatorAssignmentStmt) {
+	a.visit_lvalue(mut stmt.lvalue)
+	a.visit_expr(mut stmt.rvalue)
+	a.mark_lvalue_mutated(mut stmt.lvalue)
+}
+
+fn (mut a MypyPluginAnalyzer) visit_assignment_stmt(mut stmt mypy.AssignmentStmt) {
+	a.visit_expr(mut stmt.rvalue)
+	for mut lval in stmt.lvalues {
+		a.visit_expr(mut lval)
+		if mut lval is mypy.NameExpr {
+			a.mark_name_mutability(lval.name, lval.fullname, lval.get_context(), true, false)
+		}
 	}
 }
+

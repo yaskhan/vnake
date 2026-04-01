@@ -570,6 +570,7 @@ pub fn (mut t NodeTraverser) visit_lvalue(mut o Lvalue) !AnyNode {
 		NameExpr { t.visit_name_expr(mut it_o)! }
 		StarExpr { t.visit_star_expr(mut it_o)! }
 		TupleExpr { t.visit_tuple_expr(mut it_o)! }
+		IndexExpr { t.visit_index_expr(mut it_o)! }
 	}
 	return AnyNode(string(''))
 }

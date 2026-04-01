@@ -166,7 +166,7 @@ fn (mut sa SemanticAnalyzer) prepare_builtins_namespace(mut file_node MypyFile) 
 				body: []
 			}
 		}
-		mut info := new_type_info(mut names, cdef, 'builtins')
+		mut info := new_type_info(mut names, &cdef, 'builtins')
 		info.fullname = 'builtins.${name}'
 		names.symbols[name] = SymbolTableNode{
 			kind: gdef
@@ -934,6 +934,7 @@ pub fn (mut sa SemanticAnalyzer) visit_lvalue(mut o Lvalue) !AnyNode {
 		NameExpr { sa.visit_name_expr(mut o)! }
 		StarExpr { sa.visit_star_expr(mut o)! }
 		TupleExpr { sa.visit_tuple_expr(mut o)! }
+		IndexExpr { sa.visit_index_expr(mut o)! }
 	}
 	return ''
 }
@@ -1071,6 +1072,9 @@ pub fn (mut sa SemanticAnalyzer) analyze_lvalue(mut lval Lvalue, nested bool, ex
 			if mut l := lval.expr.as_lvalue() {
 				sa.analyze_lvalue(mut l, true, explicit_type)!
 			}
+		}
+		IndexExpr {
+			lval.accept(mut sa)!
 		}
 	}
 	return ''
@@ -1429,7 +1433,7 @@ fn (mut sa SemanticAnalyzer) prepare_class_def(mut defn ClassDef) ! {
 	// Create TypeInfo if not exists
 	if defn.info == none {
 		fullname := sa.qualified_name(defn.name)
-		mut info := new_type_info(mut sa.globals, defn, sa.cur_mod_id)
+		mut info := new_type_info(mut sa.globals, &defn, sa.cur_mod_id)
 		info.fullname = fullname
 		defn.info = info
 	}
@@ -1493,12 +1497,12 @@ pub fn (mut sa SemanticAnalyzer) report_hang() {
 
 // Helper types
 // new_type_info — helper for creating TypeInfo
-pub fn new_type_info(mut names SymbolTable, defn ClassDef, module_name string) &TypeInfo {
+pub fn new_type_info(mut _ SymbolTable, defn &ClassDef, module_name string) &TypeInfo {
 	return &TypeInfo{
 		name:        defn.name
-		fullname:    module_name + '.' + defn.name
+		fullname:    if module_name.len > 0 { module_name + '.' + defn.name } else { defn.name }
 		module_name: module_name
-		names:       names
-		defn:        &defn
+		names:       SymbolTable{symbols: map[string]SymbolTableNode{}}
+		defn:        defn
 	}
 }

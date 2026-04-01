@@ -315,6 +315,10 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			tc.store_type(Expression(lvalue), rvalue_type)
 			// TODO: handle star assignment
 		}
+		IndexExpr {
+			tc.store_type(Expression(lvalue), rvalue_type)
+			// TODO: handle index assignment
+		}
 	}
 }
 
@@ -904,6 +908,7 @@ pub fn (mut tc TypeChecker) visit_lvalue(mut o Lvalue) !AnyNode {
 		NameExpr { tc.visit_name_expr(mut o)! }
 		StarExpr { tc.visit_star_expr(mut o)! }
 		TupleExpr { tc.visit_tuple_expr(mut o)! }
+		IndexExpr { tc.visit_index_expr(mut o)! }
 	}
 	return ''
 }

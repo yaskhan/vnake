@@ -316,5 +316,6 @@ pub fn (mut t TransformVisitor) visit_lvalue(mut node Lvalue) !AnyNode {
 		NameExpr { return AnyNode(MypyNode(node)) }
 		StarExpr { return AnyNode(MypyNode(node)) }
 		TupleExpr { return AnyNode(MypyNode(node)) }
+		IndexExpr { return AnyNode(MypyNode(node)) }
 	}
 }
