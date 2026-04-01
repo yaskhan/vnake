@@ -489,7 +489,7 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 							type_suffix_parts << clean_type
 						}
 						
-						mut mangled_factory := 'new_${base.to_snake_case(func_name_str).to_lower()}'
+						mut mangled_factory := base.get_factory_name(func_name_str, eg.state.class_hierarchy)
 						if type_suffix_parts.len > 0 {
 							mangled_factory = '${mangled_factory}_${type_suffix_parts.join("_")}'
 						} else {
@@ -522,7 +522,7 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 			return '${func_name_str}{${literal_parts.join(", ")}}'
 		}
 
-		return 'new_${base.to_snake_case(func_name_str).to_lower()}(${args.join(', ')})'
+		return '${base.get_factory_name(func_name_str, eg.state.class_hierarchy)}(${args.join(", ")})'
 	}
 
 	if (func_name == 'acquire' || func_name_str.ends_with('.acquire')) && node.func is ast.Attribute {

@@ -424,6 +424,24 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 						env.emit_constant_fn('const ${const_name} = { ${anno_parts.join(", ")}, \'return\': \'&${struct_name_for_body}${generics}\' }')
 					}
 				}
+			} else {
+				if !classes.class_methods_handler.has_method(methods, '__init__') && !is_dataclass && !is_protocol && !is_typed_dict && !is_unittest {
+					prefix := if env.state.is_exported(struct_name) { 'pub ' } else { '' }
+					generics := get_generics_with_variance_str(&env)
+					mangled_factory := base.get_factory_name(struct_name, env.state.class_hierarchy)
+					is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
+					factory_ret := if is_pydantic { '!&${struct_name_for_body}${generics}' } else { '&${struct_name_for_body}${generics}' }
+					
+					mut f_code := []string{}
+					f_code << '${prefix}fn ${mangled_factory}${generics}() ${factory_ret} {'
+					f_code << '    mut self := &${struct_name_for_body}${generics}{}'
+					if is_pydantic {
+						f_code << '    self.validate() or { return err }'
+					}
+					f_code << '    return self'
+					f_code << '}'
+					env.emit_function_fn(f_code.join('\n'))
+				}
 			}
 		}
 

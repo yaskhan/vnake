@@ -350,18 +350,26 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		}
 		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
 		
-		if t.state.indent_level == 0 && id.is_upper() && base.is_compile_time_evaluable(node.value) {
-			v_id := base.to_snake_case(id)
+		if t.state.indent_level == 0 && (id.is_upper() || id in t.state.global_vars) && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
+			v_id := if id in t.state.global_vars { id } else { base.to_snake_case(id) }
 			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
 			t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 			t.declare_local(lhs)
 			return
 		}
 
-		if t.state.indent_level == 0 && id.is_upper() {
-			v_id := base.to_snake_case(id)
+		if t.state.indent_level == 0 && (id.is_upper() || id in t.state.global_vars) {
+			v_id := if id in t.state.global_vars { id } else { base.to_snake_case(id) }
 			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
-			t.emit_indented('${pub_prefix}__global ${v_id}')
+			mut v_type := v_lhs_t
+			if v_type == 'unknown' || v_type == 'Any' {
+				v_type_inferred := t.guess_type(node.value)
+				if v_type_inferred != 'unknown' && v_type_inferred != 'none' {
+					v_type = t.map_annotation_str(v_type_inferred, '', false, false, false)
+				}
+			}
+			if v_type == 'unknown' { v_type = 'Any' }
+			t.emit_indented('${pub_prefix}__global ${v_id} ${v_type}')
 			t.emit_indented('${v_id} = ${rhs_text}')
 			t.declare_local(lhs)
 			return
@@ -374,7 +382,14 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				if v_inferred.starts_with("?") {
 					t.emit_indented("${lhs} = ${rhs_text}")
 				} else {
-					inner := v_lhs_t.trim_left("?")
+					mut inner := v_lhs_t.trim_left("?")
+					mut is_ref := false
+					if inner in t.state.defined_classes && !t.state.defined_classes[inner]['is_struct'] && !t.state.defined_classes[inner]['is_type_alias'] {
+						is_ref = true
+					}
+					if (v_inferred.starts_with("&") || is_ref) && !inner.starts_with("&") {
+						inner = "&" + inner
+					}
 					t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
 				}
 			} else {

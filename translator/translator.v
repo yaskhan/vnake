@@ -383,10 +383,20 @@ fn (t &Translator) annotation_raw_name(node ast.Expression) string {
 pub fn (mut t Translator) translate(source string, filename string) string {
 	old_emitter := t.state.emitter
 	old_mapper := t.state.mapper
+	old_is_full_module := t.state.is_full_module
+	old_include_all := t.state.include_all_symbols
+	old_strict_exports := t.state.strict_exports
+	old_sccs := t.state.scc_files.clone()
+	old_current_module := t.state.current_module_name
 	
 	t.state = base.new_translator_state()
 	t.state.emitter = old_emitter
 	t.state.mapper = old_mapper
+	t.state.is_full_module = old_is_full_module
+	t.state.include_all_symbols = old_include_all
+	t.state.strict_exports = old_strict_exports
+	t.state.scc_files = old_sccs.clone()
+	t.state.current_module_name = old_current_module
 	
 	t.coroutine_handler = analyzer.new_coroutine_handler()
 	t.state.coroutine_handler = &t.coroutine_handler
@@ -519,9 +529,16 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	}
 
 	for line in t.state.output {
-		if line.starts_with('import ') {
-			e.add_import(line[7..].trim_space())
-		} else if line.len > 0 {
+		trimmed := line.trim_space()
+		if trimmed.starts_with('import ') {
+			e.add_import(trimmed['import '.len..].trim_space())
+		} else if trimmed.starts_with('const ') || trimmed.starts_with('pub const ') {
+			e.add_constant(trimmed)
+		} else if trimmed.starts_with('__global ') {
+			e.add_global(trimmed)
+		} else if trimmed.starts_with('type ') || trimmed.starts_with('pub type ') {
+			e.add_struct(trimmed)
+		} else if trimmed.len > 0 {
 			e.add_main_statement(line)
 		}
 	}

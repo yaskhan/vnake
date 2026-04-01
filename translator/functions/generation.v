@@ -180,7 +180,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 		a_clean := arg_type.trim_left('?!')
 		if (a_clean.len > 0 && a_clean[0].is_capital() && a_clean !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !a_clean.starts_with('SumType_') && a_clean !in v_gens_to_declare) && !arg_type.starts_with('&') {
-			arg_type = '&' + arg_type
+			if arg_type.starts_with('?') {
+				arg_type = '?&' + arg_type[1..]
+			} else {
+				arg_type = '&' + arg_type
+			}
 		}
 
 		annotations_data[arg_name] = arg_type
@@ -257,7 +261,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		r_clean_ptr := ret_type.trim_left('?!')
 		is_v_native_method := node.name in ['__str__', '__repr__', 'str', 'repr', '__iter__', 'iter', '__next__', 'next', '__len__', 'len', '__getitem__', 'idx', '__setitem__', 'set', '__enter__', 'enter', '__exit__', 'exit']
 		if !is_v_native_method && r_clean_ptr.len > 0 && r_clean_ptr[0].is_capital() && r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !r_clean_ptr.starts_with('SumType_') && r_clean_ptr !in v_gens_to_declare && !ret_type.starts_with('&') {
-			ret_type = '&' + ret_type
+			if ret_type.starts_with('?') {
+				ret_type = '?&' + ret_type[1..]
+			} else {
+				ret_type = '&' + ret_type
+			}
 		}
 	}
 

@@ -312,7 +312,7 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 		for var, _ in if_vars {
 			if !m.is_declared_local(var) {
 				mut v_type := m.guess_type(ast.Name{id: var})
-				if v_type == 'unknown' { v_type = 'Any' }
+				if v_type == 'unknown' || v_type == 'none' || v_type == '?none' { v_type = 'Any' }
 				if !v_type.starts_with('?') { v_type = '?${v_type}' }
 				m.emit('mut ${var} := ${v_type}(none)')
 				m.declare_local(var)
@@ -323,7 +323,7 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 		for var, _ in else_vars {
 			if !m.is_declared_local(var) {
 				mut v_type := m.guess_type(ast.Name{id: var})
-				if v_type == 'unknown' { v_type = 'Any' }
+				if v_type == 'unknown' || v_type == 'none' || v_type == '?none' { v_type = 'Any' }
 				if !v_type.starts_with('?') { v_type = '?${v_type}' }
 				m.emit('mut ${var} := ${v_type}(none)')
 				m.declare_local(var)
