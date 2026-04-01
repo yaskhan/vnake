@@ -95,7 +95,7 @@ fn run_mypy_analysis(source string, filename string) analyzer.MypyPluginStore {
 	}
 
 	mut plugin_analyzer := analyzer.new_mypy_plugin_analyzer()
-	plugin_analyzer.collect_file_with_checker(file, &tc)
+	plugin_analyzer.collect_file_with_checker(mut file, &tc)
 	return plugin_analyzer.store
 }
 
