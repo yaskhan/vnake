@@ -261,111 +261,75 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 	return res
 }
 
+// split_generic_args separates top-level generic arguments while respecting nested brackets.
+// Optimization: Uses a start index and string slicing to avoid repeated O(N) string concatenations.
 fn split_generic_args(s string) []string {
 	mut result := []string{}
 	mut depth := 0
-	mut current := ''
+	mut start := 0
 	for i := 0; i < s.len; i++ {
 		ch := s[i]
 		match ch {
-			`[` { depth++ }
-			`]` { depth-- }
+			`[` {
+				depth++
+			}
+			`]` {
+				depth--
+			}
 			`,` {
 				if depth == 0 {
-					result << current.trim_space()
-					current = ''
-					continue
+					result << s[start..i].trim_space()
+					start = i + 1
 				}
 			}
 			else {}
 		}
-		current += ch.ascii_str()
 	}
-	if current.trim_space().len > 0 {
-		result << current.trim_space()
+	if start < s.len {
+		tail := s[start..].trim_space()
+		if tail.len > 0 {
+			result << tail
+		}
 	}
 	return result
 }
 
+// map_basic_type maps common Python type names to V equivalents.
+// Optimization: Uses a match expression instead of a map literal to avoid re-allocation
+// on every call. Redundant prefixed entries (e.g. typing.Any) are removed as they are
+// already handled by prefix-stripping logic.
 fn map_basic_type(name string) string {
 	mut clean_name := name
-	if clean_name.starts_with('typing.') { clean_name = clean_name[7..] }
-	if clean_name.starts_with('typing_extensions.') { clean_name = clean_name[18..] }
-	if clean_name.starts_with('builtins.') { clean_name = clean_name[9..] }
+	if clean_name.starts_with('typing.') {
+		clean_name = clean_name[7..]
+	} else if clean_name.starts_with('typing_extensions.') {
+		clean_name = clean_name[18..]
+	} else if clean_name.starts_with('builtins.') {
+		clean_name = clean_name[9..]
+	}
 	clean_name = clean_name.trim_space()
 
-	mapping := {
-		'int':                             'int'
-		'float':                           'f64'
-		'str':                             'string'
-		'bytes':                           '[]u8'
-		'bool':                            'bool'
-		'None':                            'none'
-		'Any':                             'Any'
-		'object':                          'Any'
-		'list':                            '[]Any'
-		'dict':                            'map[string]Any'
-		'tuple':                           '[]Any'
-		'set':                             'datatypes.Set[Any]'
-		'memoryview':                      '[]u8'
-		'bytearray':                       '[]u8'
-		'IO':                              'os.File'
-		'TextIO':                          'os.File'
-		'BinaryIO':                        'os.File'
-		'StringIO':                        'strings.Builder'
-		'io.StringIO':                     'strings.Builder'
-		'NoReturn':                        'noreturn'
-		'List':                            '[]Any'
-		'Dict':                            'map[string]Any'
-		'Tuple':                           '[]Any'
-		'Set':                             'datatypes.Set[Any]'
-		'Optional':                        '?Any'
-		'Union':                           'Any'
-		'Callable':                        'fn (...Any) Any'
-		'callable':                        'fn (...Any) Any'
-		'collections.abc.Callable':        'fn (...Any) Any'
-		'Sequence':                        '[]Any'
-		'Iterable':                        '[]Any'
-		'Mapping':                         'map[string]Any'
-		'typing.Any':                      'Any'
-		'typing.List':                     '[]Any'
-		'typing.Dict':                     'map[string]Any'
-		'typing.Tuple':                    '[]Any'
-		'typing.Set':                      'datatypes.Set[Any]'
-		'typing.Optional':                 '?Any'
-		'typing.Union':                    'Any'
-		'typing.Callable':                 'fn (...Any) Any'
-		'typing_extensions.Callable':      'fn (...Any) Any'
-		'typing_extensions.Union':         'Any'
-		'typing.NoReturn':                 'noreturn'
-		'typing.Sequence':                 '[]Any'
-		'typing.Iterable':                 '[]Any'
-		'typing.Mapping':                  'map[string]Any'
-		'builtins.int':                    'int'
-		'builtins.float':                  'f64'
-		'builtins.str':                    'string'
-		'builtins.bool':                   'bool'
-		'builtins.bytes':                  '[]u8'
-		'builtins.object':                 'Any'
-		'LiteralString':                   'string'
-		'typing.LiteralString':            'string'
-		'typing_extensions.LiteralString': 'string'
-		'TypeForm':                        'Any'
-		'typing.TypeForm':                 'Any'
-		'typing_extensions.TypeForm':      'Any'
-		'type':                            'Any'
-		'builtins.type':                   'Any'
-		'Final':                           'Any'
-		'typing.Final':                    'Any'
-		'ClassVar':                        'Any'
-		'typing.ClassVar':                 'Any'
-		'ForwardRef':                      'Any'
-		'typing.ForwardRef':               'Any'
-		'annotationlib.ForwardRef':        'Any'
+	return match clean_name {
+		'int' { 'int' }
+		'float' { 'f64' }
+		'str' { 'string' }
+		'bytes' { '[]u8' }
+		'bool' { 'bool' }
+		'None' { 'none' }
+		'Any', 'object' { 'Any' }
+		'list', 'List', 'Sequence', 'Iterable' { '[]Any' }
+		'dict', 'Dict', 'Mapping' { 'map[string]Any' }
+		'tuple', 'Tuple' { '[]Any' }
+		'set', 'Set' { 'datatypes.Set[Any]' }
+		'memoryview', 'bytearray' { '[]u8' }
+		'IO', 'TextIO', 'BinaryIO' { 'os.File' }
+		'StringIO', 'io.StringIO' { 'strings.Builder' }
+		'NoReturn' { 'noreturn' }
+		'Optional' { '?Any' }
+		'Union' { 'Any' }
+		'Callable', 'callable', 'collections.abc.Callable' { 'fn (...Any) Any' }
+		'LiteralString' { 'string' }
+		'TypeForm', 'type', 'Final', 'ClassVar', 'ForwardRef', 'Annotated', 'Required', 'NotRequired', 'ReadOnly', 'annotationlib.ForwardRef' { 'Any' }
+		else { clean_name }
 	}
-
-	if clean_name in mapping {
-		return mapping[clean_name]
-	}
-	return clean_name
 }
