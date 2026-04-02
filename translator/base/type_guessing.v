@@ -223,19 +223,22 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 }
 
 fn guess_type_list(node ast.Expression, ctx TypeGuessingContext) string {
-	mut elts := []ast.Expression{}
 	if node is ast.List {
-		elts = node.elements.clone()
+		return guess_type_elements(node.elements, ctx)
 	} else if node is ast.Tuple {
-		elts = node.elements.clone()
+		return guess_type_elements(node.elements, ctx)
 	}
-	if elts.len == 0 {
+	return '[]Any'
+}
+
+fn guess_type_elements(elements []ast.Expression, ctx TypeGuessingContext) string {
+	if elements.len == 0 {
 		return '[]Any'
 	}
 
 	mut element_types := []string{}
 	mut has_none := false
-	for elt in elts {
+	for elt in elements {
 		if elt is ast.Starred {
 			element_types << 'Any'
 		} else if elt is ast.Constant && elt.value == 'None' {
