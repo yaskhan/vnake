@@ -287,85 +287,94 @@ fn split_generic_args(s string) []string {
 	return result
 }
 
+// Optimization: Move the large type mapping to a module-level constant to avoid
+// recreating the map and allocating memory on every call to map_basic_type.
+const basic_type_mapping = {
+	'int':                             'int'
+	'float':                           'f64'
+	'str':                             'string'
+	'bytes':                           '[]u8'
+	'bool':                            'bool'
+	'None':                            'none'
+	'Any':                             'Any'
+	'object':                          'Any'
+	'list':                            '[]Any'
+	'dict':                            'map[string]Any'
+	'tuple':                           '[]Any'
+	'set':                             'datatypes.Set[Any]'
+	'memoryview':                      '[]u8'
+	'bytearray':                       '[]u8'
+	'IO':                              'os.File'
+	'TextIO':                          'os.File'
+	'BinaryIO':                        'os.File'
+	'StringIO':                        'strings.Builder'
+	'io.StringIO':                     'strings.Builder'
+	'NoReturn':                        'noreturn'
+	'List':                            '[]Any'
+	'Dict':                            'map[string]Any'
+	'Tuple':                           '[]Any'
+	'Set':                             'datatypes.Set[Any]'
+	'Optional':                        '?Any'
+	'Union':                           'Any'
+	'Callable':                        'fn (...Any) Any'
+	'callable':                        'fn (...Any) Any'
+	'collections.abc.Callable':        'fn (...Any) Any'
+	'Sequence':                        '[]Any'
+	'Iterable':                        '[]Any'
+	'Mapping':                         'map[string]Any'
+	'typing.Any':                      'Any'
+	'typing.List':                     '[]Any'
+	'typing.Dict':                     'map[string]Any'
+	'typing.Tuple':                    '[]Any'
+	'typing.Set':                      'datatypes.Set[Any]'
+	'typing.Optional':                 '?Any'
+	'typing.Union':                    'Any'
+	'typing.Callable':                 'fn (...Any) Any'
+	'typing_extensions.Callable':      'fn (...Any) Any'
+	'typing_extensions.Union':         'Any'
+	'typing.NoReturn':                 'noreturn'
+	'typing.Sequence':                 '[]Any'
+	'typing.Iterable':                 '[]Any'
+	'typing.Mapping':                  'map[string]Any'
+	'builtins.int':                    'int'
+	'builtins.float':                  'f64'
+	'builtins.str':                    'string'
+	'builtins.bool':                   'bool'
+	'builtins.bytes':                  '[]u8'
+	'builtins.object':                 'Any'
+	'LiteralString':                   'string'
+	'typing.LiteralString':            'string'
+	'typing_extensions.LiteralString': 'string'
+	'TypeForm':                        'Any'
+	'typing.TypeForm':                 'Any'
+	'typing_extensions.TypeForm':      'Any'
+	'type':                            'Any'
+	'builtins.type':                   'Any'
+	'Final':                           'Any'
+	'typing.Final':                    'Any'
+	'ClassVar':                        'Any'
+	'typing.ClassVar':                 'Any'
+	'ForwardRef':                      'Any'
+	'typing.ForwardRef':               'Any'
+	'annotationlib.ForwardRef':        'Any'
+}
+
+// map_basic_type handles the mapping of simple Python types to V types.
+// Optimization: Uses an if-else chain for prefix stripping and a pre-allocated
+// constant map for O(1) type lookup.
 fn map_basic_type(name string) string {
 	mut clean_name := name
-	if clean_name.starts_with('typing.') { clean_name = clean_name[7..] }
-	if clean_name.starts_with('typing_extensions.') { clean_name = clean_name[18..] }
-	if clean_name.starts_with('builtins.') { clean_name = clean_name[9..] }
+	if clean_name.starts_with('typing.') {
+		clean_name = clean_name[7..]
+	} else if clean_name.starts_with('typing_extensions.') {
+		clean_name = clean_name[18..]
+	} else if clean_name.starts_with('builtins.') {
+		clean_name = clean_name[9..]
+	}
 	clean_name = clean_name.trim_space()
 
-	mapping := {
-		'int':                             'int'
-		'float':                           'f64'
-		'str':                             'string'
-		'bytes':                           '[]u8'
-		'bool':                            'bool'
-		'None':                            'none'
-		'Any':                             'Any'
-		'object':                          'Any'
-		'list':                            '[]Any'
-		'dict':                            'map[string]Any'
-		'tuple':                           '[]Any'
-		'set':                             'datatypes.Set[Any]'
-		'memoryview':                      '[]u8'
-		'bytearray':                       '[]u8'
-		'IO':                              'os.File'
-		'TextIO':                          'os.File'
-		'BinaryIO':                        'os.File'
-		'StringIO':                        'strings.Builder'
-		'io.StringIO':                     'strings.Builder'
-		'NoReturn':                        'noreturn'
-		'List':                            '[]Any'
-		'Dict':                            'map[string]Any'
-		'Tuple':                           '[]Any'
-		'Set':                             'datatypes.Set[Any]'
-		'Optional':                        '?Any'
-		'Union':                           'Any'
-		'Callable':                        'fn (...Any) Any'
-		'callable':                        'fn (...Any) Any'
-		'collections.abc.Callable':        'fn (...Any) Any'
-		'Sequence':                        '[]Any'
-		'Iterable':                        '[]Any'
-		'Mapping':                         'map[string]Any'
-		'typing.Any':                      'Any'
-		'typing.List':                     '[]Any'
-		'typing.Dict':                     'map[string]Any'
-		'typing.Tuple':                    '[]Any'
-		'typing.Set':                      'datatypes.Set[Any]'
-		'typing.Optional':                 '?Any'
-		'typing.Union':                    'Any'
-		'typing.Callable':                 'fn (...Any) Any'
-		'typing_extensions.Callable':      'fn (...Any) Any'
-		'typing_extensions.Union':         'Any'
-		'typing.NoReturn':                 'noreturn'
-		'typing.Sequence':                 '[]Any'
-		'typing.Iterable':                 '[]Any'
-		'typing.Mapping':                  'map[string]Any'
-		'builtins.int':                    'int'
-		'builtins.float':                  'f64'
-		'builtins.str':                    'string'
-		'builtins.bool':                   'bool'
-		'builtins.bytes':                  '[]u8'
-		'builtins.object':                 'Any'
-		'LiteralString':                   'string'
-		'typing.LiteralString':            'string'
-		'typing_extensions.LiteralString': 'string'
-		'TypeForm':                        'Any'
-		'typing.TypeForm':                 'Any'
-		'typing_extensions.TypeForm':      'Any'
-		'type':                            'Any'
-		'builtins.type':                   'Any'
-		'Final':                           'Any'
-		'typing.Final':                    'Any'
-		'ClassVar':                        'Any'
-		'typing.ClassVar':                 'Any'
-		'ForwardRef':                      'Any'
-		'typing.ForwardRef':               'Any'
-		'annotationlib.ForwardRef':        'Any'
-	}
-
-	if clean_name in mapping {
-		return mapping[clean_name]
+	if clean_name in basic_type_mapping {
+		return basic_type_mapping[clean_name]
 	}
 	return clean_name
 }
