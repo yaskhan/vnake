@@ -144,33 +144,52 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 	}
 	if val is ast.Call {
 		func_expr := val.func
-		if func_expr is ast.Attribute {
+		if func_expr is ast.Attribute && func_expr.attr == '__init__' {
+			mut parent_name := ''
+			mut args_to_skip := 0
+
+			curr_class := t.state.current_class
+			mut parents := t.state.class_hierarchy[curr_class] or { []string{} }
+			if parents.len == 0 && curr_class.ends_with('_Impl') {
+				parents = t.state.class_hierarchy[curr_class.all_before_last('_Impl')] or { []string{} }
+			}
+
 			base_expr := func_expr.value
 			if base_expr is ast.Call {
 				inner_func := base_expr.func
-				if inner_func is ast.Name {
-					if inner_func.id == 'super' {
-						// super().__init__(...) -> self.Parent_Impl = new_parent_impl(...)
-						parents := t.state.class_hierarchy[t.state.current_class] or { []string{} }
-						if parents.len > 0 {
-							parent_name := parents[0]
-							mut arg_strs := []string{}
-							for arg in val.args {
-								arg_strs << t.visit_expr(arg)
-							}
-							mut factory_name := base.get_factory_name(parent_name, t.state.class_hierarchy)
-							if parent_name in t.state.current_class_generic_bases {
-								base_type := t.state.current_class_generic_bases[parent_name]
-								if bracket_idx := base_type.index('[') {
-									factory_name += base_type[bracket_idx..]
-								}
-							}
-							target_name := if parent_name in t.state.known_interfaces { '${parent_name}_Impl' } else { parent_name }
-							t.emit_indented('self.${target_name} = *${factory_name}(${arg_strs.join(', ')})')
-							return
-						}
+				if inner_func is ast.Name && inner_func.id == 'super' {
+					// super().__init__(...) -> self.Parent_Impl = new_parent_impl(...)
+					if parents.len > 0 {
+						parent_name = parents[0]
+						args_to_skip = 0
 					}
 				}
+			} else if base_expr is ast.Name && val.args.len > 0 {
+				// BaseClass.__init__(self, ...) -> self.BaseClass_Impl = new_base_class_impl(...)
+				first_arg := val.args[0]
+				if first_arg is ast.Name && first_arg.id == 'self' {
+					if base_expr.id in parents {
+						parent_name = base_expr.id
+						args_to_skip = 1
+					}
+				}
+			}
+
+			if parent_name.len > 0 {
+				mut arg_strs := []string{}
+				for i := args_to_skip; i < val.args.len; i++ {
+					arg_strs << t.visit_expr(val.args[i])
+				}
+				mut factory_name := base.get_factory_name(parent_name, t.state.class_hierarchy)
+				if parent_name in t.state.current_class_generic_bases {
+					base_type := t.state.current_class_generic_bases[parent_name]
+					if bracket_idx := base_type.index('[') {
+						factory_name += base_type[bracket_idx..]
+					}
+				}
+				target_name := if parent_name in t.state.known_interfaces { '${parent_name}_Impl' } else { parent_name }
+				t.emit_indented('self.${target_name} = *${factory_name}(${arg_strs.join(', ')})')
+				return
 			}
 		}
 	}
