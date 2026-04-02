@@ -99,12 +99,34 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 	}
 }
 
-fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
+	fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 	// println('Visiting ExprStmt: ${node.str()}')
 	val := node.value
 	if val is ast.Constant {
 		if val.token.typ == .string_tok || val.token.typ == .fstring_tok {
 			mut content := val.value
+			// Handle f-strings with interpolation - emit as println
+			if val.token.typ == .fstring_tok {
+				// Convert to V print statement  
+				mut cleaned := content
+				if cleaned.starts_with('f"') || cleaned.starts_with('f\'') {
+					cleaned = cleaned[1..]
+				}
+				// Convert f-string format to V interpolation - always use double quotes for interpolation
+				if cleaned.starts_with('"') && cleaned.ends_with('"') {
+					t.emit_indented('println(${cleaned})')
+					return
+				} else if cleaned.starts_with("'") && cleaned.ends_with("'") {
+					// Convert single quotes to double quotes for interpolation
+					// No need to escape single quotes inside double-quoted V strings
+					inner := cleaned[1..cleaned.len - 1]
+					// But we do need to escape double quotes and backslashes
+					mut v_inner := inner.replace('\\', '\\\\')
+					v_inner = v_inner.replace('"', '\\"')
+					t.emit_indented('println("${v_inner}")')
+					return
+				}
+			}
 			if content.starts_with("'") || content.starts_with('"') {
 				content = content[1..content.len - 1]
 			}
@@ -114,7 +136,8 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 				return
 			}
 			for line in content.split_into_lines() {
-				t.emit_indented('// ${line}')
+				mut safe_line := line.replace('\'', "`")
+				t.emit_indented('// ${safe_line}')
 			}
 			return
 		}
@@ -401,10 +424,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			if v_inferred == 'str' {
 				v_inferred = 'string'
 			}
-			if v_inferred in ['none', 'Any', 'unknown'] && rhs_text == 'none' {
-				v_inferred = 'Any'
-				rhs_text = 'Any(NoneType{})'
-			}
+		if v_inferred in ['none', 'Any', 'unknown'] && rhs_text == 'none' {
+			v_inferred = 'Any'
+			rhs_text = 'none'
+		}
 			if v_inferred != 'Any' && v_inferred != 'int' {
 				t.analyzer.type_map[id] = v_inferred
 			}

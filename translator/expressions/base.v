@@ -128,24 +128,31 @@ pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
 	if tstring.len > 0 {
 		return tstring
 	}
-	
 	is_literal_goal := eg.target_type == 'LiteralString' || eg.state.current_ann_raw == 'LiteralString' || eg.state.current_ann_raw == 'typing.LiteralString'
 	
-	mut res := "'"
+	// Use double quotes to allow single quotes in content - V requires double quotes for interpolation
+	mut res := '"'
 	for val_node in node.values {
 		if val_node is ast.Constant {
-			res += eg.extract_string_content(val_node.value)
+			mut content := eg.extract_string_content(val_node.value)
+			// Escape backslashes first, then double quotes only (single quotes are fine inside double-quoted strings)
+			content = content.replace('\\', '\\\\')
+			content = content.replace('"', '\\"')
+			res += content
 		} else if val_node is ast.FormattedValue {
 			val_expr := val_node.value
 			if is_literal_goal && val_expr is ast.Constant {
 				// Flatten literal interpolation
-				res += eg.extract_string_content(val_expr.value)
+				mut inner := eg.extract_string_content(val_expr.value)
+				inner = inner.replace('\\', '\\\\')
+				inner = inner.replace('"', '\\"')
+				res += inner
 			} else {
 				res += '$' + '{' + eg.visit(val_expr) + '}'
 			}
 		}
 	}
-	res += "'"
+	res += '"'
 	return res
 }
 

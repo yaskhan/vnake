@@ -634,10 +634,16 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 			final_sep := sep.trim("'\"")
 			final_fmt := simple_items.join(final_sep)
 			final_end := end.trim("'\"")
+			// Escape double quotes and backslashes for V interpolation (requires double quotes)
+			mut escaped_fmt := final_fmt.replace('\\', '\\\\')
+			escaped_fmt = escaped_fmt.replace('"', '\\"')
+			// Single quotes don't need escaping inside double-quoted strings
 			if final_end == '\\n' {
-				return if is_stderr { "eprintln('${final_fmt}')" } else { "println('${final_fmt}')" }
+				return if is_stderr { 'eprintln("${escaped_fmt}")' } else { 'println("${escaped_fmt}")' }
 			} else {
-				return if is_stderr { "eprint('${final_fmt}${final_end.replace('\\', '\\\\')}')" } else { "print('${final_fmt}${final_end.replace('\\', '\\\\')}')" }
+				mut escaped_end := final_end.replace('\\', '\\\\')
+				escaped_end = escaped_end.replace('"', '\\"')
+				return if is_stderr { 'eprint("${escaped_fmt}${escaped_end}")' } else { 'print("${escaped_fmt}${escaped_end}")' }
 			}
 		} else {
 			fmt_str := "[${items.join(', ')}].join(${sep})"

@@ -157,25 +157,54 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	for arg in args {
 		arg_name := sanitize_name(arg.arg, false)
 		mut arg_type := 'int'
+		mut has_none_default := false
+		mut uses_default_type := false
 		if ann := arg.annotation {
 			arg_type = env.map_annotation_fn(ann)
 		} else {
 			p_key_arg := if struct_name.len > 0 { '${struct_name}.${node.name}.${arg.arg}' } else { '${node.name}.${arg.arg}' }
 			loc := '${arg.token.line}:${arg.token.column}'
 			
+			// Check if parameter has None as default value - make type optional
+			if arg.arg in defaults_map {
+				default_expr := defaults_map[arg.arg]
+				if default_expr is ast.Constant && default_expr.value == 'None' {
+					has_none_default = true
+				} else if default_expr is ast.Name && default_expr.id in ['None', 'none'] {
+					has_none_default = true
+				}
+			}
+			
 			// Heuristic to match legacy test expectations:
 			// *args functions (vararg) expect 'Any' for untyped,
 			// **kwargs or regular functions expect 'int'.
 			has_pos_vararg := node.args.vararg != none
-			default_type := if has_pos_vararg { 'Any' } else { 'int' }
+			// If parameter has None default, use Any as fallback instead of int for better type safety
+			uses_default_type = true
+			default_type := if has_pos_vararg || has_none_default { 'Any' } else { 'int' }
 			
 			mut inf_t_arg := env.analyzer.get_mypy_type(arg.arg, loc) or { 
 				env.analyzer.get_type(p_key_arg) or { default_type }
 			}
-			if inf_t_arg == 'Any' && !has_pos_vararg {
+			// Keep Any for parameters with None default (not converted to int)
+			if inf_t_arg == 'Any' && !has_pos_vararg && !has_none_default {
 				inf_t_arg = 'int'
 			}
 			arg_type = env.map_type_fn(inf_t_arg, struct_name, true, true, false)
+		}
+		// Check if parameter has None as default value - make type optional (if not already checked above)
+		if !has_none_default && arg.arg in defaults_map {
+			default_expr := defaults_map[arg.arg]
+			if default_expr is ast.Constant && default_expr.value == 'None' {
+				has_none_default = true
+			} else if default_expr is ast.Name && default_expr.id in ['None', 'none'] {
+				has_none_default = true
+			}
+		}
+		
+		// If default is None and type is not already optional, make it optional
+		if has_none_default && !arg_type.starts_with('?') && arg_type != 'Any' {
+			arg_type = '?${arg_type}'
 		}
 
 		a_clean := arg_type.trim_left('?!')
@@ -185,6 +214,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			} else {
 				arg_type = '&' + arg_type
 			}
+		}
+		
+		// If after all checks still have None default, ensure type is ?Any (not ?int)
+		if has_none_default && uses_default_type && arg_type == 'int' {
+			arg_type = '?Any'
 		}
 
 		annotations_data[arg_name] = arg_type
@@ -464,7 +498,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	if annotations_data.len > 0 {
 		mut anno_list := []string{}
 		for k, v in annotations_data {
-			anno_list << "'${k}': '${v}'"
+			anno_list << "${double_quote(k)}: ${double_quote(v)}"
 		}
 		const_name := base.to_snake_case('${struct_name}_${func_name}_annotations')
 		env.emit_constant_fn('${if pub_pfx.len > 0 { "pub " } else { "" }}const ${const_name} = { ${anno_list.join(", ")} }')
@@ -551,3 +585,10 @@ fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, stru
 	}
 	return info
 }
+
+fn double_quote(s string) string {
+	mut result := s.replace('\\', '\\\\')
+	result = result.replace('"', '\\"')
+	return '"${result}"'
+}
+

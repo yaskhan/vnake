@@ -229,12 +229,17 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 
 	if is_void_call {
 		m.emit(m.visit_expr(node.value))
-		rhs = 'Any(NoneType{})'
+		rhs = 'none'
 	} else {
 		prev_type := m.state.current_assignment_type
 		m.state.current_assignment_type = v_type
 		rhs = m.visit_expr(node.value)
 		m.state.current_assignment_type = prev_type
+	}
+
+	// For Any or none types with None assignment, use Any(NoneType{})
+	if rhs == 'none' && (v_type == 'Any' || v_type == 'none') {
+		rhs = 'Any(NoneType{})'
 	}
 
 	if m.state.in_main {

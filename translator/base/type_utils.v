@@ -113,6 +113,46 @@ fn bool_condition(expr string, v_type string, invert bool) string {
 	return if invert { '!${expr}' } else { expr }
 }
 
+// build_truthiness_check builds a V condition that checks Python truthiness for a value.
+// For optional types, it checks both != none AND the inner type's truthiness.
+// For Any types, it uses py_bool and checks for none.
+// This is used for `or`/`and` expressions to correctly handle None values.
+pub fn build_truthiness_check(expr string, v_type string) string {
+	// Optional types: must check != none first, then check inner value
+	if v_type.starts_with('?') {
+		inner := v_type[1..]
+		inner_check := truthiness_condition(expr, inner)
+		if inner_check.len > 0 {
+			return '(${expr} != none && ${inner_check})'
+		}
+		return '${expr} != none'
+	}
+	
+	// Any type needs py_bool check with none handling
+	if v_type == 'Any' {
+		return '(${expr} != none && py_bool(${expr}))'
+	}
+	
+	return truthiness_condition(expr, v_type)
+}
+
+// truthiness_condition returns the condition that checks if a value is truthy for non-optional types.
+fn truthiness_condition(expr string, v_type string) string {
+	if is_collection_type(v_type) {
+		return '${expr}.len > 0'
+	}
+	if is_numeric_type(v_type) {
+		return '${expr} != 0'
+	}
+	if v_type == 'bool' {
+		return expr
+	}
+	if v_type == 'Any' {
+		return 'py_bool(${expr})'
+	}
+	return expr
+}
+
 // map_type is a centralized Python-to-V type mapper with post-processing.
 pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, sum_type_registrar fn (string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	if type_str.contains('TypeForm') {

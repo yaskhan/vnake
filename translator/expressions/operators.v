@@ -1,6 +1,16 @@
 module expressions
 
 import ast
+import base
+
+// Local wrappers for base module functions
+fn is_collection_type(v_type string) bool {
+	return base.is_collection_type(v_type)
+}
+
+fn is_numeric_type(v_type string) bool {
+	return base.is_numeric_type(v_type)
+}
 
 fn is_none_expr(node ast.Expression) bool {
 	return (node is ast.Constant && node.value == 'None')
@@ -25,8 +35,10 @@ fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
 	if typ.starts_with('?') { return false }
 	if typ.starts_with('SumType_') { return true }
 	if typ.starts_with('map[') && typ.ends_with(']Any') { return true }
+	// For Any type (sum type containing NoneType), always use `is NoneType` check
+	// because Any is a sum type and `== none` doesn't work with sum types
 	if typ == 'Any' {
-		return eg.is_explicit_any(node, typ)
+		return true
 	}
 	return false
 }
@@ -216,6 +228,53 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 	else { return "if ${l_cond} { ${l_expr} } else { ${r_expr} }" }
 }
 
+// build_truthiness_for_or builds the truthiness check for or/and expressions
+// with proper none handling, matching the mature pythontovlang transpiler.
+fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) string {
+	v_type := eg.guess_type(node)
+	expr := eg.visit(node)
+	
+	// For Any type (sum type), use is NoneType check for proper none detection
+	if v_type == 'Any' {
+		return "(${expr} !is NoneType && ${expr} != 0)"
+	}
+	
+	// For optional types
+	if v_type.starts_with('?') {
+		inner := v_type[1..]
+		if is_collection_type(inner) {
+			return "(${expr} != none && ${expr}!.len > 0)"
+		}
+		if is_numeric_type(inner) {
+			return "(${expr} != none && ${expr}! != 0)"
+		}
+		if inner == 'string' || inner == 'LiteralString' {
+			return "(${expr} != none && ${expr}!.len > 0)"
+		}
+		return "${expr} != none"
+	}
+	
+	// For simple identifiers in `or` context, conservatively add none check
+	if node is ast.Name {
+		return "(${expr} !is NoneType && ${expr} != 0)"
+	}
+	
+	// For strings and collections
+	if is_collection_type(v_type) {
+		return "${expr}.len > 0"
+	}
+	if is_numeric_type(v_type) {
+		return "${expr} != 0"
+	}
+	if v_type == 'bool' {
+		return expr
+	}
+	
+	// Fallback to py_bool for unknown types
+	eg.state.used_builtins['py_bool'] = true
+	return "py_bool(${expr})"
+}
+
 fn (mut eg ExprGen) format_repeated_list_literal(list_node ast.List, len_node ast.Expression) string {
 	len_expr := eg.visit(len_node)
 	if list_node.elements.len == 0 {
@@ -277,7 +336,8 @@ pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
 			return if is_and { "(${left}) && (${right})" } else { "(${left}) || (${right})" }
 		}
 		
-		l_cond := eg.wrap_bool(node.values[0], false)
+		// Use build_truthiness_for_or for proper none handling
+		l_cond := eg.build_truthiness_for_or(node.values[0], !is_and)
 		mut l_val := left
 		mut r_val := right
 		
@@ -298,10 +358,11 @@ pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
 	mut result := eg.visit(node.values[node.values.len - 1])
 	for i := node.values.len - 2; i >= 0; i-- {
 		v := node.values[i]
-		v_type := eg.guess_type(v)
-		cond := eg.wrap_bool(v, false)
+		// Use build_truthiness_for_or for proper none handling
+		cond := eg.build_truthiness_for_or(v, !is_and)
 		mut v_val := eg.visit(v)
 		if eg.state.current_assignment_type == 'Any' {
+			v_type := eg.guess_type(v)
 			if !v_val.starts_with('Any(') && v_type != 'Any' {
 				v_val = if v_type.starts_with('?') { "Any(${v_val}!)" } else { "Any(${v_val})" }
 			}
