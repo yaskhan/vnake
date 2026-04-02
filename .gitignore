@@ -87,3 +87,5 @@ tests_pass_*.txt
 tests_truly_*.txt
 test_results.txt
 test_results*.txt
+*.diff
+*.patch
