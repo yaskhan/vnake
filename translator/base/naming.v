@@ -134,6 +134,10 @@ pub const v_reserved_keywords = [
 	'union',
 ]
 
+// Optimization: Moved to module level to avoid re-allocation on every call to sanitize_name.
+pub const v_reserved_types = ['int', 'string', 'bool', 'f64', 'f32', 'i64', 'byte', 'rune', 'void',
+	'Any', 'none', 'i8', 'i16', 'i32', 'u16', 'u32', 'u64']
+
 // sanitize_name sanitizes Python identifiers to comply with V
 pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, scc_prefix string, local_vars map[string]bool) string {
 	if name.len == 0 {
@@ -141,8 +145,6 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 	}
 
 	// V reserved types are kept as is
-	v_reserved_types := ['int', 'string', 'bool', 'f64', 'f32', 'i64', 'byte', 'rune', 'void',
-		'Any', 'none', 'i8', 'i16', 'i32', 'u16', 'u32', 'u64']
 	if name in v_reserved_types {
 		return name
 	}
