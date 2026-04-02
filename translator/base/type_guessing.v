@@ -223,19 +223,22 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 }
 
 fn guess_type_list(node ast.Expression, ctx TypeGuessingContext) string {
-	mut elts := []ast.Expression{}
 	if node is ast.List {
-		elts = node.elements.clone()
+		return guess_type_elements(node.elements, ctx)
 	} else if node is ast.Tuple {
-		elts = node.elements.clone()
+		return guess_type_elements(node.elements, ctx)
 	}
-	if elts.len == 0 {
+	return '[]Any'
+}
+
+fn guess_type_elements(elements []ast.Expression, ctx TypeGuessingContext) string {
+	if elements.len == 0 {
 		return '[]Any'
 	}
 
 	mut element_types := []string{}
 	mut has_none := false
-	for elt in elts {
+	for elt in elements {
 		if elt is ast.Starred {
 			element_types << 'Any'
 		} else if elt is ast.Constant && elt.value == 'None' {
@@ -272,7 +275,8 @@ fn guess_type_set(node ast.Set, ctx TypeGuessingContext) string {
 		}
 	}
 	if element_types.len == 1 {
-		t := element_types.keys()[0]
+		mut t := ''
+		for k in element_types { t = k; break }
 		if t == 'Any' {
 			return 'datatypes.Set[string]'
 		}
@@ -302,14 +306,14 @@ fn guess_type_dict(node ast.Dict, ctx TypeGuessingContext) string {
 	}
 	mut k_type := 'string'
 	if key_types.len == 1 {
-		k_type = key_types.keys()[0]
+		for k in key_types { k_type = k; break }
 	}
 	if k_type == 'Any' {
 		k_type = 'string'
 	}
 	mut v_type := 'Any'
 	if val_types.len == 1 {
-		v_type = val_types.keys()[0]
+		for k in val_types { v_type = k; break }
 	}
 	return 'map[${k_type}]${v_type}'
 }

@@ -23,8 +23,8 @@ fn (t &TypeInferenceVisitorMixin) type_ctx() models.TypeGuessingContext {
 	return models.TypeGuessingContext{
 		type_map:           t.type_map
 		location_map:       t.location_map
-		known_v_types:      map[string]string{}
-		name_remap:         map[string]string{}
+		known_v_types:      t.empty_v_types_cache
+		name_remap:         t.empty_name_remap_cache
 		defined_classes:    t.defined_classes_for_guessing()
 		explicit_any_types: t.explicit_any_types
 		analyzer:           t.analyzer_ptr
@@ -32,11 +32,7 @@ fn (t &TypeInferenceVisitorMixin) type_ctx() models.TypeGuessingContext {
 }
 
 fn (t &TypeInferenceVisitorMixin) defined_classes_for_guessing() map[string]map[string]bool {
-	mut classes := map[string]map[string]bool{}
-	for class_name in t.class_hierarchy.keys() {
-		classes[class_name] = map[string]bool{}
-	}
-	return classes
+	return t.defined_classes_cache
 }
 
 fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string {
@@ -831,7 +827,7 @@ fn (mut t TypeInferenceVisitorMixin) infer_return_type(stmts []ast.Statement) st
 	mut found_types := map[string]bool{}
 	has_return_value := t.collect_return_types(stmts, mut found_types)
 	if found_types.len == 1 {
-		return found_types.keys()[0]
+		for k in found_types { return k }
 	}
 	if found_types.len > 1 || has_return_value {
 		return 'Any'
