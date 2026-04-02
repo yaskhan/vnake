@@ -112,13 +112,32 @@ pub mut:
 	is_full_module               bool
 }
 
+pub const cached_indents = [
+	'',
+	'    ',
+	'        ',
+	'            ',
+	'                ',
+	'                    ',
+	'                        ',
+	'                            ',
+	'                                ',
+	'                                    ',
+	'                                        ',
+	'                                            ',
+	'                                                ',
+	'                                                    ',
+	'                                                        ',
+	'                                                            ',
+	'                                                                ',
+	'                                                                    ',
+	'                                                                        ',
+	'                                                                            ',
+	'                                                                                ',
+]
+
 // new_translator_state creates a new TranslatorState instance
 pub fn new_translator_state() &TranslatorState {
-	mut indents := []string{cap: 21}
-	for i in 0 .. 21 {
-		indents << '    '.repeat(i)
-	}
-
 	return &TranslatorState{
 		type_inference:               unsafe { nil }
 		compatibility:                unsafe { nil }
@@ -202,7 +221,7 @@ pub fn new_translator_state() &TranslatorState {
 		cond_optional_var_type:       map[string]string{}
 		typed_dicts:                  map[string]bool{}
 		class_hierarchy_initialized:  false
-		cached_indents:               indents
+		cached_indents:               cached_indents.clone()
 		is_full_module:               false
 	}
 }
@@ -242,7 +261,7 @@ pub fn (mut s TranslatorState) update_class_hierarchy() {
 		return
 	}
 
-	for class_name in s.defined_classes.keys() {
+	for class_name in s.defined_classes {
 		if class_name !in s.class_hierarchy {
 			s.class_hierarchy[class_name] = []string{}
 		}

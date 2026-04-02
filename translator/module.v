@@ -482,7 +482,7 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 	mut top_level_names := map[string]bool{}
 	m.collect_assigned_names(node.body, mut top_level_names)
 	
-	for name in top_level_names.keys() {
+	for name in top_level_names {
 		m.record_defined_symbol(name)
 	}
 	
@@ -490,7 +490,7 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 	mut assigned_locally := map[string]bool{}
 	m.collect_global_refs(node, top_level_names, mut assigned_locally, mut globals)
 	
-	for name in globals.keys() {
+	for name in globals {
 		m.state.global_vars[name] = true
 	}
 }
@@ -1552,7 +1552,7 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 		}
 
 		if m.strict_exports {
-			for name in m.state.defined_top_level_symbols.keys() {
+			for name in m.state.defined_top_level_symbols {
 				if name == '__all__' || name.starts_with('_') {
 					continue
 				}

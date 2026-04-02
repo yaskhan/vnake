@@ -1,38 +1,8 @@
 module translator
+import base
 
-// to_snake_case converts CamelCase or PascalCase to snake_case.
-// Optimization: Uses a single pass with direct string indexing and a pre-allocated buffer
-// to avoid multiple allocations and string copies. Underscore handling is integrated
-// into the loop to eliminate the need for a final .replace() call.
 fn to_snake_case(name string) string {
-	if name.len == 0 {
-		return ''
-	}
-	mut out := []u8{cap: name.len + 2}
-	for i := 0; i < name.len; i++ {
-		ch := name[i]
-		if ch >= `A` && ch <= `Z` {
-			if i > 0 {
-				prev := name[i - 1]
-				// Add underscore if preceded by a lowercase letter or digit
-				if prev != `_` && ((prev >= `a` && prev <= `z`) || (prev >= `0` && prev <= `9`)) {
-					if out.len > 0 && out.last() != `_` {
-						out << `_`
-					}
-				}
-			}
-			out << ch + 32
-		} else if ch == `_` {
-			// Skip redundant underscores
-			if out.len > 0 && out.last() == `_` {
-				continue
-			}
-			out << `_`
-		} else {
-			out << ch
-		}
-	}
-	return out.bytestr()
+	return base.to_snake_case(name)
 }
 
 @[heap]

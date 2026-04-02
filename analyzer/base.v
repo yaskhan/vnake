@@ -42,31 +42,37 @@ pub mut:
 	func_param_mutability map[string][]int
 	typed_dicts          map[string]bool
 	literal_types        map[string]string // map[var_name]literal_value
-	overloaded_signatures map[string][]map[string]string
-	type_vars            map[string]bool
+	overloaded_signatures  map[string][]map[string]string
+	type_vars              map[string]bool
+	defined_classes_cache  map[string]map[string]bool
+	empty_v_types_cache    map[string]string
+	empty_name_remap_cache map[string]string
 }
 
 pub fn new_type_inference_base() TypeInferenceBase {
 	return TypeInferenceBase{
-		type_map:              map[string]string{}
-		raw_type_map:          map[string]string{}
-		mutability_map:        map[string]MutabilityInfo{}
-		location_map:          map[string]string{}
-		call_signatures:       map[string]CallSignature{}
-		mixin_to_main:         map[string][]string{}
-		main_to_mixins:        map[string][]string{}
-		mixin_nodes:           map[string]string{}
-		static_methods:        map[string][]string{}
-		class_methods:         map[string][]string{}
-		is_abc:                map[string]bool{}
-		class_hierarchy:       map[string][]string{}
-		scope_names:           []string{}
-		explicit_any_types:    map[string]bool{}
-		func_param_mutability: map[string][]int{}
-		typed_dicts:          map[string]bool{}
-		literal_types:        map[string]string{}
-		overloaded_signatures: map[string][]map[string]string{}
-		type_vars:            map[string]bool{}
+		type_map:               map[string]string{}
+		raw_type_map:           map[string]string{}
+		mutability_map:         map[string]MutabilityInfo{}
+		location_map:           map[string]string{}
+		call_signatures:        map[string]CallSignature{}
+		mixin_to_main:          map[string][]string{}
+		main_to_mixins:         map[string][]string{}
+		mixin_nodes:            map[string]string{}
+		static_methods:         map[string][]string{}
+		class_methods:          map[string][]string{}
+		is_abc:                 map[string]bool{}
+		class_hierarchy:        map[string][]string{}
+		scope_names:            []string{}
+		explicit_any_types:     map[string]bool{}
+		func_param_mutability:  map[string][]int{}
+		typed_dicts:           map[string]bool{}
+		literal_types:         map[string]string{}
+		overloaded_signatures:  map[string][]map[string]string{}
+		type_vars:              map[string]bool{}
+		defined_classes_cache:  map[string]map[string]bool{}
+		empty_v_types_cache:    map[string]string{}
+		empty_name_remap_cache: map[string]string{}
 	}
 }
 
@@ -109,6 +115,7 @@ pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
 
 pub fn (mut t TypeInferenceBase) add_class_to_hierarchy(class_name string, bases []string) {
 	t.class_hierarchy[class_name] = bases
+	t.defined_classes_cache[class_name] = map[string]bool{}
 }
 
 pub fn (t &TypeInferenceBase) get_class_bases(class_name string) []string {

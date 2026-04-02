@@ -300,6 +300,8 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 	return res
 }
 
+// split_generic_args separates top-level generic arguments while respecting nested brackets.
+// Optimization: Uses a start index and string slicing to avoid repeated O(N) string concatenations.
 fn split_generic_args(s string) []string {
 	mut result := []string{}
 	mut depth := 0
@@ -323,45 +325,50 @@ fn split_generic_args(s string) []string {
 		}
 	}
 	if start < s.len {
-		last := s[start..].trim_space()
-		if last.len > 0 {
-			result << last
+		tail := s[start..].trim_space()
+		if tail.len > 0 {
+			result << tail
 		}
 	}
 	return result
 }
 
+// map_basic_type maps common Python type names to V equivalents.
+// Optimization: Uses a match expression instead of a map literal to avoid re-allocation
+// on every call. Redundant prefixed entries (e.g. typing.Any) are removed as they are
+// already handled by prefix-stripping logic.
 fn map_basic_type(name string) string {
 	mut clean_name := name
-	if clean_name.starts_with('typing.') { clean_name = clean_name[7..] }
-	if clean_name.starts_with('typing_extensions.') { clean_name = clean_name[18..] }
-	if clean_name.starts_with('builtins.') { clean_name = clean_name[9..] }
+	if clean_name.starts_with('typing.') {
+		clean_name = clean_name[7..]
+	} else if clean_name.starts_with('typing_extensions.') {
+		clean_name = clean_name[18..]
+	} else if clean_name.starts_with('builtins.') {
+		clean_name = clean_name[9..]
+	}
 	clean_name = clean_name.trim_space()
 
 	return match clean_name {
-		'int', 'builtins.int' { 'int' }
-		'float', 'builtins.float' { 'f64' }
-		'str', 'builtins.str', 'LiteralString', 'typing.LiteralString', 'typing_extensions.LiteralString' {
-			'string'
-		}
-		'bytes', 'builtins.bytes', 'memoryview', 'bytearray' { '[]u8' }
-		'bool', 'builtins.bool' { 'bool' }
+		'int' { 'int' }
+		'float' { 'f64' }
+		'str' { 'string' }
+		'bytes' { '[]u8' }
+		'bool' { 'bool' }
 		'None' { 'none' }
-		'Any', 'object', 'typing.Any', 'builtins.object', 'Union', 'typing.Union', 'typing_extensions.Union', 'TypeForm', 'typing.TypeForm', 'typing_extensions.TypeForm', 'type', 'builtins.type', 'Final', 'typing.Final', 'ClassVar', 'typing.ClassVar', 'ForwardRef', 'typing.ForwardRef', 'annotationlib.ForwardRef' {
-			'Any'
-		}
-		'list', 'List', 'typing.List', 'tuple', 'Tuple', 'typing.Tuple', 'Sequence', 'typing.Sequence', 'Iterable', 'typing.Iterable' {
-			'[]Any'
-		}
-		'dict', 'Dict', 'typing.Dict', 'Mapping', 'typing.Mapping' { 'map[string]Any' }
-		'set', 'Set', 'typing.Set' { 'datatypes.Set[Any]' }
+		'Any', 'object' { 'Any' }
+		'list', 'List', 'Sequence', 'Iterable' { '[]Any' }
+		'dict', 'Dict', 'Mapping' { 'map[string]Any' }
+		'tuple', 'Tuple' { '[]Any' }
+		'set', 'Set' { 'datatypes.Set[Any]' }
+		'memoryview', 'bytearray' { '[]u8' }
 		'IO', 'TextIO', 'BinaryIO' { 'os.File' }
 		'StringIO', 'io.StringIO' { 'strings.Builder' }
-		'NoReturn', 'typing.NoReturn' { 'noreturn' }
-		'Optional', 'typing.Optional' { '?Any' }
-		'Callable', 'callable', 'typing.Callable', 'typing_extensions.Callable', 'collections.abc.Callable' {
-			'fn (...Any) Any'
-		}
+		'NoReturn' { 'noreturn' }
+		'Optional' { '?Any' }
+		'Union' { 'Any' }
+		'Callable', 'callable', 'collections.abc.Callable' { 'fn (...Any) Any' }
+		'LiteralString' { 'string' }
+		'TypeForm', 'type', 'Final', 'ClassVar', 'ForwardRef', 'Annotated', 'Required', 'NotRequired', 'ReadOnly', 'annotationlib.ForwardRef' { 'Any' }
 		else { clean_name }
 	}
 }
