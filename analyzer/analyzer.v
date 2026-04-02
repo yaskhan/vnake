@@ -102,6 +102,7 @@ pub fn (mut a Analyzer) set_mutability(name string, info MutabilityInfo) {
 // add_class_to_hierarchy adds class to hierarchy
 pub fn (mut a Analyzer) add_class_to_hierarchy(class_name string, bases []string) {
 	a.class_hierarchy[class_name] = bases
+	a.defined_classes_cache[class_name] = map[string]bool{}
 }
 
 // get_class_bases returns base classes
