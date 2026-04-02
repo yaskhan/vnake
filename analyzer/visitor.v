@@ -827,7 +827,7 @@ fn (mut t TypeInferenceVisitorMixin) infer_return_type(stmts []ast.Statement) st
 	mut found_types := map[string]bool{}
 	has_return_value := t.collect_return_types(stmts, mut found_types)
 	if found_types.len == 1 {
-		for k in found_types { return k }
+		for k, _ in found_types { return k }
 	}
 	if found_types.len > 1 || has_return_value {
 		return 'Any'
