@@ -67,6 +67,7 @@ v/
 vnake
 vnake.exe
 *.v.orig
+*.v.rej
 /tmp
 test_output.txt
 out.txt
