@@ -110,7 +110,8 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 				if ann := arg.annotation {
 					ann_str = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
 				}
-				p_args << '${arg.arg} ${ann_str}'
+				arg_name := sanitize_name(arg.arg, false)
+				p_args << '${arg_name} ${ann_str}'
 			}
 			ret := if ann := method.returns {
 				r_type := map_python_type(env.visit_expr_fn(ann), struct_name, true, mut env)
@@ -120,7 +121,19 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 					' ' + r_type
 				}
 			} else { '' }
-			res << '    ${method.name}(${p_args.join(', ')})${ret}'
+			mut m_name := sanitize_name(method.name, false)
+			if m_name == '__next__' {
+				m_name = 'next'
+			} else if m_name == '__post_init__' {
+				m_name = 'post_init'
+			} else if m_name == '__await__' {
+				m_name = 'await_'
+			} else if m_name == '__iter__' {
+				m_name = 'iter'
+			} else if m_name == '__str__' {
+				m_name = 'str'
+			}
+			res << '    ${m_name}(${p_args.join(', ')})${ret}'
 		}
 		res << '}'
 		return res.join('\n')
