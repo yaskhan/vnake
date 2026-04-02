@@ -64,6 +64,7 @@ v/
 /tests/cases/generated/**/003.v
 /tests/cases/generated/**/004.v
 /tests/cases/generated/**/005.v
+/tests/fortranslatemanually/*.v
 vnake
 vnake.exe
 *.v.orig
