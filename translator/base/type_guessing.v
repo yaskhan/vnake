@@ -275,7 +275,8 @@ fn guess_type_set(node ast.Set, ctx TypeGuessingContext) string {
 		}
 	}
 	if element_types.len == 1 {
-		t := element_types.keys()[0]
+		mut t := ''
+		for k in element_types { t = k; break }
 		if t == 'Any' {
 			return 'datatypes.Set[string]'
 		}
@@ -305,14 +306,14 @@ fn guess_type_dict(node ast.Dict, ctx TypeGuessingContext) string {
 	}
 	mut k_type := 'string'
 	if key_types.len == 1 {
-		k_type = key_types.keys()[0]
+		for k in key_types { k_type = k; break }
 	}
 	if k_type == 'Any' {
 		k_type = 'string'
 	}
 	mut v_type := 'Any'
 	if val_types.len == 1 {
-		v_type = val_types.keys()[0]
+		for k in val_types { v_type = k; break }
 	}
 	return 'map[${k_type}]${v_type}'
 }
