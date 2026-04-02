@@ -242,7 +242,7 @@ pub fn (mut s TranslatorState) update_class_hierarchy() {
 		return
 	}
 
-	for class_name in s.defined_classes.keys() {
+	for class_name in s.defined_classes {
 		if class_name !in s.class_hierarchy {
 			s.class_hierarchy[class_name] = []string{}
 		}
