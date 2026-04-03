@@ -516,6 +516,9 @@ fn (mut m ModuleTranslator) extract_docstring(body []ast.Statement) ([]ast.State
 }
 
 fn (mut m ModuleTranslator) append_runtime_helpers() {
+	if m.state.used_builtins["regex"] {
+		m.emitter.add_helper_import("regex")
+	}
 	if m.state.used_builtins['math.pow'] || m.state.used_builtins['math.floor'] || m.state.used_builtins['py_round'] {
 		m.emitter.add_helper_import('math')
 	}
