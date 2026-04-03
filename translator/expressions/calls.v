@@ -82,6 +82,9 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 
 	if mapped_val := eg.handle_via_mapper(node, module_name, func_name, args) {
 		if mapped_val.contains('(') {
+		if mapped_val.contains("py_os_system") {
+			eg.state.pending_llm_call_comments << "//##LLM@@ SECURITY WARNING: os.system is insecure as it executes commands via a shell. Consider using subprocess.run with a list of arguments instead."
+		}
 			eg.state.used_builtins[mapped_val.all_before('(')] = true
 		} else {
 			eg.state.used_builtins[mapped_val] = true

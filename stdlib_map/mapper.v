@@ -94,7 +94,7 @@ fn (mut m StdLibMapper) init_mappings() {
 	m.mappings['os'] = {
 		'environ': 'os.environ'
 		'getcwd': 'os.getwd'
-		'system': 'os.system'
+		'system': 'py_os_system'
 		'getenv': 'os.getenv'
 		'mkdir': 'os.mkdir'
 		'makedirs': 'os.mkdir_all'
