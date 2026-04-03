@@ -11,7 +11,7 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 	call_sig := eg.get_call_signature(func_name_str, loc_key)
 
 	mut args := eg.process_call_args(node, call_sig)
-	keyword_args, needs_comment := eg.process_keywords(node, call_sig, mut args)
+	keyword_args, needs_comment := eg.process_keywords(node, call_sig, mut args, func_name_str)
 
 	if needs_comment {
 		eg.state.pending_llm_call_comments << '//##LLM@@ unresolved **kwargs unpacking'
@@ -163,7 +163,7 @@ pub fn (mut eg ExprGen) process_call_args(node ast.Call, call_sig ?analyzer.Call
 	return args
 }
 
-pub fn (mut eg ExprGen) process_keywords(node ast.Call, call_sig ?analyzer.CallSignature, mut args []string) (map[string]string, bool) {
+pub fn (mut eg ExprGen) process_keywords(node ast.Call, call_sig ?analyzer.CallSignature, mut args []string, func_name_str string) (map[string]string, bool) {
 	mut keyword_args := map[string]string{}
 	mut needs_comment := false
 
@@ -1387,7 +1387,6 @@ pub fn (mut eg ExprGen) process_factory_args(func_name string, args []string, ke
 
 	mut arg_names := []string{}
 
-	found_sig := false
 
 	for key, csig in eg.analyzer.call_signatures {
 
@@ -1453,7 +1452,7 @@ pub fn (mut eg ExprGen) process_factory_args(func_name string, args []string, ke
 
 		// 2. If STILL missing or 'none' placeholder, try fill with default
 
-		if (final_args.len <= i || final_args[i] == 'none') {
+		if final_args.len <= i || final_args[i] == 'none' {
 
 			mut d_val := 'none'
 
