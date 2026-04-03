@@ -210,6 +210,15 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	}
 	target := node.targets[0]
 	id := if target is ast.Name { target.id } else { '' }
+	if target is ast.Name && node.value is ast.Call {
+		if node.value.func is ast.Name {
+			f_id := node.value.func.id
+			if f_id in ['TypeVar', 'ParamSpec', 'TypeVarTuple', 'NewType'] {
+				t.state.type_vars[id] = true
+				return
+			}
+		}
+	}
 	mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
 	mut rhs := ''
 	

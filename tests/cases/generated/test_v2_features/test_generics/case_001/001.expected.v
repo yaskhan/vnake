@@ -1,7 +1,6 @@
 @@in# "interface Base[T] {"
-@@in# "@[heap]
-struct Base_Impl[T] {"
+@@in# "struct Base_Impl[T] {"
 @@in# "struct Child {"
 @@in# "Base_Impl[int]"
 @@in# "fn new_base_impl[T](val T) &Base_Impl[T]"
-@@in# "fn (self Child) method(x U) U"
+@@in# "fn (self Child) method[U](x U) U"

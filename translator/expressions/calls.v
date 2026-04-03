@@ -166,7 +166,6 @@ pub fn (mut eg ExprGen) process_call_args(node ast.Call, call_sig ?analyzer.Call
 pub fn (mut eg ExprGen) process_keywords(node ast.Call, call_sig ?analyzer.CallSignature, mut args []string, func_name_str string) (map[string]string, bool) {
 	mut keyword_args := map[string]string{}
 	mut needs_comment := false
-
 	for kw in node.keywords {
 		if kw.arg.len == 0 {
 			// **kwargs unpacking
@@ -179,8 +178,9 @@ pub fn (mut eg ExprGen) process_keywords(node ast.Call, call_sig ?analyzer.CallS
 					mut all_resolved := true
 					for i in 0 .. dict.keys.len {
 						key := dict.keys[i]
-						if key is ast.Constant && (key.value.starts_with("'") || key.value.starts_with('"')) {
-							k_val := key.value.trim('\'"')
+						k_str := eg.visit(key)
+						if k_str.starts_with("'") || k_str.starts_with('"') {
+							k_val := k_str.trim('\'"')
 							// Poor man's check: just append if it's in sig.arg_names
 							if k_val in sig.arg_names {
 								args << eg.visit(dict.values[i])
