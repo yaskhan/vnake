@@ -375,7 +375,14 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 		}
 	}
 
+	m.env.state.walrus_assignments = []string{}
 	test_expr := m.wrap_bool(node.test, false)
+	if m.env.state.walrus_assignments.len > 0 {
+		for assign in m.env.state.walrus_assignments {
+			m.emit(assign)
+		}
+	}
+
 	if is_elif {
 		m.emit('} else if ${test_expr} {')
 	} else {

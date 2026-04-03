@@ -1,2 +1,2 @@
-@@in# "x := input()"
-@@in# "if x == 'exit' { break }"
+@@in# "x := os.input('')"
+@@in# "if !(x != 'exit') { break }"

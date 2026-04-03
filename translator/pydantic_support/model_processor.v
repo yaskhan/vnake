@@ -328,7 +328,30 @@ fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorI
 		for line in env.state.output {
 			res << '        ' + line
 		}
-		res << '        return self'
+		
+		// Only add return self if the body doesn't already end with a return
+		mut has_return := false
+		if node.body.len > 0 {
+			last_stmt := node.body.last()
+			if last_stmt is ast.Return {
+				has_return = true
+			}
+		}
+		if !has_return && env.state.output.len > 0 {
+			if env.state.output.last().trim_space().starts_with('return ') {
+				has_return = true
+			}
+		}
+		
+		if !has_return && env.state.output.len > 0 {
+			if env.state.output.last().trim_space().starts_with('return ') {
+				has_return = true
+			}
+		}
+		
+		if !has_return {
+			res << '        return self'
+		}
 		res << '    }(mut m) !'
 	} else {
 		for f_name in v_info.fields {
@@ -346,7 +369,24 @@ fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorI
 			for line in env.state.output {
 				res << '        ' + line
 			}
-			res << '        return v'
+			
+			// Only add return v if the body doesn't already end with a return
+			mut has_return_v := false
+			if node.body.len > 0 {
+				last_stmt := node.body.last()
+				if last_stmt is ast.Return {
+					has_return_v = true
+				}
+			}
+			if !has_return_v && env.state.output.len > 0 {
+				if env.state.output.last().trim_space().starts_with('return ') {
+					has_return_v = true
+				}
+			}
+
+			if !has_return_v {
+				res << '        return v'
+			}
 			res << '    }(m.${f_name}) !'
 		}
 	}

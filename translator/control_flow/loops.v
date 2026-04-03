@@ -70,15 +70,31 @@ pub fn (mut m ControlFlowModule) visit_while(node ast.While) {
 		m.emit('mut ${flag_name} := true')
 	}
 	m.push_loop_ctx(flag_name)
+	m.env.state.walrus_assignments = []string{}
 
 	test_expr := m.wrap_bool(node.test, false)
-	m.emit('for ${test_expr} {')
-	m.env.state.indent_level++
-	for stmt in node.body {
-		m.visit_stmt(stmt)
+
+	if m.env.state.walrus_assignments.len > 0 {
+		m.emit('for {')
+		m.env.state.indent_level++
+		for assign in m.env.state.walrus_assignments {
+			m.emit(assign)
+		}
+		m.emit('if !(${test_expr}) { break }')
+		for stmt in node.body {
+			m.visit_stmt(stmt)
+		}
+		m.env.state.indent_level--
+		m.emit('}')
+	} else {
+		m.emit('for ${test_expr} {')
+		m.env.state.indent_level++
+		for stmt in node.body {
+			m.visit_stmt(stmt)
+		}
+		m.env.state.indent_level--
+		m.emit('}')
 	}
-	m.env.state.indent_level--
-	m.emit('}')
 	m.pop_loop_ctx()
 
 	if node.orelse.len > 0 {

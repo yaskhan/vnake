@@ -1,3 +1,2 @@
-@@in# "spawn sub_gen("
-@@in# "for v in gen_"
-@@in# "py_yield(ch_out, ch_in, v)"
+@@in# "go sub_gen("
+@@in# "return PyGenerator[int]{out: ch_out, in_: ch_in}"

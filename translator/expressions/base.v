@@ -638,7 +638,10 @@ pub fn (mut eg ExprGen) visit_yield_from(node ast.YieldFrom) string {
 pub fn (mut eg ExprGen) visit_named_expr(node ast.NamedExpr) string {
 	target := eg.visit(node.target)
 	value := eg.visit(node.value)
-	return '(${target} = ${value})'
+	
+	// Collect assignment to be emitted as a statement before the condition
+	eg.state.walrus_assignments << '${target} := ${value}'
+	return target
 }
 pub fn (mut eg ExprGen) map_python_type(type_str string, is_return bool) string {
 	return eg.map_type_ext(type_str, false, true, is_return)
