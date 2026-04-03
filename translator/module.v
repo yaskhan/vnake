@@ -1259,6 +1259,10 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn (c PySqliteConnection) close() { c.db.close() or {} }')
 	}
 
+	if m.state.imported_modules.values().contains("os") || m.state.used_builtins["py_os_system"] {
+		m.emitter.add_helper_import("os")
+		m.emitter.add_helper_function("//##LLM@@ SECURITY WARNING: os.system is insecure as it executes commands via a shell. Consider using subprocess.run with a list of arguments instead.\nfn py_os_system(cmd string) int {\n    return os.system(cmd)\n}")
+	}
 	if m.state.imported_modules.values().contains('subprocess') {
 		m.emitter.add_helper_import('os')
 		m.emitter.add_helper_struct('struct PyCompletedProcess { returncode int stdout string stderr string }')

@@ -90,6 +90,9 @@ fn (mut t Translator) append_helpers() {
 	if 'py_bytes_format' in t.state.used_builtins {
 		t.emit_function_code('fn py_bytes_format_arg(arg Any) string {\n    return arg.str()\n}\nfn py_bytes_format(fmt []u8, args ...Any) []u8 {\n    // ... stub \n    return fmt\n}')
 	}
+	if t.state.used_builtins["py_os_system"] {
+		t.emit_function_code("//##LLM@@ SECURITY WARNING: os.system is insecure as it executes commands via a shell. Consider using subprocess.run with a list of arguments instead.\nfn py_os_system(cmd string) int {\n    return os.system(cmd)\n}")
+	}
 	if t.state.used_builtins['py_subprocess_call'] {
 		t.emit_function_code('fn py_subprocess_call(cmd Any) int {\n    if cmd is []string {\n        mut p := os.new_process(cmd[0])\n        p.set_args(cmd[1..])\n        p.wait()\n        return p.code\n    }\n    return -1\n}')
 	}
