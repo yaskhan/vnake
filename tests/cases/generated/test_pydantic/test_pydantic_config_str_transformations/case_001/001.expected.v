@@ -1,5 +1,5 @@
 @@in# "// Config: str_strip_whitespace=true, str_to_lower=true"
-@@in# "m.name = m.name.trim()"
+@@in# "m.name = m.name.trim_space()"
 @@in# "m.name = m.name.to_lower()"
-@@in# "m.email = m.email.trim()"
+@@in# "m.email = m.email.trim_space()"
 @@in# "m.email = m.email.to_lower()"
