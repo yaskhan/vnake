@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "func("
+@@in# "for x in ["

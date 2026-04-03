@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "struct Outer_Inner {"

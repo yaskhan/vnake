@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "[..a.len - 1]"

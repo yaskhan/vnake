@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "x := 1"

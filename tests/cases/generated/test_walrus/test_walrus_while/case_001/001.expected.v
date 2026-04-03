@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "x := input()"
+@@in# "if x == 'exit' { break }"

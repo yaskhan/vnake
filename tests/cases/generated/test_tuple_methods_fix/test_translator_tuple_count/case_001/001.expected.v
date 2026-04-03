@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "t2.len"

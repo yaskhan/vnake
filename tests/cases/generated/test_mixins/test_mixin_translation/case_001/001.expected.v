@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "Mixin"
+@@in# "struct Target {"

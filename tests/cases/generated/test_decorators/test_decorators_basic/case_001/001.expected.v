@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "fn my_func() {"

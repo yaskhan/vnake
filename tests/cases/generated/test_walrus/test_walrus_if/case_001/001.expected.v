@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "x := 5"
+@@in# "if x > 0 {"

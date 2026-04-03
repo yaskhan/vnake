@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "for i, ch in 'abc'.runes() {"

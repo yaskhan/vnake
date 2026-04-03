@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "catch {"
+@@in# "return 1"

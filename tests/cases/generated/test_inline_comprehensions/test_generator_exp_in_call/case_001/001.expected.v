@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "sum("
+@@in# "for x in ["

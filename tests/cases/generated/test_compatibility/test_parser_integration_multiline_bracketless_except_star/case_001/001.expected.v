@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "catch *ValueError"
+@@in# "catch *TypeError"

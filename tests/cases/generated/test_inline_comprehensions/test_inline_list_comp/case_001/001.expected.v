@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "for x in ["

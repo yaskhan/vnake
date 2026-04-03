@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "c := a + b"

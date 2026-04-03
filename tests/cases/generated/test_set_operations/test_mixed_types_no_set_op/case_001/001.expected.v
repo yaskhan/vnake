@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "x.union(y)"

@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "t2 := ["
+@@in# "t2[0] << 3"

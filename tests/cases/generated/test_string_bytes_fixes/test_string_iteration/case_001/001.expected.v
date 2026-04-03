@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "for ch in s {"

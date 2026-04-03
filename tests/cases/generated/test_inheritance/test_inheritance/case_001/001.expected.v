@@ -1,1 +1,2 @@
-// No assertions extracted
+@@in# "struct A {"
+@@in# "struct B {"

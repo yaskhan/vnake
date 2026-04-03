@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "'123'.int()"

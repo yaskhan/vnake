@@ -1,1 +1,1 @@
-// No assertions extracted
+@@in# "new_Outer_Inner"

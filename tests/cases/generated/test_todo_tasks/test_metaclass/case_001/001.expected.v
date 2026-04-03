@@ -1,2 +1,2 @@
-@@in# "// Metaclass: MyMeta"
 @@in# "struct MyClass {"
+@@in# "struct MyMeta {"
