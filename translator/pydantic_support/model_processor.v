@@ -140,7 +140,6 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 		struct_lines << '// ConfigDict: ${config_comment.join(", ")}'
 	}
 
-	struct_lines << '${export}struct ${struct_name} {'
 	if env.state.is_exported(node.name) {
 		if !config.allow_mutation {
 			struct_lines << 'pub:'
