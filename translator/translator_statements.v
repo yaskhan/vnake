@@ -462,6 +462,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		}
 
 		if t.is_declared_local(lhs) {
+			remap_val := t.state.name_remap[id] or { '' }
+			if id in t.state.name_remap && remap_val.contains(' as ') {
+				t.state.name_remap.delete(id)
+			}
 			if v_lhs_t.starts_with("?") && !rhs_text.starts_with("?") && rhs_text != "none" {
 				inferred := t.guess_type(node.value)
 				v_inferred := t.map_annotation_str(inferred, "", false, false, false)
@@ -565,6 +569,10 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 	if value := node.value {
 		if node.target is ast.Name {
 			lhs := base.sanitize_name(node.target.id, false, map[string]bool{}, '', map[string]bool{})
+			id_inv := node.target.id
+			if id_inv in t.state.name_remap && (t.state.name_remap[id_inv] or { '' }).contains(' as ') {
+				t.state.name_remap.delete(id_inv)
+			}
 			mut prev_assignment_type := t.state.current_assignment_type
 			t.state.current_assignment_type = t.map_annotation(node.annotation)
 			t.state.current_ann_raw = t.annotation_raw_name(node.annotation)
@@ -582,10 +590,10 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			}
 			ann_raw := t.annotation_raw_name(node.annotation)
 			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
-				target := node.target
-				id := target.get_token().value
-				v_id := base.to_snake_case(id)
-				pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
+				target_final := node.target
+				id_final := target_final.get_token().value
+				v_id := base.to_snake_case(id_final)
+				pub_prefix := if t.state.is_exported(id_final) { 'pub ' } else { '' }
 				t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 				t.state.current_assignment_type = prev_assignment_type
 				return
