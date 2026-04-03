@@ -1901,6 +1901,8 @@ pub mut:
 	is_named_tuple          bool
 	is_enum                 bool
 	is_newtype              bool
+	is_dataclass            bool
+	has_post_init           bool
 	has_type_var_tuple_type bool
 	names                   SymbolTable
 	defn                    ?&ClassDef

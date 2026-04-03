@@ -197,6 +197,18 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 				if is_class_var || is_init_var {
 					if is_class_var {
 						h.set_class_var(struct_name, field_name, field_type, if default_val.len > 0 { default_val } else { 'none' }, mut env)
+					} else if is_init_var {
+						if struct_name !in env.state.dataclass_init_vars {
+							env.state.dataclass_init_vars[struct_name] = map[string]string{}
+						}
+						// Extract type from InitVar[T]
+						mut inner_type := field_type
+						if inner_type.starts_with('InitVar[') && inner_type.ends_with(']') {
+							inner_type = inner_type['InitVar['.len..inner_type.len - 1]
+						} else if inner_type == 'InitVar' {
+							inner_type = 'Any'
+						}
+						env.state.dataclass_init_vars[struct_name][field_name] = inner_type
 					}
 				} else {
 					mut info := h.get_field_def_info(field_name, field_type, struct_name, default_val, orig_name, mut env)
@@ -279,22 +291,50 @@ fn (h ClassFieldsHandler) generate_dataclass_factory(struct_name string, datacla
 			if stmt.target is ast.Name {
 				name := sanitize_name(stmt.target.id, false)
 				raw_type := env.visit_expr_fn(stmt.annotation)
-				f_type := map_python_type(raw_type, struct_name, false, mut env)
 				
-				mut default_expr := ''
 				if val := stmt.value {
-					default_expr = ' = ' + env.visit_expr_fn(val)
+					if struct_name !in env.state.dataclass_defaults {
+						env.state.dataclass_defaults[struct_name] = map[string]string{}
+					}
+					env.state.dataclass_defaults[struct_name][name] = env.visit_expr_fn(val)
+				}
+
+				is_init_var := raw_type.contains('InitVar[') || raw_type.starts_with('InitVar')
+				is_class_var := raw_type.contains('ClassVar[') || raw_type.starts_with('ClassVar')
+				if is_class_var { continue }
+
+				f_type := if is_init_var {
+					mut t := map_python_type(raw_type, struct_name, false, mut env)
+					if t.starts_with('InitVar[') && t.ends_with(']') {
+						t['InitVar['.len..t.len - 1]
+					} else if t == 'InitVar' {
+						'Any'
+					} else { t }
+				} else {
+					map_python_type(raw_type, struct_name, false, mut env)
 				}
 				
-				factory_args << '${name} ${f_type}${default_expr}'
-				struct_init << '${name}: ${name}'
-				post_init_args << name
+				factory_args << '${name} ${f_type}'
+				if !is_init_var {
+					struct_init << '${name}: ${name}'
+				} else {
+					post_init_args << name
+				}
 			}
 		}
 	}
 	
 	prefix := if env.state.is_exported(struct_name) { 'pub ' } else { '' }
 	generics := get_generics_with_variance_str(&env)
+
+	// InitVars are already handled in the loop above if they are present in the body
+	// but we might have collected more from other places (like bases, though unlikely for now)
+	// For now, let's assume the loop above is enough for the local class definition.
+
+	// Add InitVars to factory args and post_init call
+	// Note: Local InitVars are already handled in the AnnAssign loop above.
+	// We might still need to handle InitVars from base classes if dataclass_init_vars
+	// was populated from bases (though currently it isn't).
 	
 	mut code := []string{}
 	code << '${prefix}fn ${factory_name}${generics}(${factory_args.join(", ")}) &${struct_name}${generics} {'

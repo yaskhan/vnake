@@ -514,35 +514,141 @@ fn (h FunctionsGenerationHandler) is_static_or_classmethod(node &ast.FunctionDef
 }
 
 fn (h FunctionsGenerationHandler) is_mutating_method(node &ast.FunctionDef, class_name string, env &FunctionVisitEnv) bool {
+
 	if node.decorator_list.len > 0 {
+
 		for dec in node.decorator_list {
+
 			name := env.visit_expr_fn(dec)
+
 			if name.ends_with('staticmethod') || name.ends_with('classmethod') { return false }
+
 		}
+
 	}
+
 	
-	for stmt in node.body {
-		if stmt is ast.Assign {
-			for tgt in stmt.targets {
-				if tgt is ast.Attribute {
-					val := tgt.value
-					if val is ast.Name && val.id == 'self' {
-						return true
-					}
-				}
-			}
-		} else if stmt is ast.AugAssign {
-			tgt := stmt.target
-			if tgt is ast.Attribute {
-				val := tgt.value
-				if val is ast.Name && val.id == 'self' {
-					return true
-				}
-			}
-		}
-	}
+
+	if h.scan_body_for_self_assign(node.body) { return true }
+
 	
+
 	return node.name == '__init__'
+
+}
+
+
+
+fn (h FunctionsGenerationHandler) scan_body_for_self_assign(body []ast.Statement) bool {
+
+	for stmt in body {
+
+		match stmt {
+
+			ast.Assign {
+
+				for tgt in stmt.targets {
+
+					if tgt is ast.Attribute {
+
+						val := tgt.value
+
+						if val is ast.Name && val.id == 'self' { return true }
+
+					}
+
+				}
+
+			}
+
+			ast.AnnAssign {
+
+				tgt := stmt.target
+
+				if tgt is ast.Attribute {
+
+					val := tgt.value
+
+					if val is ast.Name && val.id == 'self' { return true }
+
+				}
+
+			}
+
+			ast.AugAssign {
+
+				tgt := stmt.target
+
+				if tgt is ast.Attribute {
+
+					val := tgt.value
+
+					if val is ast.Name && val.id == 'self' { return true }
+
+				}
+
+			}
+
+			ast.If {
+
+				if h.scan_body_for_self_assign(stmt.body) { return true }
+
+				if h.scan_body_for_self_assign(stmt.orelse) { return true }
+
+			}
+
+			ast.For {
+
+				if h.scan_body_for_self_assign(stmt.body) { return true }
+
+				if h.scan_body_for_self_assign(stmt.orelse) { return true }
+
+			}
+
+			ast.While {
+
+				if h.scan_body_for_self_assign(stmt.body) { return true }
+
+				if h.scan_body_for_self_assign(stmt.orelse) { return true }
+
+			}
+
+			ast.Try {
+
+				if h.scan_body_for_self_assign(stmt.body) { return true }
+
+				for handler in stmt.handlers {
+
+					if h.scan_body_for_self_assign(handler.body) { return true }
+
+				}
+
+				if h.scan_body_for_self_assign(stmt.orelse) { return true }
+
+				if h.scan_body_for_self_assign(stmt.finalbody) { return true }
+
+			}
+
+			ast.With {
+
+				if h.scan_body_for_self_assign(stmt.body) { return true }
+
+			}
+
+			ast.FunctionDef {
+
+				// Don't scan nested functions
+
+			}
+
+			else {}
+
+		}
+
+	}
+
+	return false
+
 }
 
 fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, struct_name string, env FunctionVisitEnv) DecoratorInfo {

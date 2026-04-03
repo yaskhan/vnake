@@ -110,6 +110,8 @@ pub mut:
 	class_hierarchy_initialized  bool
 	cached_indents               []string
 	is_full_module               bool
+	dataclass_init_vars          map[string]map[string]string
+	dataclass_defaults           map[string]map[string]string
 }
 
 pub const cached_indents = [
@@ -223,6 +225,8 @@ pub fn new_translator_state() &TranslatorState {
 		class_hierarchy_initialized:  false
 		cached_indents:               cached_indents.clone()
 		is_full_module:               false
+		dataclass_init_vars:          map[string]map[string]string{}
+		dataclass_defaults:           map[string]map[string]string{}
 	}
 }
 

@@ -644,6 +644,20 @@ fn (mut a MypyPluginAnalyzer) visit_class_def(mut node mypy.ClassDef) {
 	a.visit_block(mut node.defs)
 }
 
+fn check_has_decorator(decs []mypy.Expression, name string) bool {
+	for d in decs {
+		if d is mypy.NameExpr {
+			if d.name == name { return true }
+		} else if d is mypy.CallExpr {
+			callee := d.callee
+			if callee is mypy.NameExpr {
+				if callee.name == name { return true }
+			}
+		}
+	}
+	return false
+}
+
 fn (mut a MypyPluginAnalyzer) visit_type_info(mut info mypy.TypeInfo) {
 	key := ctx_key(info.get_context(), 'TypeInfo:${info.fullname}')
 	if !a.remember(key) {
@@ -654,11 +668,26 @@ fn (mut a MypyPluginAnalyzer) visit_type_info(mut info mypy.TypeInfo) {
 	sig['args'] = '[]'
 	sig['return'] = info.fullname
 	sig['is_class'] = 'true'
+	is_dataclass := info.is_dataclass || (if defn := info.defn {
+		check_has_decorator(defn.decorators, 'dataclass')
+	} else {
+		false
+	})
+	has_post_init := info.has_post_init || '__post_init__' in info.names.symbols
+
 	sig['has_init'] = if '__init__' in info.names.symbols { 'true' } else { 'false' }
+	sig['has_post_init'] = if has_post_init { 'true' } else { 'false' }
 	sig['has_vararg'] = 'false'
 	sig['has_kwarg'] = 'false'
 	sig['arg_names'] = '[]'
 	sig['defaults'] = '{}'
+
+	if is_dataclass {
+		mut dc_meta := map[string]string{}
+		dc_meta['has_post_init'] = if has_post_init { 'true' } else { 'false' }
+		sig['dataclass_metadata'] = json.encode(dc_meta)
+	}
+
 	a.store.collect_signature(info.fullname, loc, sig)
 	if info.name.len > 0 && info.name != info.fullname {
 		a.store.collect_signature(info.name, loc, sig)

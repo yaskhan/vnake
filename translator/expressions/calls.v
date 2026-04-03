@@ -229,16 +229,38 @@ pub fn (mut eg ExprGen) process_keywords(node ast.Call, call_sig ?analyzer.CallS
 		eg.state.current_assignment_type = old_type
 	}
 
-	// Fill defaults if it's not a dataclass
+	// Fill defaults if it's not a dataclass or if it's a dataclass with post_init
 	if sig := call_sig {
-		if !sig.is_class {
-			for i := args.len; i < sig.arg_names.len; i++ {
-				name := sig.arg_names[i]
+		is_dataclass_factory := sig.is_class && (sig.dataclass_metadata['is_dataclass'] == 'true' || func_name_str in eg.state.dataclasses)
+		if !sig.is_class || (is_dataclass_factory && (sig.dataclass_metadata['has_post_init'] == 'true' || eg.state.dataclass_init_vars[func_name_str].len > 0)) {
+			mut arg_names := if sig.arg_names.len > 0 { sig.arg_names.clone() } else { eg.state.dataclasses[func_name_str].clone() }
+			
+			// For dataclasses, we also need to include InitVars in the signature
+			if is_dataclass_factory && func_name_str in eg.state.dataclass_init_vars {
+				for iv_name, _ in eg.state.dataclass_init_vars[func_name_str] {
+					if iv_name !in arg_names { arg_names << iv_name }
+				}
+			}
+
+			for i := args.len; i < arg_names.len; i++ {
+				name := arg_names[i]
+				s_name := base.sanitize_name_helper(name, false)
 				if name in keyword_args {
 					args << keyword_args[name]
 					keyword_args.delete(name)
-				} else if name in sig.defaults {
-					args << sig.defaults[name]
+				} else if s_name in keyword_args {
+					args << keyword_args[s_name]
+					keyword_args.delete(s_name)
+				} else {
+					mut d_val := sig.defaults[name] or { '' }
+					if d_val == '' && is_dataclass_factory {
+						if func_name_str in eg.state.dataclass_defaults && s_name in eg.state.dataclass_defaults[func_name_str] {
+							d_val = eg.state.dataclass_defaults[func_name_str][s_name]
+						}
+					}
+					if d_val != '' {
+						args << d_val
+					}
 				}
 			}
 			if sig.has_kwarg && keyword_args.len > 0 {
@@ -503,6 +525,19 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 			}
 		}
 		if func_name_str in eg.state.dataclasses {
+			mut has_post_init := false
+			if func_name_str in eg.state.dataclass_init_vars || func_name in eg.state.dataclass_init_vars {
+				has_post_init = true
+			} else {
+				for key, csig in eg.analyzer.call_signatures {
+					if (key.starts_with('${func_name_str}@') || key.starts_with('${func_name}@')) && csig.dataclass_metadata['has_post_init'] == 'true' {
+						has_post_init = true
+						break
+					}
+				}
+			}
+
+			if !has_post_init {
 			fields := eg.state.dataclasses[func_name_str]
 			mut pos_args := args.clone()
 			
@@ -520,9 +555,10 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 				}
 			}
 			return '${func_name_str}{${literal_parts.join(", ")}}'
+			}
 		}
 
-		return '${base.get_factory_name(func_name_str, eg.state.class_hierarchy)}(${args.join(", ")})'
+		return '${base.get_factory_name(func_name_str, eg.state.class_hierarchy)}(${eg.process_factory_args(func_name_str, args, keyword_args)})'
 	}
 
 	if (func_name == 'acquire' || func_name_str.ends_with('.acquire')) && node.func is ast.Attribute {
@@ -1341,4 +1377,126 @@ pub fn (mut eg ExprGen) handle_dynamic_access(node ast.Call, func_name_str strin
 	}
 
 	return none
+}
+
+pub fn (mut eg ExprGen) process_factory_args(func_name string, args []string, keyword_args map[string]string) string {
+
+	mut final_args := args.clone()
+
+	mut arg_names := []string{}
+
+	found_sig := false
+
+	for key, csig in eg.analyzer.call_signatures {
+
+		if key.starts_with('${func_name}@') {
+
+			raw := csig.arg_names
+
+			if raw.starts_with('[') {
+
+				parts := raw[1..raw.len-1].split(',')
+
+				for p in parts {
+
+					s := p.trim(' 	"')
+
+					if s.len > 0 { arg_names << s }
+
+				}
+
+			}
+
+			if arg_names.len > 0 && arg_names[0] in ['self', 'cls'] { arg_names = arg_names[1..].clone() }
+
+			break
+
+		}
+
+	}
+
+	
+
+	// If it's a dataclass, use internal metadata if signature was incomplete
+
+	if func_name in eg.state.dataclasses {
+
+		mut dc_fields := eg.state.dataclasses[func_name].clone()
+
+		if func_name in eg.state.dataclass_init_vars {
+
+			for iv_name, _ in eg.state.dataclass_init_vars[func_name] {
+
+				if iv_name !in dc_fields { dc_fields << iv_name }
+
+			}
+
+		}
+
+		if arg_names.len < dc_fields.len {
+
+			arg_names = dc_fields
+
+		}
+
+	}
+
+
+
+	for i, name in arg_names {
+
+		s_name := base.sanitize_name_helper(name, false)
+
+		// 1. Check if provided as keyword arg
+
+		if s_name in keyword_args {
+
+			while final_args.len <= i { final_args << 'none' }
+
+			final_args[i] = keyword_args[s_name]
+
+		} else if name in keyword_args {
+
+			while final_args.len <= i { final_args << 'none' }
+
+			final_args[i] = keyword_args[name]
+
+		}
+
+		
+
+		// 2. If STILL missing or 'none' placeholder, try fill with default
+
+		if (final_args.len <= i || final_args[i] == 'none') {
+
+			mut d_val := 'none'
+
+			if func_name in eg.state.dataclass_defaults && s_name in eg.state.dataclass_defaults[func_name] {
+
+				d_val = eg.state.dataclass_defaults[func_name][s_name]
+
+			}
+
+			
+
+			if d_val != 'none' {
+
+				if final_args.len <= i { final_args << d_val } else { final_args[i] = d_val }
+
+			} else if final_args.len <= i {
+
+				// Final fallback: use a default for the type if we knew it?
+
+				// For now, use 'none' and let V compiler complain if it's really missing.
+
+				final_args << 'none'
+
+			}
+
+		}
+
+	}
+
+	return final_args.join(', ')
+
 }

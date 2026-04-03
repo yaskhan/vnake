@@ -199,11 +199,13 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		env.state.known_interfaces[struct_name] = true
 	}
 
-	mut has_post_init := false
-	for method in methods {
-		if method.name == '__post_init__' {
-			has_post_init = true
-			break
+	mut has_post_init := dataclass_metadata['has_post_init'] == 'true'
+	if !has_post_init {
+		for method in methods {
+			if method.name == '__post_init__' {
+				has_post_init = true
+				break
+			}
 		}
 	}
 
