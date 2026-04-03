@@ -1,0 +1,5 @@
+@@in# "fn gen(ch_out chan int, ch_in chan PyGeneratorInput, max int) {"
+@@in# "chan int{cap: 0}"
+@@in# "spawn gen("
+@@in# "for x in gen_"
+@@in# "println('${x}')"

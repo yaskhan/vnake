@@ -1,0 +1,5 @@
+@@in# "pub mut:"
+@@in# "count int = 10000"
+@@in# "mut:"
+@@in# "private_ int = 0"
+@@in# "fn (mut self IdleTaskRec) decrement()"
