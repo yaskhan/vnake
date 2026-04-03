@@ -22,7 +22,7 @@ pub fn generate_overload_variants(
 	mangle_name_fn fn (string, string) string,
 	is_exported_c fn (string) bool,
 	get_source_info_fn fn (ast.Statement) string,
-	extract_implicit_generics_fn fn (&ast.FunctionDef, map[string]bool, map[string]bool, []string, fn (string, bool) string) []string,
+	extract_implicit_generics_fn fn (&ast.FunctionDef, map[string]bool, map[string]bool, map[string]bool, []string, fn (string, bool) string) []string,
 	get_generic_map_fn fn ([]string, []map[string]string) map[string]string,
 	get_all_active_v_generics_fn fn ([]map[string]string) []string,
 	get_generics_with_variance_str_fn fn ([]string, map[string]string, map[string]string, map[string]string) string,
@@ -64,7 +64,7 @@ pub fn generate_overload_variants(
 		
 		
 		// Extract implicit generics for this signature
-		mut func_generics := extract_implicit_generics(node, state.type_vars, map[string]bool{},
+		mut func_generics := extract_implicit_generics(node, state.type_vars, state.paramspec_vars, map[string]bool{},
 			state.current_class_generics, sanitize_fn)
 		
 		v_gen_map := base.get_generic_map(func_generics, [state.current_class_generic_map])

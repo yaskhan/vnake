@@ -220,5 +220,29 @@ fn (mut t Translator) append_helpers() {
     return res
 }')
 	}
+    for name, def in t.state.generated_sum_types {
+        if name.contains('|') {
+             // Derive SumType name from the union string itself to be safe
+             mut parts := name.split('|').map(it.trim_space())
+             parts.sort()
+             mut name_parts := []string{}
+             for p in parts {
+                 mut pn := p.capitalize()
+                 if pn == 'Str' { pn = 'String' }
+                 name_parts << pn
+             }
+             st_name := 'SumType_${name_parts.join("")}'
+             t.emit_struct_code('type ${st_name} = ${name}')
+        } else if name.len > 0 && def.len > 0 {
+            t.emit_struct_code('type ${name} = ${def}')
+        }
+    }
+    for name, types_str in t.state.generated_tuple_structs {
+        parts := types_str.split(',').map(it.trim_space())
+        mut struct_fields := []string{}
+        for i, pt in parts {
+            struct_fields << '    v${i} ${pt}'
+        }
+        t.emit_struct_code('struct ${name} {\npub:\n${struct_fields.join("\n")}\n}')
+    }
 }
-

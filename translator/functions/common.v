@@ -129,6 +129,7 @@ fn scan_type_expr(expr ast.Expression, type_vars map[string]bool, mut found map[
 pub fn extract_implicit_generics(
 	node &ast.FunctionDef,
 	type_vars map[string]bool,
+	paramspec_vars map[string]bool,
 	constrained_typevars map[string]bool,
 	current_class_generics []string,
 	sanitize_fn fn (string, bool) string,
@@ -171,7 +172,7 @@ pub fn extract_implicit_generics(
 
 	mut filtered := map[string]bool{}
 	for gen in implicit_generics.keys() {
-		if gen !in constrained_typevars {
+		if gen !in constrained_typevars && gen !in paramspec_vars {
 			filtered[gen] = true
 		}
 	}

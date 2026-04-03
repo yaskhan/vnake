@@ -183,7 +183,11 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 	}
 	if e.functions.len > 0 { lines << e.functions.join('\n\n'); lines << '' }
 	if e.main_body.len > 0 { for m in e.main_body { lines << m } }
-	return lines.join('\n').trim_space()
+	res := lines.join('\n').trim_space()
+	if res.len == 0 && (e.structs.len > 0 || e.functions.len > 0 || e.constants.len > 0) {
+		eprintln('BUG: raw_emit returning empty while collections populated! structs=${e.structs.len} funcs=${e.functions.len} consts=${e.constants.len}')
+	}
+	return res
 }
 
 pub fn (e &VCodeEmitter) emit_helpers() string {

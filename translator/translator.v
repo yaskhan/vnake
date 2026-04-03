@@ -161,7 +161,9 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				'set', 'Set' { 'datatypes.Set[Any]' }
 				else {
 					full_sym := t.state.imported_symbols[node.id] or { node.id }
-					if full_sym in ['LiteralString', 'typing.LiteralString', 'typing_extensions.LiteralString'] { return 'string' }
+					if node.id in t.state.paramspec_vars { return '...Any' }
+					if full_sym in ['str', 'builtins.str', 'typing.LiteralString', 'typing_extensions.LiteralString'] { return 'string' }
+					if full_sym in ['float', 'builtins.float'] { return 'f64' }
 					full_sym
 				}
 			}
@@ -232,9 +234,18 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 					for elt in node.slice.elements {
 						parts << t.map_annotation(elt)
 					}
-					return '[${parts.join(', ')}]'
+					types_str := parts.join(', ')
+					struct_name := models.get_tuple_struct_name(types_str)
+					t.state.generated_tuple_structs[struct_name] = types_str
+					return struct_name
 				}
-				return '[${t.map_annotation(node.slice)}]'
+				inner := t.map_annotation(node.slice)
+				if inner.contains(',') {
+					struct_name := models.get_tuple_struct_name(inner)
+					t.state.generated_tuple_structs[struct_name] = inner
+					return struct_name
+				}
+				return '[]' + inner
 			}
 			if base_raw in ['Dict', 'typing.Dict', 'dict'] {
 				if node.slice is ast.Tuple {
@@ -269,6 +280,37 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 			if base_raw in ['Literal', 'typing.Literal'] {
 				t.state.used_builtins['LiteralEnum_'] = true
 				return 'LiteralEnum_'
+			}
+			if base_raw in ['Callable', 'typing.Callable', 'collections.abc.Callable'] {
+				mut arg_types := []string{}
+				mut ret_type := 'Any'
+				if node.slice is ast.Tuple {
+					tuple_node := node.slice
+					if tuple_node.elements.len >= 2 {
+						args_spec := tuple_node.elements[0]
+						if args_spec is ast.List {
+							for elt in args_spec.elements {
+								arg_types << t.map_annotation(elt)
+							}
+						} else if (args_spec is ast.Constant && args_spec.value == '...') || (args_spec is ast.Name && (args_spec as ast.Name).id == '...') {
+							arg_types << '...Any'
+						} else {
+							arg_spec_str := t.map_annotation(args_spec)
+							if arg_spec_str.len > 0 {
+								arg_types << arg_spec_str
+							}
+						}
+						ret_type = t.map_annotation(tuple_node.elements[1])
+					}
+				} else {
+					// Handle Callable[..., Ret]
+					ret_type = t.map_annotation(node.slice)
+					return 'fn (...Any) ${ret_type}'
+				}
+				if ret_type == '' || ret_type == 'void' || ret_type == 'none' {
+					return 'fn (${arg_types.join(", ")})'
+				}
+				return 'fn (${arg_types.join(", ")}) ${ret_type}'
 			}
 			return t.map_annotation(node.value) + '[${t.map_annotation(node.slice)}]'
 		}
@@ -312,7 +354,7 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		register_sum_types: register
 		is_return:          is_return
 		self_type:          actual_struct
-		generic_map:        t.state.current_class_generic_map
+		generic_map:        if t.state.generic_scopes.len > 0 { t.state.generic_scopes.last() } else { t.state.current_class_generic_map }
 	}
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: t.state.imported_symbols
@@ -337,7 +379,11 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 			return name
 		}
 		return ""
-	}, fn (_ []string) string { return '' }, fn (_ string) string { return '' })
+	}, fn (_ []string) string { return '' }, fn [mut t] (types_str string) string {
+		struct_name := models.get_tuple_struct_name(types_str)
+		t.state.generated_tuple_structs[struct_name] = types_str
+		return struct_name
+	})
 
 	if !allow_union && res.contains('|') {
 		// Convert "A | B" to "SumType_AB"
@@ -381,7 +427,6 @@ fn (t &Translator) annotation_raw_name(node ast.Expression) string {
 }
 
 pub fn (mut t Translator) translate(source string, filename string) string {
-	old_emitter := t.state.emitter
 	old_mapper := t.state.mapper
 	old_is_full_module := t.state.is_full_module
 	old_include_all := t.state.include_all_symbols
@@ -390,13 +435,27 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	old_current_module := t.state.current_module_name
 	
 	t.state = base.new_translator_state()
-	t.state.emitter = old_emitter
 	t.state.mapper = old_mapper
 	t.state.is_full_module = old_is_full_module
 	t.state.include_all_symbols = old_include_all
 	t.state.strict_exports = old_strict_exports
 	t.state.scc_files = old_sccs.clone()
 	t.state.current_module_name = old_current_module
+	
+	mut e := &VCodeEmitter{
+		module_name:     'main'
+		imports:         []string{}
+		structs:         []string{}
+		functions:       []string{}
+		main_body:       []string{}
+		init_body:       []string{}
+		globals:         []string{}
+		constants:       []string{}
+		helper_imports:  []string{}
+		helper_structs:  []string{}
+		helper_functions: []string{}
+	}
+	t.state.emitter = voidptr(e)
 	
 	t.coroutine_handler = analyzer.new_coroutine_handler()
 	t.state.coroutine_handler = &t.coroutine_handler
@@ -494,8 +553,6 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	t.append_helpers()
 
-	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
-
 	if t.state.used_builtins['math.pow'] || t.state.used_builtins['math.floor'] {
 		e.add_import('math')
 	}
@@ -530,6 +587,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	for line in t.state.output {
 		trimmed := line.trim_space()
+		eprintln('PROCESSING OUTPUT LINE: "${trimmed}"')
 		if trimmed.starts_with('import ') {
 			e.add_import(trimmed['import '.len..].trim_space())
 		} else if trimmed.starts_with('const ') || trimmed.starts_with('pub const ') {
@@ -542,10 +600,6 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 			e.add_main_statement(line)
 		}
 	}
-
-	if t.state.is_full_module {
-		return e.emit()
-	} else {
-		return e.raw_emit()
-	}
+	res := if t.state.is_full_module { e.emit() } else { e.raw_emit() }
+	return res
 }

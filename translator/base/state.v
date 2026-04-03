@@ -94,6 +94,7 @@ pub mut:
 	warnings                     []string
 	pending_llm_call_comments    []string
 	type_vars                    map[string]bool
+	paramspec_vars               map[string]bool
 	scope_names                  []string
 	constrained_typevars         map[string]bool
 	current_function_return_type string

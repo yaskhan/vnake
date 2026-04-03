@@ -79,7 +79,6 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		}
 	}
 
-	// Pre-process basic types
 	match clean_type {
 		'int' { return 'int' }
 		'float' { return 'f64' }
@@ -267,6 +266,32 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			return 'Any'
 		}
 		'Callable', 'typing.Callable', 'collections.abc.Callable' {
+			if args_str.len > 0 {
+				parts := split_generic_args(args_str)
+				if parts.len >= 2 {
+					mut arg_types := []string{}
+					args_part := parts[0].trim_space()
+					if args_part.starts_with('[') && args_part.ends_with(']') {
+						inner_args := args_part[1..args_part.len - 1].trim_space()
+						if inner_args.len > 0 {
+							arg_parts := split_generic_args(inner_args)
+							for p in arg_parts {
+								arg_types << map_python_type_to_v(p.trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+							}
+						}
+					} else if args_part == '...' {
+						arg_types << '...Any'
+					} else {
+						arg_types << map_python_type_to_v(args_part, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+					}
+					
+					ret_type := map_python_type_to_v(parts[1].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+					if ret_type == 'none' || ret_type == 'void' {
+						return 'fn (${arg_types.join(", ")})'
+					}
+					return 'fn (${arg_types.join(", ")}) ${ret_type}'
+				}
+			}
 			return 'fn (...Any) Any'
 		}
 		'TypeGuard', 'TypeIs', 'typing.TypeGuard', 'typing.TypeIs' {

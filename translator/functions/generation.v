@@ -121,7 +121,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	}
 
 	if py_func_generics.len == 0 {
-		implicit_generics := extract_implicit_generics(node, env.state.type_vars, env.state.constrained_typevars, env.state.current_class_generics, base.sanitize_name_helper)
+		implicit_generics := extract_implicit_generics(node, env.state.type_vars, env.state.paramspec_vars, env.state.constrained_typevars, env.state.current_class_generics, base.sanitize_name_helper)
 		if implicit_generics.len > 0 {
 			py_func_generics = implicit_generics.clone()
 			full_func_name := if is_method && struct_name.len > 0 { '${struct_name}_${sanitize_name(node.name, false)}' } else { sanitize_name(node.name, false) }
@@ -405,7 +405,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	env.state.indent_level++
 	
 	if dec_info.cache_wrapper_needed {
-		cache_name := if struct_name.len > 0 { base.to_snake_case('${struct_name}_${node.name}_cache') } else { base.to_snake_case('${node.name}_cache') }
+		mut base_cache_name := if struct_name.len > 0 { '${struct_name}_${node.name}_cache' } else { '${node.name}_cache' }
+		cache_name := base.to_snake_case(base_cache_name).trim_left('_')
 		if ret_type.len > 0 && !ret_type.contains('|') {
 			env.emit_constant_fn('__global ${cache_name} = map[string]${ret_type}{}')
 		} else {
@@ -471,7 +472,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	if dec_info.cache_wrapper_needed && dec_info.implementation_name.len > 0 {
 		wrapper_name := node.name
 		impl_name := dec_info.implementation_name
-		cache_var := if struct_name.len > 0 { base.to_snake_case('${struct_name}_${wrapper_name}_cache') } else { base.to_snake_case('${wrapper_name}_cache') }
+		mut base_cache_var := if struct_name.len > 0 { '${struct_name}_${wrapper_name}_cache' } else { '${wrapper_name}_cache' }
+		cache_var := base.to_snake_case(base_cache_var).trim_left('_')
 		
 		mut wrapper_lines := []string{}
 		mut wrapper_decl := '${pub_pfx}fn ${receiver_str}${wrapper_name}(${args_str_list.join(", ")}) ${ret_type} {'
@@ -500,8 +502,17 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		for k, v in annotations_data {
 			anno_list << "${double_quote(k)}: ${double_quote(v)}"
 		}
-		const_name := base.to_snake_case('${struct_name}_${func_name}_annotations')
+		mut base_const_name := if struct_name.len > 0 { '${struct_name}_${func_name}_annotations' } else { '${func_name}_annotations' }
+		const_name := base.to_snake_case(base_const_name).trim_left('_')
 		env.emit_constant_fn('${if pub_pfx.len > 0 { "pub " } else { "" }}const ${const_name} = { ${anno_list.join(", ")} }')
+	}
+	
+	if py_func_generics.len > 0 {
+		mut gen_list := []string{}
+		for g in py_func_generics { gen_list << double_quote(g) }
+		mut base_const_name := if struct_name.len > 0 { '${struct_name}_${func_name}_type_params' } else { '${func_name}_type_params' }
+		const_name := base.to_snake_case(base_const_name).trim_left('_')
+		env.emit_constant_fn('${if pub_pfx.len > 0 { "pub " } else { "" }}const ${const_name} = [ ${gen_list.join(", ")} ]')
 	}
 }
 

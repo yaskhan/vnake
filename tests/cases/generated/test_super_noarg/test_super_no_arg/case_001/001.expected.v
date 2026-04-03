@@ -1,1 +1,1 @@
-@@in# "self.Parent.foo()"
+@@in# "self.Parent_Impl.foo()"

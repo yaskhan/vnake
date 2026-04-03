@@ -35,6 +35,18 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		if obj in eg.state.function_names { return "${obj}__annotations__" }
 		return "py_get_type_hints_generic(${obj})"
 	}
+	if node.attr == '__type_params__' || node.attr == 'type_params___' {
+		obj := eg.visit(node.value)
+		sanitized_obj := base.to_snake_case(obj).trim_left('_')
+		if obj in eg.state.function_names || sanitized_obj in eg.state.type_params_map {
+			return "${sanitized_obj}_type_params"
+		}
+		if obj in eg.state.defined_classes || eg.guess_type(node.value) in eg.state.defined_classes {
+			class_name := if obj in eg.state.defined_classes { obj } else { eg.guess_type(node.value) }
+			return "${base.to_snake_case(class_name).trim_left('_')}_type_params"
+		}
+		return "[]string{}"
+	}
 
 	if node.attr == 'real' && eg.guess_type(node.value) == 'PyComplex' {
 		return "${eg.visit(node.value)}.re"

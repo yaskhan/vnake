@@ -42,7 +42,11 @@ pub fn (p PydanticFieldProcessor) extract(node ast.AnnAssign, mut env PydanticVi
 		}
 	}
 
-	info.type_str = env.visit_expr_fn(type_expr)
+	if env.map_annotation_fn != unsafe { nil } {
+		info.type_str = env.map_annotation_fn(type_expr)
+	} else {
+		info.type_str = env.visit_expr_fn(type_expr)
+	}
 	info.is_optional = info.type_str.starts_with('?')
 
 	if value := node.value {

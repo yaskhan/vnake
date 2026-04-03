@@ -120,8 +120,8 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 					// Convert single quotes to double quotes for interpolation
 					// No need to escape single quotes inside double-quoted V strings
 					inner := cleaned[1..cleaned.len - 1]
-					// But we do need to escape double quotes and backslashes
-					mut v_inner := inner.replace('\\', '\\\\')
+					// But we do need to escape double quotes and dollars
+					mut v_inner := inner.replace('$', '\\$')
 					v_inner = v_inner.replace('"', '\\"')
 					t.emit_indented('println("${v_inner}")')
 					return
@@ -215,6 +215,9 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			f_id := node.value.func.id
 			if f_id in ['TypeVar', 'ParamSpec', 'TypeVarTuple', 'NewType'] {
 				t.state.type_vars[id] = true
+				if f_id == 'ParamSpec' {
+					t.state.paramspec_vars[id] = true
+				}
 				return
 			}
 		}
@@ -339,7 +342,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	}
 
 	if target is ast.Name {
-		is_type_id := id.len > 0 && id[0].is_capital()
+		is_type_id := target.id.len > 0 && target.id[0].is_capital()
 		if is_type_id {
 			mut rhs_name := ''
 			if node.value is ast.Name { rhs_name = node.value.id }
@@ -380,11 +383,43 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 					}
 				}
 			}
-			is_type_expr := node.value is ast.Name || node.value is ast.Subscript || node.value is ast.Attribute
+			is_type_expr := node.value is ast.Name || node.value is ast.Subscript || node.value is ast.Attribute || (node.value is ast.BinaryOp && (node.value as ast.BinaryOp).op.value == '|')
 			if is_type_expr {
-				if ann_text.contains('|') || ann_text.contains('map[') || ann_text.contains('[]') || ann_text.starts_with('?') || ann_text == 'Any' || rhs_name == 'list' || rhs_name == 'dict' {
-					t.emit_indented('type ${id} = ${ann_text}')
-					t.declare_local(id)
+				if ann_text.contains('|') || ann_text.starts_with('SumType_') || ann_text.contains('map[') || ann_text.contains('[]') || ann_text.starts_with('?') || ann_text == 'Any' || rhs_name == 'list' || rhs_name == 'dict' {
+					mut def := ann_text
+					if ann_text.starts_with('SumType_') {
+						// Look for the definition in the map
+						for k, v_def in t.state.generated_sum_types {
+							if k == ann_text && v_def.len > 0 {
+								def = v_def
+								break
+							}
+						}
+						// If still the same, maybe it's swapped (name is the definition)
+						if def == ann_text {
+							for k, v_def in t.state.generated_sum_types {
+								if v_def == '' && k.contains('|') {
+									// Potentially the definition
+									mut parts := k.split('|').map(it.trim_space())
+									parts.sort()
+									mut name_parts := []string{}
+									for p in parts {
+										mut pn := p.capitalize()
+										if pn == 'Str' { pn = 'String' }
+										name_parts << pn
+									}
+									derived := 'SumType_${name_parts.join("")}'
+									if derived == ann_text {
+										def = k
+										break
+									}
+								}
+							}
+						}
+					}
+					t.emit_indented('type ${target.id} = ${def}')
+					eprintln('EMITTED ALIAS: type ${target.id} = ${def}')
+					t.declare_local(target.id)
 					return
 				}
 			}

@@ -1,2 +1,2 @@
-@@in# "s := 'Val: ${x:05}'"
-@@in# "Line\nBreak\tTab \'Quote\'"
+@@in# "s := \"Val: ${x:05}\""
+@@in# "Line\nBreak\tTab 'Quote'"

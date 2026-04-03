@@ -327,6 +327,25 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		return 'panic(\'assert_never reached\')'
 	}
 	
+	if func_name_str == 'super' {
+		if eg.state.current_class.len > 0 {
+			mut parents := eg.state.class_hierarchy[eg.state.current_class] or { []string{} }
+			if parents.len == 0 && eg.state.current_class.ends_with('_Impl') {
+				parents = eg.state.class_hierarchy[eg.state.current_class.all_before_last('_Impl')] or { []string{} }
+			}
+			if parents.len > 0 {
+				parent_name := parents[0]
+				target_name := if parent_name in eg.state.known_interfaces { '${parent_name}_Impl' } else { parent_name }
+				return 'self.${target_name}'
+			}
+		}
+		return 'self'
+	}
+
+	if func_name_str == 'type' && args.len == 1 {
+		return 'typeof(${args[0]}).name'
+	}
+
 	if func_name_str == 'cls' && eg.state.current_class.len > 0 {
 		gen_s := if eg.state.current_class_generics.len > 0 {
 			mut v_gens := []string{}

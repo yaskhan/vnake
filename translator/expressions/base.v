@@ -95,6 +95,13 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	name := eg.state.name_remap[node.id] or { node.id }
+	
+	// If name is already a complex expression (e.g. from narrowing: "(obj as Derived)"), 
+	// don't sanitize it again, as it contains V syntax.
+	if name.contains('(') || name.contains(' ') || name.contains(' as ') {
+		return name
+	}
+
 	if name.len > 0 && name[0].is_capital() && !name.is_upper() {
 		return base.sanitize_name(name, true, map[string]bool{}, '', map[string]bool{})
 	}
@@ -105,7 +112,11 @@ fn (eg &ExprGen) extract_string_content(value string) string {
 	res := value.trim('\r\n\t')
 	if res.len < 2 { return res }
 	mut v := res
-	// Remove prefixes first
+	// Remove prefixes first, including Vnake internal prefix
+	if v.starts_with('__py2v_t__') {
+		v = v['__py2v_t__'.len..]
+	}
+	// Strip b/f/r prefixes
 	for v.len > 0 && v[0].is_letter() {
 		if v.len > 1 && (v[1] == `'` || v[1] == `"`) {
 			v = v[1..]
@@ -113,14 +124,26 @@ fn (eg &ExprGen) extract_string_content(value string) string {
 			break
 		}
 	}
-	// Independently strip quotes from both ends
-	for v.len > 0 && (v[0] == `'` || v[0] == `"`) {
-		v = v[1..]
+	// Robust recursive strip all leading/trailing quotes
+	for v.len >= 2 {
+		if v.starts_with("'''") && v.ends_with("'''") && v.len >= 6 {
+			v = v[3..v.len - 3]
+		} else if v.starts_with('"""') && v.ends_with('"""') && v.len >= 6 {
+			v = v[3..v.len - 3]
+		} else if v.starts_with("'") && v.ends_with("'") {
+			v = v[1..v.len - 1]
+		} else if v.starts_with('"') && v.ends_with('"') {
+			v = v[1..v.len - 1]
+		} else if v.starts_with("'") || v.starts_with('"') {
+			v = v[1..]
+		} else if v.ends_with("'") || v.ends_with('"') {
+			v = v[..v.len - 1]
+		} else {
+			break
+		}
 	}
-	for v.len > 0 && (v[v.len - 1] == `'` || v[v.len - 1] == `"`) {
-		v = v[..v.len - 1]
-	}
-	return v
+	// Final trim for any leftover escaped quotes from unbalanced lexing
+	return v.trim_right('\\"').trim("'\"")
 }
 
 pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
@@ -135,20 +158,34 @@ pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
 	for val_node in node.values {
 		if val_node is ast.Constant {
 			mut content := eg.extract_string_content(val_node.value)
-			// Escape backslashes first, then double quotes only (single quotes are fine inside double-quoted strings)
-			content = content.replace('\\', '\\\\')
+			content = content.replace('$', '\\$')
 			content = content.replace('"', '\\"')
 			res += content
 		} else if val_node is ast.FormattedValue {
-			val_expr := val_node.value
-			if is_literal_goal && val_expr is ast.Constant {
+			if is_literal_goal && val_node.value is ast.Constant {
 				// Flatten literal interpolation
-				mut inner := eg.extract_string_content(val_expr.value)
-				inner = inner.replace('\\', '\\\\')
-				inner = inner.replace('"', '\\"')
-				res += inner
+				mut inner_c := eg.extract_string_content(val_node.value.value)
+				inner_c = inner_c.replace('$', '\\$')
+				inner_c = inner_c.replace('"', '\\"')
+				res += inner_c
 			} else {
-				res += '$' + '{' + eg.visit(val_expr) + '}'
+				mut inner := eg.visit(val_node.value)
+				mut suffix := ''
+				if val_node.conversion == 114 {
+					inner = 'py_repr(${inner})'
+					eg.state.used_builtins['py_repr'] = true
+				} else if val_node.conversion == 97 {
+					inner = 'py_ascii(${inner})'
+					eg.state.used_builtins['py_ascii'] = true
+				}
+				if spec := val_node.format_spec {
+					if spec is ast.JoinedStr {
+						suffix = ':' + eg.visit_joined_str(spec).trim('"')
+					} else if spec is ast.Constant {
+						suffix = ':' + eg.extract_string_content(spec.value)
+					}
+				}
+				res += '$' + '{' + inner + suffix + '}'
 			}
 		}
 	}
@@ -161,16 +198,7 @@ fn (eg &ExprGen) quote_string_content(value string) string {
 		return "''"
 	}
 
-	if value.contains('\\') {
-		if !value.contains("'") {
-			return "r'${value}'"
-		}
-		if !value.contains('"') {
-			return 'r"${value}"'
-		}
-	}
-
-	mut escaped := value.replace('\\', '\\\\')
+	mut escaped := value.replace('$', '\\$')
 	escaped = escaped.replace("'", "\\'")
 	escaped = escaped.replace('\n', '\\n')
 	escaped = escaped.replace('\r', '\\r')

@@ -88,6 +88,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			env.emit_function_fn,
 			env.emit_constant_fn,
 			env.map_type_fn,
+			env.map_annotation_fn,
 			env.source_mapping,
 		)
 		processor := pydantic_support.new_pydantic_model_processor()
@@ -420,7 +421,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					f_code << '}'
 					env.emit_function_fn(f_code.join('\n'))
 
-					const_name := base.to_snake_case('${struct_name_for_body}_${mangled_factory}_annotations')
+					const_name := base.to_snake_case('${struct_name_for_body}_${mangled_factory}_annotations').trim_left('_')
 					if anno_parts.len > 0 {
 						env.emit_constant_fn('pub const ${const_name} = { ${anno_parts.join(", ")} }')
 						env.emit_constant_fn('const ${const_name} = { ${anno_parts.join(", ")}, \'return\': \'&${struct_name_for_body}${generics}\' }')
@@ -458,6 +459,12 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		for method in methods {
 			env.visit_stmt_fn(method)
 		}
+	}
+	if py_generics.len > 0 {
+		mut gen_list := []string{}
+		for g in py_generics { gen_list << "'${g}'" }
+		const_name := base.to_snake_case('${struct_name}_type_params').trim_left('_')
+		env.emit_constant_fn('pub const ${const_name} = [ ${gen_list.join(", ")} ]')
 	}
 
 	defer {
