@@ -254,8 +254,10 @@ pub fn (mut eg ExprGen) process_keywords(node ast.Call, call_sig ?analyzer.CallS
 				} else {
 					mut d_val := sig.defaults[name] or { '' }
 					if d_val == '' && is_dataclass_factory {
-						if func_name_str in eg.state.dataclass_defaults && s_name in eg.state.dataclass_defaults[func_name_str] {
-							d_val = eg.state.dataclass_defaults[func_name_str][s_name]
+						if defaults := eg.state.dataclass_defaults[func_name_str] {
+							if d := defaults[s_name] {
+								d_val = d
+							}
 						}
 					}
 					if d_val != '' {
@@ -1390,27 +1392,11 @@ pub fn (mut eg ExprGen) process_factory_args(func_name string, args []string, ke
 	for key, csig in eg.analyzer.call_signatures {
 
 		if key.starts_with('${func_name}@') {
-
-			raw := csig.arg_names
-
-			if raw.starts_with('[') {
-
-				parts := raw[1..raw.len-1].split(',')
-
-				for p in parts {
-
-					s := p.trim(' 	"')
-
-					if s.len > 0 { arg_names << s }
-
-				}
-
+			arg_names = csig.arg_names.clone()
+			if arg_names.len > 0 && arg_names[0] in ['self', 'cls'] {
+				arg_names = arg_names[1..].clone()
 			}
-
-			if arg_names.len > 0 && arg_names[0] in ['self', 'cls'] { arg_names = arg_names[1..].clone() }
-
 			break
-
 		}
 
 	}
@@ -1435,7 +1421,7 @@ pub fn (mut eg ExprGen) process_factory_args(func_name string, args []string, ke
 
 		if arg_names.len < dc_fields.len {
 
-			arg_names = dc_fields
+			arg_names = dc_fields.clone()
 
 		}
 
@@ -1451,13 +1437,13 @@ pub fn (mut eg ExprGen) process_factory_args(func_name string, args []string, ke
 
 		if s_name in keyword_args {
 
-			while final_args.len <= i { final_args << 'none' }
+			for final_args.len <= i { final_args << 'none' }
 
 			final_args[i] = keyword_args[s_name]
 
 		} else if name in keyword_args {
 
-			while final_args.len <= i { final_args << 'none' }
+			for final_args.len <= i { final_args << 'none' }
 
 			final_args[i] = keyword_args[name]
 
@@ -1471,10 +1457,10 @@ pub fn (mut eg ExprGen) process_factory_args(func_name string, args []string, ke
 
 			mut d_val := 'none'
 
-			if func_name in eg.state.dataclass_defaults && s_name in eg.state.dataclass_defaults[func_name] {
-
-				d_val = eg.state.dataclass_defaults[func_name][s_name]
-
+			if defaults := eg.state.dataclass_defaults[func_name] {
+				if d := defaults[s_name] {
+					d_val = d
+				}
 			}
 
 			
