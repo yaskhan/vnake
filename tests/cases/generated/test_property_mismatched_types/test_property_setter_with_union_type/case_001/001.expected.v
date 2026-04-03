@@ -1,1 +1,2 @@
-@@in# "fn (mut self Person) set_name(value string) {"
+@@in# "fn (mut self Config) set_value(new_value SumType_IntString) {"
+@@in# "mut:"

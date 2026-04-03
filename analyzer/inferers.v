@@ -760,6 +760,13 @@ fn (mut f FunctionMutabilityScanner) mark_mutated(node ast.Expression) {
 		ast.Attribute {
 			if node.value is ast.Name && node.value.id in f.current_params {
 				f.mutated_params[node.value.id] = true
+				if f.scope_stack.len > 0 && node.value.id in ["self", "cls"] {
+					prefix := f.scope_stack.join(".")
+					key := "${prefix}.${node.attr}"
+					mut info := f.mutability_map[key] or { MutabilityInfo{} }
+					info.is_mutated = true
+					f.mutability_map[key] = info
+				}
 			} else {
 				f.mark_mutated(node.value)
 			}
@@ -1000,7 +1007,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		ast.Assign {
 			for target in node.targets {
 				if target is ast.Subscript || target is ast.Attribute {
-					f.mark_mutated(f.get_base_node(target))
+					f.mark_mutated(target)
 				} else if target is ast.Name {
 					f.mark_reassigned(target)
 				}
@@ -1012,7 +1019,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		}
 		ast.AugAssign {
 			if node.target is ast.Subscript || node.target is ast.Attribute {
-				f.mark_mutated(f.get_base_node(node.target))
+				f.mark_mutated(node.target)
 			} else if node.target is ast.Name {
 				f.mark_reassigned(node.target)
 			}
@@ -1021,8 +1028,8 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		}
 		ast.Delete {
 			for target in node.targets {
-				if target is ast.Subscript {
-					f.mark_mutated(f.get_base_node(target.value))
+				if target is ast.Subscript || target is ast.Attribute {
+					f.mark_mutated(target)
 				}
 				f.visit_expr(target)
 			}
@@ -1146,6 +1153,13 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		ast.Break {}
 		ast.Continue {}
 		ast.AnnAssign {
+			if _ := node.value {
+				if node.target is ast.Subscript || node.target is ast.Attribute {
+					f.mark_mutated(node.target)
+				} else if node.target is ast.Name {
+					f.mark_reassigned(node.target)
+				}
+			}
 			f.visit_expr(node.target)
 			f.visit_expr(node.annotation)
 			if value := node.value {
