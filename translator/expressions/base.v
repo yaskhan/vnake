@@ -306,13 +306,17 @@ pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
 		}
 		return "'${node.value}'"
 	}
-	if node.value.ends_with('j') && !node.value.starts_with("'") && !node.value.starts_with('"') {
-		content := node.value[..node.value.len - 1]
-		val := if content.contains('.') { content } else { '${content}.0' }
-		eg.state.used_builtins['py_complex'] = true
-		return 'py_complex(0.0, ${val})'
+	mut val := node.value
+	if node.token.typ == .number {
+		val = val.replace('_', '')
 	}
-	return node.value
+	if val.ends_with('j') && !val.starts_with("'") && !val.starts_with('"') {
+		content := val[..val.len - 1]
+		complex_val := if content.contains('.') { content } else { '${content}.0' }
+		eg.state.used_builtins['py_complex'] = true
+		return 'py_complex(0.0, ${complex_val})'
+	}
+	return val
 }
 
 fn (eg &ExprGen) bytes_literal_to_v(content string) string {
