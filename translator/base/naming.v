@@ -21,6 +21,22 @@ pub fn to_snake_case(name string) string {
 
 	// Fast path for ASCII strings
 	if name.is_ascii() {
+		mut already_snake := true
+		for i := 0; i < name.len; i++ {
+			ch := name[i]
+			if ch.is_capital() {
+				already_snake = false
+				break
+			}
+			if ch == `_` && i > 0 && name[i - 1] == `_` {
+				already_snake = false
+				break
+			}
+		}
+		if already_snake {
+			return name
+		}
+
 		mut res := []u8{cap: name.len + 2}
 		for i := 0; i < name.len; i++ {
 			ch := name[i]
@@ -96,65 +112,35 @@ pub fn get_factory_name(struct_name string, hierarchy map[string][]string) strin
 	return 'new_${sanitized.to_lower()}'
 }
 
-pub const v_reserved_keywords = [
-	'fn',
-	'type',
-	'struct',
-	'mut',
-	'if',
-	'else',
-	'for',
-	'return',
-	'match',
-	'interface',
-	'enum',
-	'pub',
-	'import',
-	'module',
-	'const',
-	'unsafe',
-	'defer',
-	'go',
-	'chan',
-	'shared',
-	'spawn',
-	'assert',
-	'sizeof',
-	'typeof',
-	'__global',
-	'as',
-	'in',
-	'is',
-	'none',
-	'map',
-	'array',
-	'string',
-	'bool',
-	'Any',
-	'union',
-]
+// is_v_reserved_keyword checks if the name is a V reserved keyword.
+// This is optimized to use a match expression for faster lookup.
+pub fn is_v_reserved_keyword(name string) bool {
+	return match name {
+		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface',
+		'enum', 'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared',
+		'spawn', 'assert', 'sizeof', 'typeof', '__global', 'as', 'in', 'is', 'none', 'map',
+		'array', 'string', 'bool', 'Any', 'union' {
+			true
+		}
+		else {
+			false
+		}
+	}
+}
 
-// v_reserved_types contains V built-in types that should not be sanitized.
-// Optimization: Moved to a global constant to avoid redundant heap allocations on every sanitize_name call.
-pub const v_reserved_types = [
-	'int',
-	'string',
-	'bool',
-	'f64',
-	'f32',
-	'i64',
-	'byte',
-	'rune',
-	'void',
-	'Any',
-	'none',
-	'i8',
-	'i16',
-	'i32',
-	'u16',
-	'u32',
-	'u64',
-]
+// is_v_reserved_type checks if the name is a V reserved type.
+// This is optimized to use a match expression for faster lookup.
+pub fn is_v_reserved_type(name string) bool {
+	return match name {
+		'int', 'string', 'bool', 'f64', 'f32', 'i64', 'byte', 'rune', 'void', 'Any', 'none',
+		'i8', 'i16', 'i32', 'u16', 'u32', 'u64' {
+			true
+		}
+		else {
+			false
+		}
+	}
+}
 
 // sanitize_name sanitizes Python identifiers to comply with V
 pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, scc_prefix string, local_vars map[string]bool) string {
@@ -163,7 +149,7 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 	}
 
 	// V reserved types are kept as is
-	if name in v_reserved_types {
+	if is_v_reserved_type(name) {
 		return name
 	}
 
@@ -201,7 +187,7 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 		res = res.replace('_', '')
 		res += '_'.repeat(prefix_count)
 
-		if res in reserved_words || res in v_reserved_keywords {
+		if res in reserved_words || is_v_reserved_keyword(res) {
 			return 'Py${res}'
 		}
 		return res
@@ -211,7 +197,7 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 	mut sanitized := to_snake_case(clean_name)
 	sanitized += '_'.repeat(prefix_count)
 
-	if sanitized in reserved_words || sanitized in v_reserved_keywords {
+	if sanitized in reserved_words || is_v_reserved_keyword(sanitized) {
 		return 'py_${sanitized}'
 	}
 
