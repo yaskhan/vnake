@@ -80,6 +80,26 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 			}
 			return 'Any'
 		}
+		ast.Attribute {
+			val_type := t.guess_expr_type(node.value)
+			if val_type != 'Any' && val_type != 'int' {
+				attr_type := t.get_type(val_type.trim_left('?&') + '.' + node.attr)
+				if attr_type != 'Any' {
+					return attr_type
+				}
+			}
+			return 'Any'
+		}
+		ast.Subscript {
+			val_type := t.guess_expr_type(node.value)
+			if val_type.starts_with('[]') {
+				return val_type[2..]
+			}
+			if val_type.starts_with('map[') && val_type.contains(']') {
+				return val_type.all_after(']')
+			}
+			return 'Any'
+		}
 		else {}
 	}
 	return 'Any'
@@ -548,6 +568,12 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 		t.mark_mutated_expr(node.value)
 	}
 	
+	val_type := t.guess_expr_type(node.value)
+	if val_type != 'Any' && val_type != 'int' {
+		loc_key := '${node.token.line}:${node.token.column}'
+		t.location_map[loc_key] = val_type.trim_left('?&')
+	}
+
 	// TypedDict tracking for read access
 	dict_name := t.expr_to_name(node.value)
 	if dict_name.len > 0 {
@@ -1142,8 +1168,14 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				current := t.get_type(target.id)
 				is_cap := target.id.len > 0 && target.id[0].is_capital()
 				if value_type != 'Any' {
-					if current in ['Any', 'none', 'int'] || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
+					if (current in ['Any', 'none', 'int'] && value_type != 'none') || current == 'Any' || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
 						t.store_type(target.id, value_type)
+					}
+				} else if node.value is ast.Name {
+					// Propagate type from RHS if it's a name even if value_type is Any
+					rhs_type := t.get_type(node.value.id)
+					if rhs_type != 'Any' && rhs_type != 'int' {
+						t.store_type(target.id, rhs_type)
 					}
 				}
 				if node.value is ast.Lambda {
@@ -1152,17 +1184,21 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 			}
 			ast.Attribute {
 				t.mark_mutated_expr(target)
-				obj_name := t.render_expr(target.value)
-				if obj_name.len > 0 {
-					full_attr := '${obj_name}.${target.attr}'
-					current := t.get_type(full_attr)
-					if current in ['Any', 'unknown', 'none'] {
+				mut obj_key := t.guess_expr_type(target.value)
+				obj_key = obj_key.trim_left('?&')
+				if obj_key in ['Any', 'int', 'unknown'] {
+					obj_key = t.render_expr(target.value)
+				}
+				if obj_key.len > 0 {
+					full_attr := "${obj_key}.${target.attr}"
+					curr_attr_type := t.get_type(full_attr)
+					if value_type != 'none' || curr_attr_type == 'Any' {
 						t.store_type(full_attr, value_type)
 					}
 				}
 				if target.value is ast.Name && target.value.id == 'self' {
-					current := t.get_type(target.attr)
-					if current in ['Any', 'unknown', 'none'] {
+					curr_attr_type := t.get_type(target.attr)
+					if value_type != 'none' || curr_attr_type == 'Any' {
 						t.store_type(target.attr, value_type)
 					}
 				}

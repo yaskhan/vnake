@@ -151,7 +151,7 @@ pub fn (mut t TypeInferenceUtilsMixin) guess_node_type(node_type string) string 
 }
 
 pub fn map_python_type_to_v(py_type string) string {
-	mut clean_type := py_type.trim_space()
+	mut clean_type := py_type.trim_space().trim('\'"')
 	if clean_type.starts_with('typing_extensions.') {
 		clean_type = clean_type[18..]
 	}
@@ -258,7 +258,7 @@ pub fn map_python_type_to_v(py_type string) string {
 					else { others << m }
 				}
 				if has_none && others.len == 1 {
-					return '?${others[0]}'
+					return '?' + others[0]
 				}
 				
 				return mapped.join(' | ')

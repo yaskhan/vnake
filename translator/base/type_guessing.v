@@ -12,14 +12,14 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		loc_key := '${node.get_token().line}:${node.get_token().column}'
 		if loc_key in ctx.location_map {
 			res := ctx.location_map[loc_key]
-			if res != 'none' {
+			if res != 'none' && res != 'Any' && res != 'unknown' {
 				return res
 			}
 		}
 		if ctx.analyzer != unsafe { nil } {
 			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
 			if mypy_type := a.get_mypy_type(node.str(), loc_key) {
-				return mypy_type
+				return analyzer.map_python_type_to_v(mypy_type)
 			}
 		}
 	}
@@ -40,7 +40,7 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		return 'bool'
 	}
 	if node is ast.Call {
-		return guess_type_call(node, ctx)
+		return guess_type_call(node, ctx, use_location)
 	}
 	if node is ast.List || node is ast.Tuple {
 		return guess_type_list(node, ctx)
@@ -55,10 +55,10 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		return guess_type_name(node, ctx, use_location)
 	}
 	if node is ast.Attribute {
-		return guess_type_attribute(node, ctx)
+		return guess_type_attribute(node, ctx, use_location)
 	}
 	if node is ast.Subscript {
-		return guess_type_subscript(node, ctx)
+		return guess_type_subscript(node, ctx, use_location)
 	}
 	if node is ast.BinaryOp {
 		return guess_type_binop(node, ctx)
@@ -87,7 +87,7 @@ fn guess_constant_type(node ast.Constant) string {
 		if node.value.ends_with('j') {
 			return 'PyComplex'
 		}
-		if node.value.contains('.') {
+		if node.value.contains('.') || node.value.contains('e') || node.value.contains('E') {
 			return 'f64'
 		}
 		return 'int'
@@ -100,10 +100,19 @@ fn guess_constant_type(node ast.Constant) string {
 			return 'none'
 		}
 	}
-	return 'int' // legacy fallback
+	return 'Any'
 }
 
-fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
+fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) string {
+	if use_location {
+		loc_key := '${node.get_token().line}:${node.get_token().column}'
+		if loc_key in ctx.location_map {
+			res := ctx.location_map[loc_key]
+			if res != 'none' && res != 'Any' && res != 'unknown' {
+				return res
+			}
+		}
+	}
 	if node.func is ast.Name {
 		fid := node.func.id
 		if fid in ctx.defined_classes {
@@ -226,7 +235,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 			return 'none'
 		}
 	}
-	return 'int'
+	return 'Any'
 }
 
 fn guess_type_list(node ast.Expression, ctx TypeGuessingContext) string {
@@ -326,6 +335,13 @@ fn guess_type_dict(node ast.Dict, ctx TypeGuessingContext) string {
 }
 
 fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) string {
+	if use_location {
+		loc_key := '${node.get_token().line}:${node.get_token().column}'
+		if loc_key in ctx.location_map {
+			res := ctx.location_map[loc_key]
+			if res != 'int' && res != 'Any' && res != 'unknown' { return res }
+		}
+	}
 	actual_name := ctx.name_remap[node.id] or { node.id }
 	if actual_name.starts_with('(') && actual_name.contains(' as ') {
 		return actual_name.all_after(' as ').all_before(')').trim_space()
@@ -334,40 +350,97 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 		return 'Any'
 	}
 	if use_location {
-		loc_key := '${node.id}@${node.token.line}:${node.token.column}'
-		if loc_key in ctx.explicit_any_types {
-			return 'Any'
-		}
+		loc_key_alt := '${node.id}@${node.token.line}:${node.token.column}'
+		if loc_key_alt in ctx.explicit_any_types { return 'Any' }
+		if loc_key_alt in ctx.type_map { return ctx.type_map[loc_key_alt] }
 	}
-	if actual_name in ctx.known_v_types {
-		return ctx.known_v_types[actual_name]
-	}
-	if node.id in ctx.known_v_types {
-		return ctx.known_v_types[node.id]
-	}
-	if use_location {
-		loc_key := '${node.id}@${node.token.line}:${node.token.column}'
-		if loc_key in ctx.type_map {
-			return ctx.type_map[loc_key]
-		}
-	}
+	if actual_name in ctx.known_v_types { return ctx.known_v_types[actual_name] }
+	if node.id in ctx.known_v_types { return ctx.known_v_types[node.id] }
+
 	if node.id in ctx.type_map {
-		return ctx.type_map[node.id]
+		res := ctx.type_map[node.id]
+		if res != 'int' && res != 'Any' && res != 'unknown' { return res }
+	}
+	if ctx.analyzer != unsafe { nil } {
+		analyzer_ptr := unsafe { &analyzer.Analyzer(ctx.analyzer) }
+		loc_key := '${node.token.line}:${node.token.column}'
+		if res := analyzer_ptr.get_mypy_type(node.id, loc_key) {
+			return analyzer.map_python_type_to_v(res)
+		}
+		if res := analyzer_ptr.get_mypy_type('', loc_key) {
+			return analyzer.map_python_type_to_v(res)
+		}
+		if res := analyzer_ptr.get_mypy_type(node.str(), loc_key) {
+			return analyzer.map_python_type_to_v(res)
+		}
+		if res := analyzer_ptr.mypy_store.collected_types[node.id] {
+			mut closest_typ := ''
+			mut min_dist := 1000000
+			line_num := node.token.line
+			for k, v in res {
+				l := k.all_before(':').int()
+				if l > 0 {
+					dist := if l <= line_num { line_num - l } else { l - line_num }
+					if dist < min_dist {
+						min_dist = dist
+						closest_typ = v
+					}
+				}
+			}
+			if closest_typ != '' { return analyzer.map_python_type_to_v(closest_typ) }
+		}
+		if analyzer_ptr.has_type(node.id) {
+			return analyzer_ptr.get_type(node.id) or { 'int' }
+		}
 	}
 	return 'int'
 }
 
-fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext) string {
+fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_location bool) string {
+	if use_location {
+		loc_key := '${node.token.line}:${node.token.column}'
+		if loc_key in ctx.location_map {
+			return ctx.location_map[loc_key]
+		}
+		if ctx.analyzer != unsafe { nil } {
+			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
+			full_name := analyzer.expr_name(node)
+			if res := a.get_mypy_type(full_name, loc_key) {
+				return analyzer.map_python_type_to_v(res)
+			}
+			if res := a.get_mypy_type(node.attr, loc_key) {
+				return analyzer.map_python_type_to_v(res)
+			}
+		}
+	}
+
+	val_type := guess_type(node.value, ctx, false)
+	base_type := val_type.trim_left('?&')
+	if base_type != 'Any' && base_type != 'int' {
+		attr_name := '${base_type}.${node.attr}'
+		if attr_name in ctx.type_map { return ctx.type_map[attr_name] }
+		if ctx.analyzer != unsafe { nil } {
+			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
+			if a.has_type(attr_name) {
+				return a.get_type(attr_name) or { 'Any' }
+			}
+		}
+	}
+
 	if node.value is ast.Name {
 		attr_name := '${node.value.id}.${node.attr}'
-		if attr_name in ctx.type_map {
-			return ctx.type_map[attr_name]
-		}
+		if attr_name in ctx.type_map { return ctx.type_map[attr_name] }
 	}
 	return 'Any'
 }
 
-fn guess_type_subscript(node ast.Subscript, ctx TypeGuessingContext) string {
+fn guess_type_subscript(node ast.Subscript, ctx TypeGuessingContext, use_location bool) string {
+	if use_location {
+		loc_key := '${node.token.line}:${node.token.column}'
+		if loc_key in ctx.location_map {
+			return ctx.location_map[loc_key]
+		}
+	}
 	val_type := guess_type(node.value, ctx, true)
 	if val_type.starts_with("[]") {
 		return val_type[2..]
@@ -504,3 +577,6 @@ pub fn is_literal_string_expr(node ast.Expression, ctx TypeGuessingContext) bool
 	return false
 }
 
+fn is_string_type(typ string) bool {
+	return typ == 'string' || typ == 'LiteralString'
+}
