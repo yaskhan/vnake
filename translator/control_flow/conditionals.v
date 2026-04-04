@@ -350,23 +350,72 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 
 		// Pre-declare conditionally initialized variables
 		if_vars := m.collect_assigned_vars(node.body)
-		else_vars := if node.orelse.len > 0 { m.collect_assigned_vars(node.orelse) } else { map[string]bool{} }
-		for var, _ in if_vars {
+		else_vars := if node.orelse.len > 0 { m.collect_assigned_vars(node.orelse) } else { []AssignedVar{} }
+		mut seen_vars := map[string]bool{}
+		for vinfo in if_vars {
+			var := vinfo.name
+			if var.contains('.') { continue }
+			target_expr := vinfo.expr
 			if !m.is_declared_local(var) {
-				mut v_type := m.guess_type(ast.Name{id: var})
+				mut v_type := m.guess_type(target_expr)
 				if v_type == 'unknown' || v_type == 'none' || v_type == '?none' { v_type = 'Any' }
-				if !v_type.starts_with('?') { v_type = '?${v_type}' }
+
+				mut base_v_type := v_type.trim_left('?&')
+				if base_v_type in m.env.state.defined_classes {
+					if !v_type.contains('&') {
+						if v_type.starts_with('?') {
+							v_type = '?&' + v_type[1..]
+						} else {
+							v_type = '&' + v_type
+						}
+					}
+				}
+
+				if v_type == 'int' || v_type == 'unknown' {
+					v_type = 'Any'
+				}
+				if !v_type.starts_with('?') {
+					v_type = '?' + v_type
+				}
+				if v_type == '?Any' {
+				    v_type = 'Any'
+				}
 				m.emit('mut ${var} := ${v_type}(none)')
 				m.declare_local(var)
 				m.env.analyzer.type_map[var] = v_type
 				m.env.analyzer.raw_type_map[var] = v_type
+				seen_vars[var] = true
 			}
 		}
-		for var, _ in else_vars {
+		for vinfo in else_vars {
+			var := vinfo.name
+			if var.contains('.') { continue }
+			target_expr := vinfo.expr
 			if !m.is_declared_local(var) {
-				mut v_type := m.guess_type(ast.Name{id: var})
+				if var in seen_vars { continue }
+				mut v_type := m.guess_type(target_expr)
 				if v_type == 'unknown' || v_type == 'none' || v_type == '?none' { v_type = 'Any' }
-				if !v_type.starts_with('?') { v_type = '?${v_type}' }
+
+				mut base_v_type := v_type.trim_left('?&')
+				if base_v_type in m.env.state.defined_classes {
+					if !v_type.contains('&') {
+						if v_type.starts_with('?') {
+							v_type = '?&' + v_type[1..]
+						} else {
+							v_type = '&' + v_type
+						}
+					}
+				}
+
+				if v_type == 'int' || v_type == 'unknown' {
+					v_type = 'Any'
+				}
+				if !v_type.starts_with('?') {
+					v_type = '?' + v_type
+				}
+				if v_type == '?Any' {
+				    v_type = 'Any'
+				}
 				m.emit('mut ${var} := ${v_type}(none)')
 				m.declare_local(var)
 				m.env.analyzer.type_map[var] = v_type

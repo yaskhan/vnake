@@ -80,6 +80,26 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 			}
 			return 'Any'
 		}
+		ast.Attribute {
+			val_type := t.guess_expr_type(node.value)
+			if val_type != 'Any' && val_type != 'int' {
+				attr_type := t.get_type(val_type.trim_left('?&') + '.' + node.attr)
+				if attr_type != 'Any' {
+					return attr_type
+				}
+			}
+			return 'Any'
+		}
+		ast.Subscript {
+			val_type := t.guess_expr_type(node.value)
+			if val_type.starts_with('[]') {
+				return val_type[2..]
+			}
+			if val_type.starts_with('map[') && val_type.contains(']') {
+				return val_type.all_after(']')
+			}
+			return 'Any'
+		}
 		else {}
 	}
 	return 'Any'
@@ -548,6 +568,12 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 		t.mark_mutated_expr(node.value)
 	}
 	
+	val_type := t.guess_expr_type(node.value)
+	if val_type != 'Any' && val_type != 'int' {
+		loc_key := '${node.token.line}:${node.token.column}'
+		t.location_map[loc_key] = val_type.trim_left('?&')
+	}
+
 	// TypedDict tracking for read access
 	dict_name := t.expr_to_name(node.value)
 	if dict_name.len > 0 {

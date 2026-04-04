@@ -345,7 +345,10 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 		}
 	}
 	if node.id in ctx.type_map {
-		return ctx.type_map[node.id]
+		res := ctx.type_map[node.id]
+		if res != 'int' && res != 'Any' && res != 'unknown' {
+			return res
+		}
 	}
 	return 'int'
 }
