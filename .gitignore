@@ -90,3 +90,4 @@ test_results.txt
 test_results*.txt
 *.diff
 *.patch
+raw_type_map_debug.json
