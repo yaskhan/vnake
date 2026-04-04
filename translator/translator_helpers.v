@@ -229,6 +229,17 @@ fn (mut t Translator) append_helpers() {
     return res
 }')
 	}
+	if t.state.used_delete_many {
+		t.emit_function_code('fn (mut a []T) delete_many[T](start int, count int) {
+    if count <= 0 { return }
+    a.delete(start, start + count)
+}')
+	}
+	if t.state.used_insert_many {
+		t.emit_function_code('fn (mut a []T) insert_many[T](index int, val []T) {
+    a.insert(index, val)
+}')
+	}
     for name, def in t.state.generated_sum_types {
         if name.contains('|') {
              // Derive SumType name from the union string itself to be safe

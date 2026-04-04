@@ -587,6 +587,18 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			t.emit_indented('${t.visit_expr(target.value)}.${field_name} = ${rhs}')
 			return
 		}
+		if target.slice is ast.Slice {
+			sl := target.slice
+			list_obj := t.visit_expr(target.value)
+			lower := if val := sl.lower { t.visit_expr(val) } else { '0' }
+			upper := if val := sl.upper { t.visit_expr(val) } else { '${list_obj}.len' }
+			
+			t.state.used_delete_many = true
+			t.state.used_insert_many = true
+			t.emit_indented('${list_obj}.delete_many(${lower}, (${upper}) - (${lower}))')
+			t.emit_indented('${list_obj}.insert_many(${lower}, ${rhs})')
+			return
+		}
 		t.emit_indented('${t.visit_expr(target.value)}[${t.visit_expr(target.slice)}] = ${rhs}')
 		return
 	}

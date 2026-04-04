@@ -624,6 +624,17 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
     return res
 }')
 	}
+	if m.state.used_delete_many {
+		m.emitter.add_helper_function('fn (mut a []T) delete_many[T](start int, count int) {
+    if count <= 0 { return }
+    a.delete(start, start + count)
+}')
+	}
+	if m.state.used_insert_many {
+		m.emitter.add_helper_function('fn (mut a []T) insert_many[T](index int, val []T) {
+    a.insert(index, val)
+}')
+	}
 
 	if m.state.used_builtins['py_list_slice'] {
 		m.emitter.add_helper_function('fn py_list_slice[T](arr []T, start ?Any, end ?Any, step ?Any) []T {
