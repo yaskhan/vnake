@@ -159,6 +159,7 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				}
 				'dict', 'Dict' { 'map[string]Any' }
 				'set', 'Set' { 'datatypes.Set[Any]' }
+				'callable', 'Callable' { 'fn (...Any) Any' }
 				else {
 					full_sym := t.state.imported_symbols[node.id] or { node.id }
 					if node.id in t.state.paramspec_vars { return '...Any' }
@@ -300,7 +301,7 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				t.state.used_builtins['LiteralEnum_'] = true
 				return 'LiteralEnum_'
 			}
-			if base_raw in ['Callable', 'typing.Callable', 'collections.abc.Callable'] {
+			if base_raw in ['Callable', 'typing.Callable', 'collections.abc.Callable', 'callable'] {
 				mut arg_types := []string{}
 				mut ret_type := 'Any'
 				if node.slice is ast.Tuple {
@@ -527,8 +528,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.analyzer.mypy_store = analyzer.run_mypy_analysis(preprocessed, filename)
 
 	t.coroutine_handler.scan_module(module_node)
-	// Second pass to propagate inferences back to aliases
-	t.analyzer.analyze(module_node)
+	for name, yield_type in t.coroutine_handler.generators {
+		t.analyzer.type_map['${name}@return'] = 'PyGenerator[${yield_type}]'
+	}
 
 	for k, v in t.analyzer.class_hierarchy {
 		t.state.class_hierarchy[k] = v.clone()

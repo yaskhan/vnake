@@ -10,4 +10,5 @@ pub mut:
 	explicit_any_types map[string]bool
 	target_type        string
 	analyzer           voidptr = unsafe { nil }
+	coroutine_handler  voidptr = unsafe { nil }
 }

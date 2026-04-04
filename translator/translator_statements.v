@@ -3,6 +3,7 @@ module translator
 import ast
 import base
 import expressions
+import analyzer
 
 fn (mut t Translator) emit_block(stmts []ast.Statement) {
 	for stmt in stmts {
@@ -215,6 +216,10 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 				return
 			}
 		}
+	}
+	if val is ast.YieldFrom {
+		t.emit_yield_from(val)
+		return
 	}
 	expr := t.visit_expr(val)
 	if expr.len > 0 {
@@ -779,4 +784,23 @@ fn (t &Translator) stmt_name_usage(node ast.Statement, name string) int {
 			return 0
 		}
 	}
+}
+
+fn (mut t Translator) emit_yield_from(node ast.YieldFrom) {
+	mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
+	val := eg.visit(node.value)
+
+	// Get active channels from coroutine handler if available
+	if t.state.coroutine_handler != unsafe { nil } {
+		mut ch := unsafe { &analyzer.CoroutineHandler(t.state.coroutine_handler) }
+		if act_ch := ch.active_channel {
+			in_ch := ch.active_in_channel or { 'ch_in' }
+			t.emit_indented('for v in ${val} {')
+			t.emit_indented('    py_yield(${act_ch}, ${in_ch}, v)')
+			t.emit_indented('}')
+			t.state.used_builtins['py_yield'] = true
+			return
+		}
+	}
+	t.emit_indented('/* yield from outside generator */ ${val}')
 }

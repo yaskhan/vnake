@@ -94,6 +94,7 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		'builtins.float' { return 'f64' }
 		'builtins.str' { return 'string' }
 		'builtins.bool' { return 'bool' }
+		'Callable', 'callable', 'typing.Callable', 'collections.abc.Callable' { return 'fn (...Any) Any' }
 		else {}
 	}
 	

@@ -55,7 +55,7 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 		return 'fn(${wrapper_params.join(", ")}) PyGenerator[${gen_yield_type}] {
     ch_out := chan ${gen_yield_type}{cap: 0}
     ch_in := chan PyGeneratorInput{cap: 0}
-    go ${go_call_recv}${func_to_call_name}(${go_args.join(", ")})
+    spawn ${go_call_recv}${func_to_call_name}(${go_args.join(", ")})
     return PyGenerator[${gen_yield_type}]{out: ch_out, in_: ch_in}
 }(${wrapper_args.join(", ")})'
 	}

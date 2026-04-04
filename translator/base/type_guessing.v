@@ -109,6 +109,13 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext) string {
 		if fid in ctx.defined_classes {
 			return fid
 		}
+		if ctx.coroutine_handler != unsafe { nil } {
+			ch := unsafe { &analyzer.CoroutineHandler(ctx.coroutine_handler) }
+			if ch.is_generator(fid) {
+				yield_type := ch.generators[fid] or { 'int' }
+				return 'PyGenerator[${yield_type}]'
+			}
+		}
 		if fid.len > 0 && fid[0].is_capital() {
 			current := ctx.type_map[fid] or { 'Any' }
 			if current == '[]Any' { return '[]Any' }

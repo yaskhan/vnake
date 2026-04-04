@@ -130,6 +130,19 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 
 	mut target := m.visit_expr(node.target)
 	mut iter_expr := m.visit_expr(node.iter)
+	iter_type := m.guess_type(node.iter)
+	if iter_type.starts_with('PyGenerator') {
+		m.emit('for ${target} in ${iter_expr}.out {')
+		m.env.state.indent_level++
+		for stmt in node.body {
+			m.visit_stmt(stmt)
+		}
+		m.env.state.indent_level--
+		m.emit('}')
+		m.pop_loop_ctx()
+		m.emit_for_else(node, flag_name)
+		return
+	}
 
 	mut is_zip := false
 	mut is_range := false

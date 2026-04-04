@@ -33,6 +33,7 @@ pub fn (eg &ExprGen) type_ctx() base.TypeGuessingContext {
 		explicit_any_types: eg.analyzer.explicit_any_types
 		target_type:        eg.target_type
 		analyzer:           eg.analyzer
+		coroutine_handler:  eg.state.coroutine_handler
 	}
 }
 
