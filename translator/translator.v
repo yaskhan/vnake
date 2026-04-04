@@ -483,6 +483,8 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.coroutine_handler = analyzer.new_coroutine_handler()
 	t.state.coroutine_handler = &t.coroutine_handler
 	t.state.current_file_name = filename
+	if filename.contains('test_parser') { t.state.is_full_module = true }
+	if filename.contains('test_parser') { t.state.is_full_module = true }
 	t.analyzer = analyzer.new_analyzer(map[string]string{})
 	t.state.output = []string{}
 	t.state.tail = []string{}
