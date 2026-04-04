@@ -1,2 +1,2 @@
-@@in# "Mixin"
-@@in# "struct Target {"
+@@in# "AuthMixin"
+@@in# "struct User {"
