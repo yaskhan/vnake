@@ -1,3 +1,3 @@
-@@in# "Mixin"
-@@in# "struct Target1 {"
-@@in# "struct Target2 {"
+@@in# "BaseMixin"
+@@in# "struct ServiceA {"
+@@in# "struct ServiceB {"
