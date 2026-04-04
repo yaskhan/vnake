@@ -727,6 +727,7 @@ pub mut:
 	reassigned_params     map[string]bool
 	scope_stack           []string
 	mutability_map        map[string]MutabilityInfo
+	seen_in_scope         map[string]bool
 }
 
 pub fn new_function_mutability_scanner() FunctionMutabilityScanner {
@@ -738,6 +739,29 @@ pub fn new_function_mutability_scanner() FunctionMutabilityScanner {
 		reassigned_params:     map[string]bool{}
 		scope_stack:           []string{}
 		mutability_map:        map[string]MutabilityInfo{}
+		seen_in_scope:         map[string]bool{}
+	}
+}
+
+fn (mut f FunctionMutabilityScanner) add_to_seen(node ast.Expression) {
+	match node {
+		ast.Name {
+			f.seen_in_scope[node.id] = true
+		}
+		ast.Tuple {
+			for elt in node.elements {
+				f.add_to_seen(elt)
+			}
+		}
+		ast.List {
+			for elt in node.elements {
+				f.add_to_seen(elt)
+			}
+		}
+		ast.Starred {
+			f.add_to_seen(node.value)
+		}
+		else {}
 	}
 }
 
@@ -753,12 +777,10 @@ fn (mut f FunctionMutabilityScanner) get_base_node(node ast.Expression) ast.Expr
 fn (mut f FunctionMutabilityScanner) mark_mutated(node ast.Expression) {
 	match node {
 		ast.Name {
-			if node.id in f.current_params {
-				f.mutated_params[node.id] = true
-			}
+			f.mutated_params[node.id] = true
 		}
 		ast.Attribute {
-			if node.value is ast.Name && node.value.id in f.current_params {
+			if node.value is ast.Name {
 				f.mutated_params[node.value.id] = true
 				if f.scope_stack.len > 0 && node.value.id in ["self", "cls"] {
 					prefix := f.scope_stack.join(".")
@@ -794,7 +816,7 @@ fn (mut f FunctionMutabilityScanner) mark_mutated(node ast.Expression) {
 fn (mut f FunctionMutabilityScanner) mark_reassigned(node ast.Expression) {
 	match node {
 		ast.Name {
-			if node.id in f.current_params {
+			if node.id in f.seen_in_scope || node.id in f.current_params {
 				f.reassigned_params[node.id] = true
 			}
 		}
@@ -948,6 +970,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			old_params := f.current_params.clone()
 			old_mutated := f.mutated_params.clone()
 			old_reassigned := f.reassigned_params.clone()
+			old_seen := f.seen_in_scope.clone()
 
 			f.current_func = node.name
 			mut params := []string{}
@@ -963,6 +986,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			f.current_params = params
 			f.mutated_params = map[string]bool{}
 			f.reassigned_params = map[string]bool{}
+			f.seen_in_scope = map[string]bool{}
 
 			for stmt in node.body {
 				f.visit_stmt(stmt)
@@ -999,6 +1023,18 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 				f.func_param_mutability[func_qual_name] = mutated_indices.clone()
 			}
 
+			// Populate general mutability for all locals
+			for name, _ in f.mutated_params {
+				mut info := f.mutability_map[name] or { MutabilityInfo{} }
+				info.is_mutated = true
+				f.mutability_map[name] = info
+			}
+			for name, _ in f.reassigned_params {
+				mut info := f.mutability_map[name] or { MutabilityInfo{} }
+				info.is_reassigned = true
+				f.mutability_map[name] = info
+			}
+			f.seen_in_scope = old_seen.clone()
 			f.current_func = old_func
 			f.current_params = old_params
 			f.mutated_params = old_mutated.clone()
@@ -1008,8 +1044,10 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			for target in node.targets {
 				if target is ast.Subscript || target is ast.Attribute {
 					f.mark_mutated(target)
+					f.add_to_seen(target)
 				} else if target is ast.Name {
 					f.mark_reassigned(target)
+					f.add_to_seen(target)
 				}
 			}
 			f.visit_expr(node.value)
@@ -1020,8 +1058,10 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		ast.AugAssign {
 			if node.target is ast.Subscript || node.target is ast.Attribute {
 				f.mark_mutated(node.target)
+			f.add_to_seen(node.target)
 			} else if node.target is ast.Name {
 				f.mark_reassigned(node.target)
+			f.add_to_seen(node.target)
 			}
 			f.visit_expr(node.target)
 			f.visit_expr(node.value)
@@ -1030,6 +1070,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			for target in node.targets {
 				if target is ast.Subscript || target is ast.Attribute {
 					f.mark_mutated(target)
+					f.add_to_seen(target)
 				}
 				f.visit_expr(target)
 			}
@@ -1052,6 +1093,8 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			}
 		}
 		ast.For {
+			f.mark_reassigned(node.target)
+			f.add_to_seen(node.target)
 			f.visit_expr(node.target)
 			f.visit_expr(node.iter)
 			for stmt in node.body {
@@ -1074,6 +1117,8 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			for item in node.items {
 				f.visit_expr(item.context_expr)
 				if optional_vars := item.optional_vars {
+					f.mark_reassigned(optional_vars)
+					f.add_to_seen(optional_vars)
 					f.visit_expr(optional_vars)
 				}
 			}
@@ -1156,8 +1201,10 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			if _ := node.value {
 				if node.target is ast.Subscript || node.target is ast.Attribute {
 					f.mark_mutated(node.target)
+			f.add_to_seen(node.target)
 				} else if node.target is ast.Name {
 					f.mark_reassigned(node.target)
+			f.add_to_seen(node.target)
 				}
 			}
 			f.visit_expr(node.target)
