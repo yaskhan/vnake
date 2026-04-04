@@ -379,13 +379,13 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		iterable := args[1]
 		mut inner := func
 		// Handle basic type constructors as callbacks
-		if func == "'string'" {
+		if func == 'string' {
 			inner = 'it.str()'
-		} else if func == "'int'" {
+		} else if func == 'int' {
 			inner = 'it.int()'
-		} else if func in ["'f64'", "'float'"] {
+		} else if func in ['f64', 'float'] {
 			inner = 'it.f64()'
-		} else if func == "'bool'" {
+		} else if func == 'bool' {
 			inner = 'py_bool(it)'
 		} else if !func.contains('fn (') && !func.contains('(') {
 			inner = '${func}(it)'

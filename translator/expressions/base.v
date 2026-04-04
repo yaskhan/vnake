@@ -412,7 +412,7 @@ pub fn (mut eg ExprGen) visit_list(node ast.List) string {
 				args << '[${val}]'
 			}
 		}
-		return 'py_list_concat([${args.join(', ')}])'
+		return 'py_list_concat(${args.join(', ')})'
 	}
 	
 	if values.len == 0 {
@@ -467,7 +467,7 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 				args << '[${val}]'
 			}
 		}
-		return 'py_list_concat([${args.join(', ')}])'
+		return 'py_list_concat(${args.join(', ')})'
 	}
 	
 	return '[${values.join(', ')}]'
@@ -549,7 +549,7 @@ pub fn (mut eg ExprGen) visit_set(node ast.Set) string {
 				args << '[${val}]'
 			}
 		}
-		return 'py_set_create([${args.join(', ')}])'
+		return 'py_set_create(${args.join(', ')})'
 	}
 
 	if node.elements.len == 0 {
