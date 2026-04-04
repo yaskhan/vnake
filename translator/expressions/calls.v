@@ -453,17 +453,30 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 			return 'py_chain(${args.join(', ')})'
 		}
 	}
+	if func_name_str == 'bytearray.fromhex' && args.len == 1 {
+		eg.state.used_builtins['encoding.hex'] = true
+		return "hex.decode(${args[0]}) or { []u8{} }"
+	}
+	if func_name_str == 'memoryview' && args.len == 1 {
+		return args[0]
+	}
 	if func_name_str in ['bytes', 'bytearray'] {
+		if args.len == 0 {
+			return "[]u8{}"
+		}
 		if args.len > 0 {
 			if args[0].starts_with("'") || args[0].starts_with('"') {
-				return '${args[0]}.bytes()'
+				return "${args[0]}.bytes()"
+			}
+			if args[0].starts_with("[") && args[0].ends_with("]") {
+				return args[0]
 			}
 			if eg.guess_type(node.args[0]) == 'int' {
-				return '[]u8{len: ${args[0]}}'
+				return "[]u8{len: ${args[0]}}"
 			}
 		}
 		eg.state.used_builtins['py_${func_name_str}'] = true
-		return 'py_${func_name_str}(${args.join(', ')})'
+		return "py_${func_name_str}(${args.join(', ')})"
 	}
 	if func_name_str == 'sorted' {
 		eg.state.used_builtins['py_sorted'] = true
