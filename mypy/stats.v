@@ -184,7 +184,10 @@ pub fn (v StatisticsVisitor) is_checked_scope() bool {
 
 // visit_class_def visits a class definition
 pub fn (mut v StatisticsVisitor) visit_class_def(o ClassDef) {
-	v.record_line(o.base.ctx.line, type_precise) // TODO: Look at base classes
+	v.record_line(o.base.ctx.line, type_precise)
+	for base_expr in o.base_type_exprs {
+		v.process_node(base_expr)
+	}
 	// While base_type_exprs are technically expressions, type analyzer does not visit them
 	for _ in o.decorators {
 		// Decorators are intentionally ignored here.
@@ -425,13 +428,13 @@ pub fn (mut v StatisticsVisitor) type_node(t ?MypyTypeNode) {
 		return
 	}
 
-	// if isinstance(t, AnyType) and is_special_form_any(t):
-	//     # TODO: What if there is an error in special form definition?
-	//     self.record_line(self.line, TYPE_PRECISE)
-	//     return
 
 	match node_t {
 		AnyType {
+			if is_special_form_any(node_t) {
+				v.record_line(v.line, type_precise)
+				return
+			}
 			// self.log("  !! Any type around line %d" % self.line)
 			v.num_any_exprs++
 			v.record_line(v.line, type_any)
