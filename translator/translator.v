@@ -585,6 +585,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	if t.state.used_builtins['encoding.base64'] {
 		e.add_import('encoding.base64')
 	}
+	if t.state.used_builtins['encoding.hex'] {
+		e.add_import('encoding.hex')
+	}
 	if t.state.used_builtins['compress.zlib'] {
 		e.add_import('compress.zlib')
 	}
