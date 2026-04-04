@@ -19,20 +19,7 @@ pub fn get_generic_map(generic_names []string, generic_scopes []map[string]strin
 		}
 
 		preferred := clean[0].ascii_str().to_upper()
-		
-		// Check if it's already in an outer scope with the same py_name
-		mut found_outer := false
-		for scope in generic_scopes {
-			// check if preferred mapping for py_name already exists in a scope
-			if scope[py_name] == preferred {
-				mapping[py_name] = preferred
-				found_outer = true
-				break
-			}
-		}
-		if found_outer {
-			continue
-		}
+		mapping[py_name] = preferred // Default, will be adjusted below if busy
 
 		if preferred !in used_chars {
 			mapping[py_name] = preferred

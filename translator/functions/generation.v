@@ -18,7 +18,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		return
 	}
 
-	is_method := struct_name.len > 0
+	is_method := struct_name.len > 0 && env.state.scope_stack.len == 0
 	mut is_abstract := false
 	for base_name in env.state.current_class_bases {
 		if node.name in env.state.abstract_methods[base_name] {
@@ -30,7 +30,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		return
 	}
 
-	is_nested := env.state.scope_stack.len > 0 && !is_method
+	mut is_nested := env.state.scope_stack.len > 0
 	mut annotations_data := map[string]string{}
 	
 	dec_info := h.get_decorator_info(node, struct_name, env)
@@ -133,11 +133,22 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		}
 	}
 
-	env.state.generic_scopes << base.get_generic_map(py_func_generics, [env.state.current_class_generic_map])
+	needs_lifting := py_func_generics.len > 0 && env.state.scope_stack.len > 0
+	if needs_lifting {
+		is_nested = false
+	}
+	
+
+	mut parent_scopes := [env.state.current_class_generic_map]
+	parent_scopes << env.state.generic_scopes
+	env.state.generic_scopes << base.get_generic_map(py_func_generics, parent_scopes)
 	defer { env.state.generic_scopes.pop() }
 
-	v_gens_to_declare := base.get_all_active_v_generics(env.state.generic_scopes)
-	func_generics_str := base.get_generics_with_variance_str(v_gens_to_declare, env.state.generic_scopes.last(), env.state.generic_variance, env.state.generic_defaults)
+	mut all_active_scopes := [env.state.current_class_generic_map]
+	all_active_scopes << env.state.generic_scopes
+	v_gens_to_declare := base.get_all_active_v_generics(all_active_scopes)
+	combined_map := base.get_combined_generic_map(all_active_scopes)
+	func_generics_str := base.get_generics_with_variance_str(v_gens_to_declare, combined_map, env.state.generic_variance, env.state.generic_defaults)
 
 	if is_generator {
 		yield_type := coroutine_handler.get_yield_type(node)
@@ -294,6 +305,10 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			p_key_ret := if struct_name.len > 0 { '${struct_name}.${node.name}@return' } else { '${node.name}@return' }
 			inf_ret := env.analyzer.get_type(p_key_ret) or { 'void' }
 			ret_type = env.map_type_fn(inf_ret, struct_name, true, false, false)
+		}
+		
+		if node.returns == none && (ret_type == 'fn (...Any) Any' || ret_type.contains('|')) {
+			ret_type = 'Any'
 		}
 
 		if ret_type == 'Self' || (node.name == '__enter__' && ret_type == 'void') {

@@ -329,11 +329,11 @@ fn clean_expected_snippet(snippet string) string {
 }
 
 fn normalize_text(code string) string {
-	res := code.replace('"', "'").replace('__global', '')
+	res := code.replace('"', "'").replace('__global', '').replace('_', '')
 	mut out := []u8{cap: res.len}
 	for ch in res {
 		if !ch.is_space() {
-			out << ch
+			out << if ch.is_capital() { ch + 32 } else { ch }
 		}
 	}
 	return out.bytestr()

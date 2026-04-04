@@ -59,7 +59,11 @@ fn (mut t Translator) visit_function_def(node &ast.FunctionDef) {
 	t.current_function_name = prev_func
 	
 	if func_code.len > 0 {
-		if prev_func.len > 0 {
+		// Lift generic functions to top-level even if they are nested.
+		// Non-generic nested functions can stay as closures if they were generated that way.
+		is_lifted := node.type_params.len > 0 || (prev_func.len > 0 && !func_code.contains(' := fn '))
+		
+		if prev_func.len > 0 && !is_lifted {
 			t.state.output << func_code
 		} else {
 			t.emit_function_code(func_code)

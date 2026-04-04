@@ -12,7 +12,7 @@ pub mut:
 pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut env ClassVisitEnv, mut classes ClassesModule) {
 	mut struct_name := sanitize_name(node.name, true)
 	if h.class_stack.len > 0 {
-		struct_name = h.class_stack.join('_') + '_' + struct_name
+		struct_name = h.class_stack.join('') + struct_name
 	}
 	if h.class_stack.len == 0 {
 		env.state.defined_top_level_symbols[node.name] = true
@@ -71,15 +71,24 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 
 	env.state.current_class = struct_name
 	env.state.current_class_body = node.body.clone()
-	env.state.current_class_generics = py_generics.clone()
+	
+	mut all_class_generics := prev_generics.clone()
+	for pg in py_generics {
+		if pg !in all_class_generics { all_class_generics << pg }
+	}
+	env.state.current_class_generics = all_class_generics.clone()
 	env.state.current_class_generic_map = map[string]string{}
 	env.state.current_class_bases = []string{}
 	env.state.current_class_generic_bases = map[string]string{}
 	env.state.current_class_is_unittest = false
 
 	if py_generics.len > 0 {
-		env.state.current_class_generic_map = base.get_generic_map(py_generics, [])
+		mut parent_maps := []map[string]string{}
+		if prev_generic_map.len > 0 { parent_maps << prev_generic_map }
+		env.state.current_class_generic_map = base.get_generic_map(py_generics, parent_maps)
 	}
+	env.state.generic_scopes << env.state.current_class_generic_map
+	defer { env.state.generic_scopes.pop() }
 
 	if classes.pydantic_handler.is_pydantic_model(node) {
 		mut p_env := pydantic_support.new_pydantic_visit_env(
