@@ -294,6 +294,7 @@ fn (mut eg ExprGen) format_repeated_list_literal(list_node ast.List, len_node as
 		} else {
 			elem_type = '?Any'
 		}
+		return "[]${elem_type}{len: ${len_expr}, init: none}"
 	}
 
 	match init_node {
