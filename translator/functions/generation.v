@@ -110,7 +110,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 	if node.type_params.len > 0 {
 		for param in node.type_params {
-			if param.name !in py_func_generics { py_func_generics << param.name }
+			mut clean_p := param.name
+			if clean_p.starts_with('**') { clean_p = clean_p[2..] }
+			else if clean_p.starts_with('*') { clean_p = clean_p[1..] }
+			
+			if clean_p !in py_func_generics { py_func_generics << clean_p }
 			if def := param.default_ {
 				type_str := env.visit_expr_fn(def)
 				env.state.generic_defaults[param.name] = env.map_type_fn(type_str, struct_name, true, true, false)
@@ -261,7 +265,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			args_str_list << '${arg_name_raw} ${arg_type}'
 		} else {
 			if arg_type.starts_with('[]') { arg_type = arg_type[2..] }
-			args_str_list << '${arg_name_raw} ...${arg_type}'
+			if arg_type.starts_with('...') {
+				args_str_list << '${arg_name_raw} ${arg_type}'
+			} else {
+				args_str_list << '${arg_name_raw} ...${arg_type}'
+			}
 		}
 		args_names << arg_name_raw
 		annotations_data[arg_name_raw] = arg_type
@@ -441,7 +449,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 	is_empty := if node.body.len == 0 { true } else if node.body.len == 1 && node.body[0] is ast.Pass { true } else { false }
 
-	if is_empty && ret_type != 'void' && !is_init {
+	if is_empty && ret_type != 'void' && ret_type != '' && !is_init {
 		env.emit_fn(env.state.indent() + 'return // TODO: default value for ${ret_type}')
 	} else {
 		for stmt in node.body {

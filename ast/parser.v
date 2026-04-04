@@ -341,10 +341,13 @@ fn (mut p Parser) parse_type_params() []TypeParam {
 			tok := p.current_token
 			mut kind := TypeParamKind.typevar
 
-			if p.current_is(.operator) && p.current_token.value == '*' {
+			if p.current_is(.operator) && (p.current_token.value == '*' || p.current_token.value == '**') {
+				is_double := p.current_token.value == '**'
 				p.advance()
-				if p.current_is(.operator) && p.current_token.value == '*' {
+				if !is_double && p.current_is(.operator) && p.current_token.value == '*' {
 					p.advance()
+					kind = .paramspec
+				} else if is_double {
 					kind = .paramspec
 				} else {
 					kind = .typevartuple

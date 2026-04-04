@@ -79,6 +79,9 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		}
 	}
 
+	if clean_type.ends_with('.args') { return '...Any' }
+	if clean_type.ends_with('.kwargs') { return 'map[string]Any' }
+
 	match clean_type {
 		'int' { return 'int' }
 		'float' { return 'f64' }

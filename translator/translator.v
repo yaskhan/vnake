@@ -167,11 +167,23 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 					full_sym
 				}
 			}
-			if node.id == 'list' || node.id == 'OrderedCollection' {
+			// Check generic scopes first
+			for i := t.state.generic_scopes.len - 1; i >= 0; i-- {
+				if node.id in t.state.generic_scopes[i] {
+					return t.state.generic_scopes[i][node.id]
+				}
 			}
+
 			return res
 		}
 		ast.Attribute {
+			if node.attr == 'args' {
+				return '...Any'
+			}
+			if node.attr == 'kwargs' {
+				return 'map[string]Any'
+			}
+
 			if node.attr == 'Self' {
 				gen_s := if t.state.current_class_generics.len > 0 {
 					'[${t.state.current_class_generics.join(", ")}]'
@@ -337,6 +349,9 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				return t.map_annotation_str('${l} | ${r}', '', false, true, false)
 			}
 			return ''
+		}
+		ast.Starred {
+			return t.map_annotation(node.value)
 		}
 		else {
 			return ''
