@@ -174,6 +174,13 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				}
 			}
 
+			if t.state.current_class.len > 0 {
+				nested := t.state.current_class + "_" + node.id
+				if nested in t.state.defined_classes {
+					return "&" + nested
+				}
+			}
+
 			return res
 		}
 		ast.Attribute {
@@ -373,6 +380,7 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 	}
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: t.state.imported_symbols
+		defined_classes:  t.state.defined_classes
 		scc_files:        t.state.scc_files.keys()
 		used_builtins:    t.state.used_builtins
 		warnings:         t.state.warnings

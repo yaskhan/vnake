@@ -59,7 +59,11 @@ fn (mut t Translator) visit_function_def(node &ast.FunctionDef) {
 	t.current_function_name = prev_func
 	
 	if func_code.len > 0 {
-		t.emit_function_code(func_code)
+		if prev_func.len > 0 {
+			t.state.output << func_code
+		} else {
+			t.emit_function_code(func_code)
+		}
 	}
 }
 

@@ -10,7 +10,10 @@ pub mut:
 }
 
 pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut env ClassVisitEnv, mut classes ClassesModule) {
-	struct_name := sanitize_name(node.name, true)
+	mut struct_name := sanitize_name(node.name, true)
+	if h.class_stack.len > 0 {
+		struct_name = h.class_stack.join('_') + '_' + struct_name
+	}
 	if h.class_stack.len == 0 {
 		env.state.defined_top_level_symbols[node.name] = true
 	}

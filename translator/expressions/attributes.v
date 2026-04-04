@@ -101,6 +101,12 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 			}
 		}
 
+		// Handle Nested Classes
+		nested_class_name := target_class + "_" + node.attr
+		if nested_class_name in eg.state.defined_classes {
+			return "new_" + base.to_snake_case(nested_class_name).trim_left('_')
+		}
+
 		if defining := base.find_defining_class_for_static_method(target_class, node.attr, eg.analyzer.static_methods, eg.analyzer.class_methods, eg.analyzer.class_hierarchy) {
 			return "${defining}_${attr_name}"
 		}

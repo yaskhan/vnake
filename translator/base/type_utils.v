@@ -27,8 +27,9 @@ pub const op_methods_to_symbols = {
 
 pub struct TypeUtilsContext {
 pub mut:
-	imported_symbols map[string]string
-	scc_files        []string
+	imported_symbols    map[string]string
+	defined_classes     map[string]map[string]bool
+	scc_files           []string
 	used_builtins    map[string]bool
 	warnings         []string
 	include_all_symbols bool
@@ -201,6 +202,13 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 		if parts.len > 1 {
 			module_prefix := parts[..parts.len - 1].join('.')
 			typename := parts[parts.len - 1]
+			
+			// Handle Nested Classes: Outer.Inner -> Outer_Inner
+			nested_name := v_type.replace('.', '_')
+			if nested_name in ctx.defined_classes {
+				return nested_name
+			}
+
 			for f in ctx.scc_files {
 				norm := f.replace('.py', '').replace('/', '.').replace('\\', '.')
 				if module_prefix.ends_with(norm) {

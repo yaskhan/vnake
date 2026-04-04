@@ -690,6 +690,7 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 	}
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: eg.state.imported_symbols
+		defined_classes:  eg.state.defined_classes
 		scc_files:        eg.state.scc_files.keys()
 		used_builtins:    eg.state.used_builtins
 		warnings:         eg.state.warnings

@@ -398,10 +398,16 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		ret_s_op := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
 		decl = '${dep_attr}fn ${receiver_str}${op} (${args_str_list.join(", ")})${ret_s_op} {'
 	} else if is_nested {
+		mut any_args := []string{}
+		for arg in args_str_list {
+			any_args << replace_generics_with_any(arg, env.state.generic_scopes)
+		}
+		any_ret := replace_generics_with_any(ret_type, env.state.generic_scopes)
+		
 		captures := find_captured_vars(node, env.state.scope_stack, base.sanitize_name_helper)
 		c_str := if captures.len > 0 { '[${captures.join(", ")}] ' } else { '' }
-		ret_s_nested := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
-		decl = 'mut ${func_name} := fn ${c_str}(${args_str_list.join(", ")})${ret_s_nested} {'
+		ret_s_nested := if any_ret != 'void' && any_ret != '' { ' ${any_ret}' } else { '' }
+		decl = 'mut ${func_name} := fn ${c_str}(${any_args.join(", ")})${ret_s_nested} {'
 	} else {
 		ret_s_def := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
 		decl = '${nor_attr}${dep_attr}${pub_pfx}fn ${receiver_str}${func_name}${func_generics_str}(${args_str_list.join(", ")})${ret_s_def} {'
@@ -715,5 +721,19 @@ fn double_quote(s string) string {
 	mut result := s.replace('\\', '\\\\')
 	result = result.replace('"', '\\"')
 	return '"${result}"'
+}
+
+fn replace_generics_with_any(type_str string, generic_scopes []map[string]string) string {
+	mut res := type_str
+	for scope in generic_scopes {
+		for _, v_name in scope {
+			// Basic word boundary replacement for the mapped generic name
+			if res == v_name { return 'Any' }
+			if res.contains('[${v_name}]') { res = res.replace('[${v_name}]', '[Any]') }
+			if res.contains('[]${v_name}') { res = res.replace('[]${v_name}', '[]Any') }
+			if res.ends_with(' ${v_name}') { res = res.replace(' ${v_name}', ' Any') }
+		}
+	}
+	return res
 }
 

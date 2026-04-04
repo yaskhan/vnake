@@ -216,9 +216,93 @@ pub fn find_captured_vars(
 		}
 
 		scan_captured(node.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+	} else if node is ast.FunctionDef {
+		for arg in node.args.posonlyargs {
+			local_scope[arg.arg] = true
+		}
+		for arg in node.args.args {
+			local_scope[arg.arg] = true
+		}
+		for arg in node.args.kwonlyargs {
+			local_scope[arg.arg] = true
+		}
+		if va := node.args.vararg {
+			local_scope[va.arg] = true
+		}
+		if kw := node.args.kwarg {
+			local_scope[kw.arg] = true
+		}
+		
+		scan_captured_body(node.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
 	}
 
 	return captured
+}
+
+fn scan_captured_body(body []ast.Statement, mut local_scope map[string]bool, scope_stack []map[string]bool, sanitize_fn fn (string, bool) string, mut captured []string) {
+	for stmt in body {
+		scan_captured_stmt(stmt, mut local_scope, scope_stack, sanitize_fn, mut captured)
+	}
+}
+
+fn scan_captured_stmt(stmt ast.Statement, mut local_scope map[string]bool, scope_stack []map[string]bool, sanitize_fn fn (string, bool) string, mut captured []string) {
+	match stmt {
+		ast.Assign {
+			scan_captured(stmt.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			for t in stmt.targets { add_to_scope(t, mut local_scope) }
+		}
+		ast.AnnAssign {
+			if val := stmt.value { scan_captured(val, mut local_scope, scope_stack, sanitize_fn, mut captured) }
+			add_to_scope(stmt.target, mut local_scope)
+		}
+		ast.Expr {
+			scan_captured(stmt.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.Return {
+			if val := stmt.value { scan_captured(val, mut local_scope, scope_stack, sanitize_fn, mut captured) }
+		}
+		ast.If {
+			scan_captured(stmt.test, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.For {
+			scan_captured(stmt.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			mut nested_local := local_scope.clone()
+			add_to_scope(stmt.target, mut nested_local)
+			scan_captured_body(stmt.body, mut nested_local, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.While {
+			scan_captured(stmt.test, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.With {
+			for item in stmt.items {
+				scan_captured(item.context_expr, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				if vars := item.optional_vars { add_to_scope(vars, mut local_scope) }
+			}
+			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.Try {
+			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			for h in stmt.handlers {
+				mut h_local := local_scope.clone()
+				if name := h.name { h_local[name] = true }
+				scan_captured_body(h.body, mut h_local, scope_stack, sanitize_fn, mut captured)
+			}
+			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.finalbody, mut local_scope, scope_stack, sanitize_fn, mut captured)
+		}
+		ast.FunctionDef {
+			local_scope[stmt.name] = true
+			// Nested functions can also capture, but they don't capture into the CURRENT function's list directly.
+			// However, if the nested function references something from outer, it's already scanned when WE scan that nested function's body if we wanted to.
+			// But Python's capture is simpler: just references.
+		}
+		else {}
+	}
 }
 
 fn add_to_scope(node ast.Expression, mut scope map[string]bool) {
