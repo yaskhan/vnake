@@ -282,19 +282,19 @@ fn (mut eg ExprGen) format_repeated_list_literal(list_node ast.List, len_node as
 	}
 	init_node := list_node.elements[0]
 	init_val := eg.visit(init_node)
-	mut elem_type := eg.guess_type(init_node)
 	
 	mut final_init := init_val
 	if is_none_expr(init_node) {
 		final_init = 'none'
 		expected := eg.state.current_assignment_type
-		if expected.starts_with('[]') {
-			elem_type = expected[2..]
-			if !elem_type.starts_with('?') { elem_type = '?${elem_type}' }
-		} else {
-			elem_type = '?Any'
+		mut elem_t := if expected.starts_with('[]') { expected[2..] } else { 'Any' }
+
+		if eg.should_use_is_none_type(elem_t, init_node) {
+			return "[]${elem_t}{len: ${len_expr}, init: NoneType{}}"
 		}
-		return "[]${elem_type}{len: ${len_expr}, init: none}"
+
+		if !elem_t.starts_with('?') { elem_t = '?${elem_t}' }
+		return "[]${elem_t}{len: ${len_expr}, init: none}"
 	}
 
 	match init_node {
