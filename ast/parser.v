@@ -754,7 +754,9 @@ fn (mut p Parser) parse_try() ?Statement {
 		mut typ := ?Expression(none)
 		mut hname := ?string(none)
 		if !p.current_is(.colon) {
+			p.lexer.grouping_level++
 			typ = p.parse_expression_list(false, true)
+			p.lexer.grouping_level--
 			if p.current_is_keyword('as') {
 				p.advance()
 				hname = p.current_token.value
