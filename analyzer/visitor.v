@@ -1168,8 +1168,14 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				current := t.get_type(target.id)
 				is_cap := target.id.len > 0 && target.id[0].is_capital()
 				if value_type != 'Any' {
-					if current in ['Any', 'none', 'int'] || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
+					if (current in ['Any', 'none', 'int'] && value_type != 'none') || current == 'Any' || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
 						t.store_type(target.id, value_type)
+					}
+				} else if node.value is ast.Name {
+					// Propagate type from RHS if it's a name even if value_type is Any
+					rhs_type := t.get_type(node.value.id)
+					if rhs_type != 'Any' && rhs_type != 'int' {
+						t.store_type(target.id, rhs_type)
 					}
 				}
 				if node.value is ast.Lambda {
@@ -1178,17 +1184,21 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 			}
 			ast.Attribute {
 				t.mark_mutated_expr(target)
-				obj_name := t.render_expr(target.value)
-				if obj_name.len > 0 {
-					full_attr := '${obj_name}.${target.attr}'
-					current := t.get_type(full_attr)
-					if current in ['Any', 'unknown', 'none'] {
+				mut obj_key := t.guess_expr_type(target.value)
+				obj_key = obj_key.trim_left('?&')
+				if obj_key in ['Any', 'int', 'unknown'] {
+					obj_key = t.render_expr(target.value)
+				}
+				if obj_key.len > 0 {
+					full_attr := "${obj_key}.${target.attr}"
+					curr_attr_type := t.get_type(full_attr)
+					if value_type != 'none' || curr_attr_type == 'Any' {
 						t.store_type(full_attr, value_type)
 					}
 				}
 				if target.value is ast.Name && target.value.id == 'self' {
-					current := t.get_type(target.attr)
-					if current in ['Any', 'unknown', 'none'] {
+					curr_attr_type := t.get_type(target.attr)
+					if value_type != 'none' || curr_attr_type == 'Any' {
 						t.store_type(target.attr, value_type)
 					}
 				}

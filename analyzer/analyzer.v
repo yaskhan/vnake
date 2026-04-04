@@ -122,12 +122,12 @@ pub fn (mut a Analyzer) load_mypy_data(store MypyPluginStore) {
 			a.mypy_store.collected_types[k][loc] = typ
 		}
 	}
-	for k, v in store.collected_sigs {
-		if k !in a.mypy_store.collected_sigs {
-			a.mypy_store.collected_sigs[k] = map[string]string{}
+	for k, v in store.collected_signatures {
+		if k !in a.mypy_store.collected_signatures {
+			a.mypy_store.collected_signatures[k] = map[string]map[string]string{}
 		}
 		for loc, sig in v {
-			a.mypy_store.collected_sigs[k][loc] = sig
+			a.mypy_store.collected_signatures[k][loc] = sig.clone()
 		}
 	}
 }

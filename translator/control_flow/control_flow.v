@@ -6,8 +6,9 @@ import base
 
 pub struct AssignedVar {
 pub:
-	name string
-	expr ast.Expression
+	name   string
+	target ast.Expression
+	value  ?ast.Expression
 }
 
 pub struct ControlFlowVisitEnv {
@@ -205,14 +206,14 @@ pub fn (m &ControlFlowModule) collect_assigned_vars(nodes []ast.Statement) []Ass
 			for target in node.targets {
 				if target is ast.Name {
 					if target.id !in seen {
-						vars << AssignedVar{target.id, target}
+						vars << AssignedVar{target.id, target, node.value}
 						seen[target.id] = true
 					}
 				} else if target is ast.Attribute {
 					if target.value is ast.Name {
 						id := target.value.id + '.' + target.attr
 						if id !in seen {
-							vars << AssignedVar{id, target}
+							vars << AssignedVar{id, target, node.value}
 							seen[id] = true
 						}
 					}
@@ -221,14 +222,14 @@ pub fn (m &ControlFlowModule) collect_assigned_vars(nodes []ast.Statement) []Ass
 		} else if node is ast.AnnAssign {
 			if node.target is ast.Name {
 				if node.target.id !in seen {
-					vars << AssignedVar{node.target.id, node.target}
+					vars << AssignedVar{node.target.id, node.target, node.value}
 					seen[node.target.id] = true
 				}
 			}
 		} else if node is ast.For {
 			if node.target is ast.Name {
 				if node.target.id !in seen {
-					vars << AssignedVar{node.target.id, node.target}
+					vars << AssignedVar{node.target.id, node.target, none}
 					seen[node.target.id] = true
 				}
 			}
@@ -237,7 +238,7 @@ pub fn (m &ControlFlowModule) collect_assigned_vars(nodes []ast.Statement) []Ass
 				if opt := item.optional_vars {
 					if opt is ast.Name {
 						if opt.id !in seen {
-							vars << AssignedVar{opt.id, opt}
+							vars << AssignedVar{opt.id, opt, none}
 							seen[opt.id] = true
 						}
 					}

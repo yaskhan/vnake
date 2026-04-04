@@ -1,103 +1,18 @@
 module control_flow
 
 import ast
-import translator.base
-
-fn (m &ControlFlowModule) is_name_main(node ast.If) bool {
-	if node.test is ast.Compare {
-		cmp := node.test
-		if cmp.left is ast.Name && cmp.left.id == '__name__' && cmp.comparators.len == 1 {
-			if cmp.comparators[0] is ast.Constant && cmp.comparators[0].value == '__main__' {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-fn (m &ControlFlowModule) is_type_checking(node ast.If) bool {
-	if node.test is ast.Name {
-		return node.test.id == 'TYPE_CHECKING'
-	}
-	if node.test is ast.Attribute {
-		return node.test.attr == 'TYPE_CHECKING'
-	}
-	return false
-}
-
-fn (m &ControlFlowModule) has_walrus_expr(node ast.Expression) bool {
-	if node is ast.NamedExpr {
-		return true
-	}
-	if node is ast.BinaryOp {
-		return m.has_walrus_expr(node.left) || m.has_walrus_expr(node.right)
-	}
-	if node is ast.UnaryOp {
-		return m.has_walrus_expr(node.operand)
-	}
-	if node is ast.Compare {
-		if m.has_walrus_expr(node.left) {
-			return true
-		}
-		for comparator in node.comparators {
-			if m.has_walrus_expr(comparator) {
-				return true
-			}
-		}
-	}
-	if node is ast.Call {
-		if m.has_walrus_expr(node.func) {
-			return true
-		}
-		for arg in node.args {
-			if m.has_walrus_expr(arg) {
-				return true
-			}
-		}
-		for kw in node.keywords {
-			if m.has_walrus_expr(kw.value) {
-				return true
-			}
-		}
-	}
-	if node is ast.Attribute {
-		return m.has_walrus_expr(node.value)
-	}
-	if node is ast.Subscript {
-		return m.has_walrus_expr(node.value) || m.has_walrus_expr(node.slice)
-	}
-	if node is ast.IfExp {
-		return m.has_walrus_expr(node.test) || m.has_walrus_expr(node.body) || m.has_walrus_expr(node.orelse)
-	}
-	if node is ast.JoinedStr {
-		for value in node.values {
-			if m.has_walrus_expr(value) {
-				return true
-			}
-		}
-	}
-	if node is ast.FormattedValue {
-		return m.has_walrus_expr(node.value)
-	}
-	return false
-}
 
 fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive bool) map[string]string {
 	mut res := map[string]string{}
 	if node is ast.Call {
-		func_expr := node.func
-		if func_expr is ast.Name {
-			name_id := func_expr.id
-			if name_id == 'isinstance' && node.args.len == 2 {
+		if node.func is ast.Name {
+			name_id := node.func.id
+			if name_id == 'isinstance' && node.args.len >= 2 {
 				arg0 := node.args[0]
-					mut var_name := ''
-					if arg0 is ast.Name {
-						var_name = arg0.id
-					} else if arg0 is ast.Attribute {
-						var_name = m.visit_expr(arg0)
-					}
-					if var_name.len > 0 {
-						arg1 := node.args[1]
+				arg1 := node.args[1]
+				if arg0 is ast.Name {
+					var_name := arg0.id
+					if positive {
 						mut v_type := if arg1 is ast.Tuple {
 							mut parts := []string{}
 							for elt in arg1.elements {
@@ -113,37 +28,11 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 							res[var_name] = v_type
 						}
 					}
-			} else {
-				mut guard_found := false
-				mut guard_info := base.TypeGuardInfo{}
-				if name_id in m.env.state.type_guards {
-					guard_info = m.env.state.type_guards[name_id]
-					guard_found = true
-				} else {
-					// Try qualified name suffix match
-					for k, v in m.env.state.type_guards {
-						if k.ends_with('.' + name_id) {
-							guard_info = v
-							guard_found = true
-							break
-						}
-					}
-				}
-
-				if guard_found && node.args.len > 0 {
-					arg0_node := node.args[0]
-					if arg0_node is ast.Name {
-						id := arg0_node.id
-						mut n_type := guard_info.narrowed_type
-						if n_type == 'str' { n_type = 'string' }
-						res[id] = n_type
-					}
 				}
 			}
 		}
 	} else if node is ast.Compare && node.comparators.len == 1 {
-		op_tok := node.ops[0]
-		op := op_tok.value
+		op := node.ops[0].value
 		left := node.left
 		right := node.comparators[0]
 		if left is ast.Name {
@@ -163,127 +52,40 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 	} else if node is ast.UnaryOp && node.op.value == 'not' {
 		return m.collect_narrowing(node.operand, !positive)
 	} else if node is ast.BinaryOp && node.op.value == 'and' && positive {
-		for k, v in m.collect_narrowing(node.left, true) {
-			res[k] = v
-		}
-		for k, v in m.collect_narrowing(node.right, true) {
-			res[k] = v
-		}
+		for k, v in m.collect_narrowing(node.left, true) { res[k] = v }
+		for k, v in m.collect_narrowing(node.right, true) { res[k] = v }
 	} else if node is ast.BinaryOp && node.op.value == 'or' && !positive {
-		for k, v in m.collect_narrowing(node.left, false) {
-			res[k] = v
-		}
-		for k, v in m.collect_narrowing(node.right, false) {
-			res[k] = v
-		}
+		for k, v in m.collect_narrowing(node.left, false) { res[k] = v }
+		for k, v in m.collect_narrowing(node.right, false) { res[k] = v }
 	}
 	return res
 }
 
 fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast.Expression, positive bool, branch_suffix string) map[string]string {
-	if body.len == 0 {
-		return map[string]string{}
-	}
+	if body.len == 0 { return map[string]string{} }
 	mut original_remaps := map[string]string{}
 	narrowing := m.collect_narrowing(test, positive)
 
 	for var_name, n_type in narrowing {
 		mut narrowed_type := n_type
-		if narrowed_type == 'none' {
-			continue
-		}
+		if narrowed_type == 'none' { continue }
 		sanitized := m.sanitize_name(var_name, false)
 		base_type := m.guess_type(ast.Name{id: var_name})
 		
-		// V auto-narrowing check
 		mut is_auto := false
-		if test is ast.Compare {
-			if base_type.starts_with('?') && narrowed_type == base_type[1..] {
-				is_auto = true
-			} else if (base_type.starts_with('SumType_') || base_type.contains('|')) && !narrowed_type.contains('|') && !var_name.contains('.') {
-				is_auto = true
-			}
-		} else if test is ast.Call {
-			if test.func is ast.Name && (test.func as ast.Name).id == 'isinstance' {
-				if !narrowed_type.contains('|') && !var_name.contains('.') {
-					// Only use auto-narrowing for Any (to avoid redundant (x as int))
-					// but NOT for SumTypes (where test expects (x as int))
-					if base_type == 'Any' {
-						is_auto = true
-					}
-				}
-			}
-		}
-
-		if is_auto {
-			continue
-		}
-
-		if !positive {
-			// Basic negative narrowing for binary unions (e.g. int | string)
-			if base_type.contains(' | ') && !base_type.contains(' |  | ') { // Exactly two types
-				parts := base_type.split(' | ')
-				if parts.len == 2 {
-					mut remaining_type := ''
-					if parts[0] == narrowed_type {
-						remaining_type = parts[1]
-					} else if parts[1] == narrowed_type {
-						remaining_type = parts[0]
-					}
-					
-					if remaining_type != '' {
-						 // eprintln('DEBUG NEGATIVE NARROWING: base=${base_type} test=${narrowed_type} narrowed=${remaining_type}')
-						narrowed_type = remaining_type
-						// Fall through to remapping logic below
-					} else {
-						continue
-					}
-				} else {
-					continue
-				}
-			} else {
-				continue
-			}
-		}
+		if base_type.starts_with('?') && narrowed_type == base_type[1..] { is_auto = true }
+		else if (base_type.contains('|') || base_type.starts_with('SumType_')) && !narrowed_type.contains('|') { is_auto = true }
 		
+		if is_auto { continue }
+
 		if narrowed_type !in ['Any', 'void', 'none'] {
-			// Tests expect hybrid approach:
-			// 1. If it's a manual check (node is ast.Compare), use in-place cast.
-			// 2. If it's a function call (TypeGuard), use explicit narrowed variable.
-			is_isinstance := if test is ast.Call {
-				func := test.func
-				func is ast.Name && func.id == 'isinstance'
+			narrowed_expr := '(${sanitized} as ${narrowed_type})'
+			if var_name in m.env.state.name_remap {
+				original_remaps[var_name] = m.env.state.name_remap[var_name]
 			} else {
-				false
+				original_remaps[var_name] = '__NONE__'
 			}
-			is_call_narrowing := if test is ast.Call {
-				true
-			} else if test is ast.UnaryOp {
-				test.operand is ast.Call
-			} else {
-				false
-			} && !is_isinstance
-			
-			if is_call_narrowing && !var_name.contains('.') {
-				narrowed_name := 'narrowed${branch_suffix}_${sanitized}'.replace('.', '_').replace('__', '_')
-				m.emit('${narrowed_name} := (${sanitized} as ${narrowed_type})')
-				m.env.analyzer.type_map[narrowed_name] = narrowed_type
-				if var_name in m.env.state.name_remap {
-					original_remaps[var_name] = m.env.state.name_remap[var_name]
-				} else {
-					original_remaps[var_name] = '__NONE__'
-				}
-				m.env.state.name_remap[var_name] = narrowed_name
-			} else {
-				// Use in-place cast remapping for others
-				narrowed_expr := '(${sanitized} as ${narrowed_type})'
-				if var_name in m.env.state.name_remap {
-					original_remaps[var_name] = m.env.state.name_remap[var_name]
-				} else {
-					original_remaps[var_name] = '__NONE__'
-				}
-				m.env.state.name_remap[var_name] = narrowed_expr
-			}
+			m.env.state.name_remap[var_name] = narrowed_expr
 		}
 	}
 	return original_remaps
@@ -297,154 +99,86 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 	if !is_elif {
 		if m.is_name_main(node) {
 			m.emit("// if __name__ == '__main__':")
-			for stmt in node.body {
-				m.visit_stmt(stmt)
-			}
+			for stmt in node.body { m.visit_stmt(stmt) }
 			return
 		}
-		if m.is_type_checking(node) {
-			return
-		}
-
-		// Generate unwrap pattern for Option types: var_opt := var or { return ... }
-		// For: if x is None: return some_value  (with optional type variable x)
-		if node.test is ast.Compare && node.test.ops[0].value == 'is' && node.test.comparators.len == 1 {
-			right := node.test.comparators[0]
-			is_none_lit := (right is ast.Constant && right.value == 'None') || 
-						   (right is ast.Name && right.id in ['None', 'none']) || 
-						   right is ast.NoneExpr
-			if is_none_lit && node.test.left is ast.Name && node.orelse.len == 0 {
-				var_name := node.test.left.id
-				base_type := m.guess_type(ast.Name{id: var_name})
-				if base_type.starts_with('?') {
-					mut ret_stmts := []string{}
-					mut has_only_returns := true
-					for stmt in node.body {
-						if stmt is ast.Return {
-							if ret_val := stmt.value {
-								ret_stmts << m.visit_expr(ret_val)
-							} else {
-								ret_stmts << ''
-							}
-						} else {
-							has_only_returns = false
-							break
-						}
-					}
-					if has_only_returns && ret_stmts.len > 0 {
-						sanit_var := m.sanitize_name(var_name, false)
-						unwrap_var := '${sanit_var}_opt'
-						mut ret_expr := ret_stmts[0]
-						if ret_stmts.len > 1 { ret_expr = ret_stmts.join(', ') }
-						if ret_expr == '' { ret_expr = 'none' }
-						m.env.analyzer.type_map[unwrap_var] = base_type[1..]
-						m.emit('${unwrap_var} := ${sanit_var} or { return ${ret_expr} }')
-						m.declare_local(unwrap_var)
-						// Persist name_remap for subsequent statements in the function
-						m.env.state.name_remap[var_name] = unwrap_var
-						return
-					}
-				}
-			}
-		}
+		if m.is_type_checking(node) { return }
 
 		// Pre-declare conditionally initialized variables
 		if_vars := m.collect_assigned_vars(node.body)
 		else_vars := if node.orelse.len > 0 { m.collect_assigned_vars(node.orelse) } else { []AssignedVar{} }
 		mut seen_vars := map[string]bool{}
+
 		for vinfo in if_vars {
 			var := vinfo.name
-			if var.contains('.') { continue }
-			target_expr := vinfo.expr
-			if !m.is_declared_local(var) {
-				mut v_type := m.guess_type(target_expr)
-				if v_type == 'unknown' || v_type == 'none' || v_type == '?none' { v_type = 'Any' }
+			if var.contains('.') || m.is_declared_local(var) { continue }
 
-				mut base_v_type := v_type.trim_left('?&')
-				if base_v_type in m.env.state.defined_classes {
-					if !v_type.contains('&') {
-						if v_type.starts_with('?') {
-							v_type = '?&' + v_type[1..]
-						} else {
-							v_type = '&' + v_type
-						}
-					}
-				}
-
-				if v_type == 'int' || v_type == 'unknown' {
-					v_type = 'Any'
-				}
-				if !v_type.starts_with('?') {
-					v_type = '?' + v_type
-				}
-				if v_type == '?Any' {
-				    v_type = 'Any'
-				}
-				m.emit('mut ${var} := ${v_type}(none)')
-				m.declare_local(var)
-				m.env.analyzer.type_map[var] = v_type
-				m.env.analyzer.raw_type_map[var] = v_type
-				seen_vars[var] = true
+			mut v_type := 'Any'
+			if val := vinfo.value {
+				v_type = m.guess_type(val)
 			}
+			if v_type in ['Any', 'int', 'unknown'] {
+				v_type = m.guess_type(vinfo.target)
+			}
+
+			if v_type == 'int' || v_type == 'unknown' { v_type = 'Any' }
+
+			mut base_v_t := v_type.trim_left('?&')
+			if base_v_t in m.env.state.defined_classes {
+				if !v_type.contains('&') {
+					if v_type.starts_with('?') { v_type = '?&' + v_type[1..] }
+					else { v_type = '&' + v_type }
+				}
+			}
+
+			if !v_type.starts_with('?') && v_type != 'Any' { v_type = '?' + v_type }
+
+			m.emit('mut ${var} := ${v_type}(none)')
+			m.declare_local(var)
+			m.env.analyzer.type_map[var] = v_type
+			seen_vars[var] = true
 		}
+
 		for vinfo in else_vars {
 			var := vinfo.name
-			if var.contains('.') { continue }
-			target_expr := vinfo.expr
-			if !m.is_declared_local(var) {
-				if var in seen_vars { continue }
-				mut v_type := m.guess_type(target_expr)
-				if v_type == 'unknown' || v_type == 'none' || v_type == '?none' { v_type = 'Any' }
+			if var.contains('.') || m.is_declared_local(var) || var in seen_vars { continue }
 
-				mut base_v_type := v_type.trim_left('?&')
-				if base_v_type in m.env.state.defined_classes {
-					if !v_type.contains('&') {
-						if v_type.starts_with('?') {
-							v_type = '?&' + v_type[1..]
-						} else {
-							v_type = '&' + v_type
-						}
-					}
-				}
-
-				if v_type == 'int' || v_type == 'unknown' {
-					v_type = 'Any'
-				}
-				if !v_type.starts_with('?') {
-					v_type = '?' + v_type
-				}
-				if v_type == '?Any' {
-				    v_type = 'Any'
-				}
-				m.emit('mut ${var} := ${v_type}(none)')
-				m.declare_local(var)
-				m.env.analyzer.type_map[var] = v_type
-				m.env.analyzer.raw_type_map[var] = v_type
+			mut v_type := 'Any'
+			if val := vinfo.value {
+				v_type = m.guess_type(val)
 			}
+			if v_type in ['Any', 'int', 'unknown'] {
+				v_type = m.guess_type(vinfo.target)
+			}
+
+			if v_type == 'int' || v_type == 'unknown' { v_type = 'Any' }
+
+			mut base_v_t := v_type.trim_left('?&')
+			if base_v_t in m.env.state.defined_classes {
+				if !v_type.contains('&') {
+					if v_type.starts_with('?') { v_type = '?&' + v_type[1..] }
+					else { v_type = '&' + v_type }
+				}
+			}
+
+			if !v_type.starts_with('?') && v_type != 'Any' { v_type = '?' + v_type }
+
+			m.emit('mut ${var} := ${v_type}(none)')
+			m.declare_local(var)
+			m.env.analyzer.type_map[var] = v_type
 		}
 	}
 
-	m.env.state.walrus_assignments = []string{}
 	test_expr := m.wrap_bool(node.test, false)
-	if m.env.state.walrus_assignments.len > 0 {
-		for assign in m.env.state.walrus_assignments {
-			m.emit(assign)
-		}
-	}
-
-	if is_elif {
-		m.emit('} else if ${test_expr} {')
-	} else {
-		m.emit('if ${test_expr} {')
-	}
-	m.env.state.indent_level++
+	if is_elif { m.emit('} else if ${test_expr} {') }
+	else { m.emit('if ${test_expr} {') }
 	
-	mut remaps := m.apply_flow_narrowing(node.body, node.test, true, '')
-	for stmt in node.body {
-		m.visit_stmt(stmt)
-	}
+	m.env.state.indent_level++
+	remaps := m.apply_flow_narrowing(node.body, node.test, true, '')
+	for stmt in node.body { m.visit_stmt(stmt) }
 	for var, orig in remaps {
-		if orig == '__NONE__' { m.env.state.name_remap.delete(var) } else { m.env.state.name_remap[var] = orig }
+		if orig == '__NONE__' { m.env.state.name_remap.delete(var) }
+		else { m.env.state.name_remap[var] = orig }
 	}
 	m.env.state.indent_level--
 
@@ -454,12 +188,11 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 		} else {
 			m.emit('} else {')
 			m.env.state.indent_level++
-			mut eremaps := m.apply_flow_narrowing(node.orelse, node.test, false, '_else')
-			for stmt in node.orelse {
-				m.visit_stmt(stmt)
-			}
+			eremaps := m.apply_flow_narrowing(node.orelse, node.test, false, '_else')
+			for stmt in node.orelse { m.visit_stmt(stmt) }
 			for var, orig in eremaps {
-				if orig == '__NONE__' { m.env.state.name_remap.delete(var) } else { m.env.state.name_remap[var] = orig }
+				if orig == '__NONE__' { m.env.state.name_remap.delete(var) }
+				else { m.env.state.name_remap[var] = orig }
 			}
 			m.env.state.indent_level--
 			m.emit('}')
@@ -467,4 +200,23 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 	} else {
 		m.emit('}')
 	}
+}
+
+fn (m &ControlFlowModule) is_name_main(node ast.If) bool {
+	if node.test is ast.Compare {
+		comp := node.test
+		if comp.left is ast.Name && comp.left.id == '__name__' {
+			if comp.comparators.len > 0 && comp.comparators[0] is ast.Constant {
+				c := comp.comparators[0] as ast.Constant
+				val := c.value
+				return val == "'__main__'" || val == '"__main__"'
+			}
+		}
+	}
+	return false
+}
+
+fn (m &ControlFlowModule) is_type_checking(node ast.If) bool {
+	if node.test is ast.Name && node.test.id == 'TYPE_CHECKING' { return true }
+	return false
 }
