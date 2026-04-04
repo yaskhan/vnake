@@ -297,8 +297,12 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 		'TypeGuard', 'TypeIs', 'typing.TypeGuard', 'typing.TypeIs' {
 			return 'bool'
 		}
-		'Final', 'ClassVar', 'Annotated', 'Required', 'NotRequired', 'ReadOnly', 'typing.Final',
-		'typing.ClassVar', 'typing.Annotated', 'typing.Required', 'typing.NotRequired', 'typing.ReadOnly' {
+		'TypeForm', 'typing.TypeForm', 'typing_extensions.TypeForm' {
+			return 'string'
+		}
+		'Final', 'ClassVar', 'Annotated', 'Required', 'NotRequired', 'ReadOnly',
+		'typing.Final', 'typing.ClassVar', 'typing.Annotated', 'typing.Required', 'typing.NotRequired',
+		'typing.ReadOnly' {
 			if args_str.len > 0 {
 				parts := split_generic_args(args_str)
 				inner := map_python_type_to_v(parts[0].trim_space(), self_name, allow_union,

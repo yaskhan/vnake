@@ -321,9 +321,13 @@ fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorI
 	
 	if v_info.is_model_validator {
 		res << '    m = fn (mut self ${struct_name}) !${struct_name} {'
+		prev_in_v := env.state.in_pydantic_validator
+		env.state.in_pydantic_validator = true
+		env.state.output = []string{}
 		for stmt in node.body {
 			env.visit_stmt_fn(stmt)
 		}
+		env.state.in_pydantic_validator = prev_in_v
 		for line in env.state.output {
 			res << '        ' + line
 		}
@@ -362,9 +366,13 @@ fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorI
 				}
 			}
 			res << '    m.${f_name} = fn (v ${f_type}) !${f_type} {'
+			prev_in_v := env.state.in_pydantic_validator
+			env.state.in_pydantic_validator = true
+			env.state.output = []string{}
 			for stmt in node.body {
 				env.visit_stmt_fn(stmt)
 			}
+			env.state.in_pydantic_validator = prev_in_v
 			for line in env.state.output {
 				res << '        ' + line
 			}

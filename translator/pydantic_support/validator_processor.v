@@ -42,7 +42,9 @@ pub fn (p PydanticValidatorProcessor) extract_info(node ast.FunctionDef, mut env
 
 		if dec_name in ['validator', 'field_validator'] {
 			is_field_validator = true
-			fields << dec_args
+			for arg in dec_args {
+				fields << arg.trim("'\"")
+			}
 			if 'mode' in dec_keywords {
 				mode = dec_keywords['mode']
 			} else if 'pre' in dec_keywords && dec_keywords['pre'] == 'true' {

@@ -432,6 +432,7 @@ fn (mut eg ExprGen) translate_single_comparison(left string, op string, right st
 			if right_type.starts_with('map[') { return "${prefix}(none in ${right})" }
 			return "${prefix}${right}.any(it == none)"
 		}
+		if op == 'not in' { return '!(${left} in ${right})' }
 		return "${left} ${op} ${right}"
 	}
 
@@ -448,6 +449,7 @@ fn (mut eg ExprGen) translate_single_comparison(left string, op string, right st
 	v_op := match op {
 		'is' { '==' }
 		'is not' { '!=' }
+		'not in' { return '!(${left} in ${right})' }
 		else { op }
 	}
 	return "${left} ${v_op} ${right}"

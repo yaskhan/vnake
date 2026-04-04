@@ -96,6 +96,11 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	name := eg.state.name_remap[node.id] or { node.id }
 	
+	if name == 'str' { return "'string'" }
+	if name == 'float' { return "'f64'" }
+	if name == 'int' { return "'int'" }
+	if name == 'bool' { return "'bool'" }
+
 	// If name is already a complex expression (e.g. from narrowing: "(obj as Derived)"), 
 	// don't sanitize it again, as it contains V syntax.
 	if name.contains('(') || name.contains(' ') || name.contains(' as ') {

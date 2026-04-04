@@ -262,19 +262,19 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 			if base_raw in ['Set', 'typing.Set', 'set'] {
 				return 'datatypes.Set[${t.map_annotation(node.slice)}]'
 			}
-			if base_raw in ['Required', 'typing.Required'] {
-				return t.map_annotation(node.slice)
+			if base_raw in ['TypeForm', 'typing.TypeForm', 'typing_extensions.TypeForm'] {
+				return 'string'
 			}
-			if base_raw in ['NotRequired', 'typing.NotRequired'] {
-				return '?${t.map_annotation(node.slice)}'
-			}
-			if base_raw in ['Final', 'typing.Final'] {
-				return t.map_annotation(node.slice)
-			}
-			if base_raw in ['ReadOnly', 'typing.ReadOnly'] {
-				return t.map_annotation(node.slice)
-			}
-			if base_raw in ['ClassVar', 'typing.ClassVar'] {
+			if base_raw in ['Required', 'typing.Required', 'NotRequired', 'typing.NotRequired',
+				'Final', 'typing.Final', 'ClassVar', 'typing.ClassVar', 'ReadOnly', 'typing.ReadOnly',
+				'Annotated', 'typing.Annotated'] {
+				if base_raw.contains('NotRequired') {
+					inner := t.map_annotation(node.slice)
+					return if inner.starts_with('?') { inner } else { '?${inner}' }
+				}
+				if node.slice is ast.Tuple {
+					return t.map_annotation(node.slice.elements[0])
+				}
 				return t.map_annotation(node.slice)
 			}
 			if base_raw in ['Literal', 'typing.Literal'] {
