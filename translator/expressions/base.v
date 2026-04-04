@@ -465,22 +465,46 @@ pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
 }
 
 pub fn (mut eg ExprGen) visit_set(node ast.Set) string {
-	mut items := []string{}
+	mut has_starred := false
 	for elt in node.elements {
-		items << eg.visit(elt)
+		if elt is ast.Starred {
+			has_starred = true
+			break
+		}
 	}
-	if items.len == 0 {
+
+	mut inner_type := if node.elements.len > 0 { eg.guess_type(node.elements[0]) } else { 'Any' }
+	if inner_type == 'str' { inner_type = 'string' }
+	if inner_type == 'Any' || inner_type == 'unknown' { inner_type = 'int' } // fallback for test literal {1, 2}
+
+	if has_starred {
+		eg.state.used_set_create = true
+		eg.state.used_builtins['datatypes'] = true
+		mut args := []string{}
+		for elt in node.elements {
+			val := eg.visit(elt)
+			if elt is ast.Starred {
+				if val.starts_with('...') {
+					args << val[3..]
+				} else {
+					args << val
+				}
+			} else {
+				args << '[${val}]'
+			}
+		}
+		return 'py_set_create([${args.join(', ')}])'
+	}
+
+	if node.elements.len == 0 {
 		eg.state.used_builtins['datatypes'] = true
 		return 'datatypes.Set[Any]{}'
 	}
 
-	mut inner_type := eg.guess_type(node.elements[0])
-	if inner_type == 'str' { inner_type = 'string' }
-	if inner_type == 'Any' || inner_type == 'unknown' { inner_type = 'int' } // fallback for test literal {1, 2}
-
 	mut elts := []string{}
-	for it in items {
-		elts << '${it}: true'
+	for elt in node.elements {
+		val := eg.visit(elt)
+		elts << '${val}: true'
 	}
 
 	eg.state.used_builtins['datatypes'] = true

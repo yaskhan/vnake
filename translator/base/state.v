@@ -54,6 +54,7 @@ pub mut:
 	used_delete_many             bool
 	used_insert_many             bool
 	used_dict_merge              bool
+	used_set_create              bool
 	used_string_format           bool
 	dataclasses                  map[string][]string
 	generated_sum_types          map[string]string

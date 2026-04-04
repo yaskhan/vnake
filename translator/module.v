@@ -613,6 +613,52 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 }')
 	}
 
+	if m.state.used_set_create {
+		m.emitter.add_helper_function('fn py_set_create[T](elements ...[]T) datatypes.Set[T] {
+    mut res := datatypes.Set[T]{}
+    for e in elements {
+        for it in e {
+            res.add(it)
+        }
+    }
+    return res
+}')
+	}
+
+	if m.state.used_builtins['py_list_slice'] {
+		m.emitter.add_helper_function('fn py_list_slice[T](arr []T, start ?Any, end ?Any, step ?Any) []T {
+    mut s := if st := start {
+        if st is int { int(st) } else { 0 }
+    } else { 0 }
+    mut e := if et := end {
+        if et is int { int(et) } else { arr.len }
+    } else { arr.len }
+    if s < 0 { s = arr.len + s }
+    if e < 0 { e = arr.len + e }
+    if s < 0 { s = 0 } else if s > arr.len { s = arr.len }
+    if e < 0 { e = 0 } else if e > arr.len { e = arr.len }
+    if s >= e { return []T{} }
+    return arr[s..e].clone()
+}')
+	}
+
+	if m.state.used_builtins['py_str_slice'] {
+		m.emitter.add_helper_function('fn py_str_slice(arr string, start ?Any, end ?Any, step ?Any) string {
+    mut s := if st := start {
+        if st is int { int(st) } else { 0 }
+    } else { 0 }
+    mut e := if et := end {
+        if et is int { int(et) } else { arr.len }
+    } else { arr.len }
+    if s < 0 { s = arr.len + s }
+    if e < 0 { e = arr.len + e }
+    if s < 0 { s = 0 } else if s > arr.len { s = arr.len }
+    if e < 0 { e = 0 } else if e > arr.len { e = arr.len }
+    if s >= e { return "" }
+    return arr[s..e]
+}')
+	}
+
 	if m.state.used_dict_merge {
 		m.emitter.add_helper_function('fn py_dict_merge[K, V](dicts ...map[K]V) map[K]V {
     mut res := map[K]V{}

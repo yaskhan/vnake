@@ -140,6 +140,12 @@ fn (mut t Translator) append_helpers() {
 	if t.state.used_builtins['py_counter'] {
 		t.emit_function_code('fn py_counter[T](a []T) map[T]int {\n    mut res := map[T]int{}\n    for x in a { res[x]++ }\n    return res\n}')
 	}
+	if t.state.used_builtins['py_list_slice'] {
+		t.emit_function_code('fn py_list_slice[T](arr []T, start ?Any, end ?Any, step ?Any) []T {\n    mut s := if st := start {\n        if st is int { int(st) } else { 0 }\n    } else { 0 }\n    mut e := if et := end {\n        if et is int { int(et) } else { arr.len }\n    } else { arr.len }\n    if s < 0 { s = arr.len + s }\n    if e < 0 { e = arr.len + e }\n    if s < 0 { s = 0 } else if s > arr.len { s = arr.len }\n    if e < 0 { e = 0 } else if e > arr.len { e = arr.len }\n    if s >= e { return []T{} }\n    return arr[s..e].clone()\n}')
+	}
+	if t.state.used_builtins['py_str_slice'] {
+		t.emit_function_code('fn py_str_slice(arr string, start ?Any, end ?Any, step ?Any) string {\n    mut s := if st := start {\n        if st is int { int(st) } else { 0 }\n    } else { 0 }\n    mut e := if et := end {\n        if et is int { int(et) } else { arr.len }\n    } else { arr.len }\n    if s < 0 { s = arr.len + s }\n    if e < 0 { e = arr.len + e }\n    if s < 0 { s = 0 } else if s > arr.len { s = arr.len }\n    if e < 0 { e = 0 } else if e > arr.len { e = arr.len }\n    if s >= e { return "" }\n    return arr[s..e]\n}')
+	}
 	if t.state.used_builtins['py_csv_reader'] || t.state.used_builtins['PyCsvReader'] {
 		t.emit_struct_code('struct PyCsvReader {\n    mut:\n        r &csv.Reader\n}')
 		t.emit_function_code('fn py_csv_reader(f os.File) &PyCsvReader {\n    return &PyCsvReader{r: csv.new_reader(f)}\n}\nfn (mut r PyCsvReader) next() ?[]string {\n    return r.r.read() or { none }\n}\nfn (mut r PyCsvReader) iter() &PyCsvReader {\n    return r\n}')
