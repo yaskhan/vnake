@@ -378,8 +378,16 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		func := args[0]
 		iterable := args[1]
 		mut inner := func
-		// If it's a simple function name or builtin, inject (it) for V's functional methods
-		if !func.contains('fn (') && !func.contains('(') {
+		// Handle basic type constructors as callbacks
+		if func == "'string'" {
+			inner = 'it.str()'
+		} else if func == "'int'" {
+			inner = 'it.int()'
+		} else if func in ["'f64'", "'float'"] {
+			inner = 'it.f64()'
+		} else if func == "'bool'" {
+			inner = 'py_bool(it)'
+		} else if !func.contains('fn (') && !func.contains('(') {
 			inner = '${func}(it)'
 		}
 		if func_name_str == 'map' {

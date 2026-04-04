@@ -23,7 +23,7 @@ pub fn new_expr_gen(model &models.VType, type_analyzer &analyzer.Analyzer, state
 	}
 }
 
-fn (eg &ExprGen) type_ctx() base.TypeGuessingContext {
+pub fn (eg &ExprGen) type_ctx() base.TypeGuessingContext {
 	return base.TypeGuessingContext{
 		type_map:           eg.analyzer.type_map
 		location_map:       eg.analyzer.location_map

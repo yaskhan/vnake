@@ -380,6 +380,13 @@ fn (mut l Lexer) next_token() Token {
 			return l.make_token(.eof, '')
 		}
 
+		// Handle initial indentation
+		if l.pos == 0 && (l.peek_char() == ` ` || l.peek_char() == `\t`) {
+			if tok := l.handle_indentation() {
+				return tok
+			}
+		}
+
 		ch := l.peek_char()
 
 		// Newline => handle indentation on next line

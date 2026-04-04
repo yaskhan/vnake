@@ -581,6 +581,12 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			eg.target_type = t.state.current_assignment_type
 			mut rhs_text := eg.visit(value)
 			t.state.current_assignment_lhs = ''
+
+			if (t.state.current_ann_raw == 'LiteralString' || t.state.current_ann_raw == 'typing.LiteralString') {
+				if !base.is_literal_string_expr(value, eg.type_ctx()) {
+					t.emit_indented('//##LLM@@ SECURITY WARNING: Assigning non-literal string to LiteralString.')
+				}
+			}
 			t.state.current_ann_raw = ''
 			if rhs_text == 'none' && !t.state.current_assignment_type.starts_with('?') {
 				t.state.current_assignment_type = '?' + t.state.current_assignment_type
