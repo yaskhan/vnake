@@ -1,3 +1,3 @@
 @@in# "fn new_decimal(value string) &Decimal {"
 @@in# "return &Decimal{}"
-@@notin# "__new__"
+@@notin# "fn (cls Decimal) new_decimal"

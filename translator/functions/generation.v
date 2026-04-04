@@ -72,7 +72,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	args << node.args.kwonlyargs
 
 	// Receiver handling
-	if is_method && args.len > 0 && args[0].arg in ['self', 'cls'] {
+	if is_method && node.name != '__new__' && args.len > 0 && args[0].arg in ['self', 'cls'] {
 		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
 			mut is_mutated := h.is_mutating_method(node, struct_name, &env)
 			p_key := '${struct_name}.${node.name}.self'
@@ -93,6 +93,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			receiver_str = '(${mut_pfx}${args[0].arg} ${struct_name}${gen_s}) '
 			receiver_name = args[0].arg
 		}
+		args = args[1..].clone()
+	} else if node.name == '__new__' && args.len > 0 && args[0].arg == 'cls' {
 		args = args[1..].clone()
 	} else if env.state.current_class_is_unittest && args.len > 0 && args[0].arg == 'self' {
 		args = args[1..].clone()
@@ -450,8 +452,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	prev_in_init := env.state.in_init
 	if is_init {
 		env.state.in_init = true
-		alloc_type := if ret_type.starts_with('!') { ret_type[2..] } else { ret_type[1..] } // trim !& or &
-		env.emit_fn(env.state.indent() + 'mut self := ${alloc_type}{}')
+		env.emit_fn(env.state.indent() + 'mut self := ${ret_type}{}')
 	}
 
 	prev_ret_type_state := env.state.current_function_return_type
@@ -489,7 +490,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		if env.state.defined_classes[struct_name]['is_pydantic'] {
 			env.emit_fn(env.state.indent() + 'self.validate() or { return err }')
 		}
-		env.emit_fn(env.state.indent() + 'return &self')
+		env.emit_fn(env.state.indent() + 'return self')
 	}
 
 	env.pop_scope_fn()

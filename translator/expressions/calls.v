@@ -349,6 +349,18 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		return 'typeof(${args[0]}).name'
 	}
 
+	if func_name_str == 'object.new___' && args.len > 0 {
+		mut res_type := eg.state.current_class
+		if eg.state.current_class_generics.len > 0 {
+			mut v_gens := []string{}
+			for gn in eg.state.current_class_generics {
+				v_gens << eg.state.current_class_generic_map[gn] or { gn }
+			}
+			res_type += "[${v_gens.join(', ')}]"
+		}
+		return "&${res_type}{}"
+	}
+
 	if func_name_str == 'cls' && eg.state.current_class.len > 0 {
 		gen_s := if eg.state.current_class_generics.len > 0 {
 			mut v_gens := []string{}

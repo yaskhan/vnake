@@ -123,7 +123,11 @@ pub fn (e &VCodeEmitter) emit() string {
 			if sanitized.starts_with('pub ') {
 				sanitized = sanitized[4..]
 			}
-			lines << '__global ${sanitized}'
+			if sanitized.starts_with('__global ') {
+				lines << sanitized
+			} else {
+				lines << '__global ${sanitized}'
+			}
 		}
 		lines << ''
 	}

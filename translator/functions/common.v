@@ -177,11 +177,9 @@ pub fn extract_implicit_generics(
 		}
 	}
 
-/*
 	for gen in current_class_generics {
 		filtered.delete(gen)
 	}
-*/
 
 	mut result := filtered.keys()
 	result.sort()

@@ -490,7 +490,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			return
 		}
 
-		if t.state.indent_level == 0 && (id.is_upper() || id in t.state.global_vars) {
+		if t.state.indent_level == 0 && ((id.is_upper() && id.len > 1) || id in t.state.global_vars) {
 			v_id := if id in t.state.global_vars { id } else { base.to_snake_case(id) }
 			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
 			mut v_type := v_lhs_t

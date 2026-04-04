@@ -312,7 +312,11 @@ fn (m &ModuleTranslator) collect_names_from_expr(expr ast.Expression, mut names 
 
 fn (m &ModuleTranslator) collect_global_refs(node ast.ASTNode, top_level map[string]bool, mut assigned_locally map[string]bool, mut globals map[string]bool) {
 	if node is ast.Module {
-		for s in node.body { m.walk_stmt_refs(s, top_level, assigned_locally, mut globals) }
+		for s in node.body {
+			if s is ast.FunctionDef || s is ast.ClassDef {
+				m.walk_stmt_refs(s, top_level, assigned_locally, mut globals)
+			}
+		}
 	} else if node is ast.FunctionDef {
 		mut inner_assigned := assigned_locally.clone()
 		for arg in node.args.args { inner_assigned[arg.arg] = true }

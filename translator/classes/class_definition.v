@@ -159,6 +159,8 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		}
 	}
 	body = filtered_body.clone()
+	has_init, has_new, static_methods, class_methods := classes.class_methods_handler.extract_method_info(node)
+	classes.class_methods_handler.register_class_info(struct_name, has_init, has_new, static_methods, class_methods, false, mut env)
 
 	mut abs_methods := []string{}
 	for base_name in current_class_bases {
@@ -440,7 +442,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					}
 				}
 			} else {
-				if !classes.class_methods_handler.has_method(methods, '__init__') && !is_dataclass && !is_protocol && !is_typed_dict && !is_unittest {
+				if !classes.class_methods_handler.has_method(methods, '__init__') && !classes.class_methods_handler.has_method(methods, '__new__') && !is_dataclass && !is_protocol && !is_typed_dict && !is_unittest {
 					prefix := if env.state.is_exported(struct_name) { 'pub ' } else { '' }
 					generics := get_generics_with_variance_str(&env)
 					mangled_factory := base.get_factory_name(struct_name, env.state.class_hierarchy)
