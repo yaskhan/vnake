@@ -553,6 +553,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	t.append_helpers()
 
+	if t.state.used_builtins["regex"] {
+		e.add_import("regex")
+	}
 	if t.state.used_builtins['math.pow'] || t.state.used_builtins['math.floor'] {
 		e.add_import('math')
 	}

@@ -153,7 +153,7 @@ pub fn (p PydanticFieldProcessor) generate_struct_tags(info PydanticFieldInfo) s
 		tags << "title: '${info.title}'"
 	}
 	if tags.len > 0 {
-		return '[${tags.join('; ')}]'
+		return '[${tags.join("; ")}]'
 	}
 	return ''
 }
@@ -189,7 +189,9 @@ pub fn (p PydanticFieldProcessor) generate_validation_code(info PydanticFieldInf
 		code << '${indent}if ${prefix}.len < ${info.min_length} { return error("Validation Error: ${info.name} length must be >= ${info.min_length}") }'
 	}
 	if info.pattern.len > 0 {
-		code << '${indent}// pattern validation for ${info.name}: ${info.pattern}'
+		env.state.used_builtins['regex'] = true
+		pattern := trim_quotes(info.pattern)
+		code << '${indent}if !regex.match(${prefix}, r\'${pattern}\') { return error("Validation Error: ${info.name} must match pattern") }'
 	}
 	if info.multiple_of.len > 0 {
 		code << '${indent}if ${prefix} % ${info.multiple_of} != 0 { return error("Validation Error: ${info.name} must be multiple of ${info.multiple_of}") }'
@@ -201,7 +203,15 @@ pub fn (p PydanticFieldProcessor) generate_validation_code(info PydanticFieldInf
 		code << '${indent}if ${prefix}.len > ${info.max_items} { return error("Validation Error: ${info.name} length must be <= ${info.max_items}") }'
 	}
 	if info.unique_items {
-		code << '${indent}// unique_items validation for ${info.name}'
+		mut elem_type := "Any"
+		if info.type_str.starts_with("[]") {
+			elem_type = info.type_str[2..]
+		}
+		code << '${indent}seen_${info.name} := map[${elem_type}]bool{}'
+		code << '${indent}for item in ${prefix} {'
+		code << '${indent}    if item in seen_${info.name} { return error("Validation Error: ${info.name} items must be unique") }'
+		code << '${indent}    seen_${info.name}[item] = true'
+		code << '${indent}}'
 	}
 	if info.const_value.len > 0 {
 		code << '${indent}if ${prefix} != ${info.const_value} { return error("Validation Error: ${info.name} must be ${trim_quotes(info.const_value)}") }'
