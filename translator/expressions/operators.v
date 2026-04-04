@@ -303,7 +303,8 @@ fn (mut eg ExprGen) format_repeated_list_literal(list_node ast.List, len_node as
 		}
 		else {}
 	}
-	return "[]${elem_type}{len: ${len_expr}, init: ${final_init}}"
+	v_list := eg.visit_list(list_node)
+	return '(${v_list}).repeat(${len_expr})'
 }
 
 pub fn (mut eg ExprGen) visit_unary_op(node ast.UnaryOp) string {

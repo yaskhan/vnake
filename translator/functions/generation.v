@@ -212,7 +212,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		}
 
 		a_clean := arg_type.trim_left('?!')
-		if (a_clean.len > 0 && a_clean[0].is_capital() && a_clean !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !a_clean.starts_with('SumType_') && a_clean !in v_gens_to_declare) && !arg_type.starts_with('&') {
+		if (a_clean.len > 0 && a_clean[0].is_capital() && a_clean !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !a_clean.starts_with('SumType_') && !a_clean.starts_with('TupleStruct_') && a_clean !in v_gens_to_declare) && !arg_type.starts_with('&') {
 			if arg_type.starts_with('?') {
 				arg_type = '?&' + arg_type[1..]
 			} else {
@@ -302,7 +302,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 		r_clean_ptr := ret_type.trim_left('?!')
 		is_v_native_method := node.name in ['__str__', '__repr__', 'str', 'repr', '__iter__', 'iter', '__next__', 'next', '__len__', 'len', '__getitem__', 'idx', '__setitem__', 'set', '__enter__', 'enter', '__exit__', 'exit']
-		if !is_v_native_method && r_clean_ptr.len > 0 && r_clean_ptr[0].is_capital() && r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !r_clean_ptr.starts_with('SumType_') && r_clean_ptr !in v_gens_to_declare && !ret_type.starts_with('&') {
+		if !is_v_native_method && r_clean_ptr.len > 0 && r_clean_ptr[0].is_capital() && r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !r_clean_ptr.starts_with('SumType_') && !r_clean_ptr.starts_with('TupleStruct_') && r_clean_ptr !in v_gens_to_declare && !ret_type.starts_with('&') {
 			if ret_type.starts_with('?') {
 				ret_type = '?&' + ret_type[1..]
 			} else {
@@ -353,7 +353,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		}
 		'__len__', 'len' { func_name = 'len' }
 		'__getitem__', 'idx' { func_name = 'idx' }
-		'__setitem__', 'set' { func_name = 'set' }
+		'__setitem__', '__set__', 'set' { func_name = 'set' }
 		'__iter__', 'iter' {
 			func_name = 'iter'
 			if (ret_type == 'void' || ret_type == '') && struct_name.len > 0 {
@@ -362,6 +362,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		}
 		'__enter__', '__aenter__', 'enter' { func_name = 'enter' }
 		'__exit__', '__aexit__', 'exit' { func_name = 'exit' }
+		'__get__', 'get' { func_name = 'get' }
+		'__delete__', 'delete' { func_name = 'delete' }
 		'__post_init__', 'post_init' { func_name = 'post_init' }
 		else {
 			if dec_info.is_classmethod || dec_info.is_staticmethod {

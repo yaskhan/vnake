@@ -49,8 +49,11 @@ fn (mut t Translator) visit_continue(node ast.Continue) {
 }
 
 fn (mut t Translator) visit_return(node ast.Return) {
+	prev := t.state.current_assignment_type
+	t.state.current_assignment_type = t.state.current_function_return_type
 	t.control_flow_module.env = t.get_control_flow_env()
 	t.control_flow_module.visit_return(node)
+	t.state.current_assignment_type = prev
 }
 
 fn (mut t Translator) visit_raise(node ast.Raise) {

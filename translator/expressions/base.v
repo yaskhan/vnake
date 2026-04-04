@@ -96,10 +96,10 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	name := eg.state.name_remap[node.id] or { node.id }
 	
-	if name == 'str' { return "'string'" }
-	if name == 'float' { return "'f64'" }
-	if name == 'int' { return "'int'" }
-	if name == 'bool' { return "'bool'" }
+	if name == 'str' { return "string" }
+	if name == 'float' { return "f64" }
+	if name == 'int' { return "int" }
+	if name == 'bool' { return "bool" }
 
 	// If name is already a complex expression (e.g. from narrowing: "(obj as Derived)"), 
 	// don't sanitize it again, as it contains V syntax.
@@ -198,9 +198,12 @@ pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
 	return res
 }
 
-fn (eg &ExprGen) quote_string_content(value string) string {
+fn (eg &ExprGen) quote_string_content(value string, is_raw bool) string {
 	if value.len == 0 {
 		return "''"
+	}
+	if is_raw {
+		return "r'${value}'"
 	}
 
 	mut escaped := value.replace('$', '\\$')
@@ -215,14 +218,29 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 	if values.len == 0 {
 		return ''
 	}
-	v_first := values[0]
-	if v_first is ast.Constant {
-		if !v_first.value.starts_with('__py2v_t__')
-			&& !v_first.value.starts_with('t\'')
-			&& !v_first.value.starts_with('t"')
-			&& v_first.token.typ != .tstring_tok {
-			return ''
+	mut has_marker := false
+	mut is_raw := false
+	for val in values {
+		if val is ast.Constant {
+			if val.value.contains('__py2v_t__') {
+				has_marker = true
+				break
+			}
+			if val.value.contains('__py2v_rt__') {
+				has_marker = true
+				is_raw = true
+				break
+			}
+			if val.value.starts_with('t\'') || val.value.starts_with('t"') || val.value.starts_with('rt\'') || val.value.starts_with('rt"') {
+				has_marker = true
+				if val.value.starts_with('rt') { is_raw = true }
+				break
+			}
 		}
+	}
+	if !has_marker {
+		return ''
+	}
 
 		mut parts := []string{}
 		mut interpolations := []string{}
@@ -230,12 +248,20 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 		for i, value in values {
 			match value {
 				ast.Constant {
-					mut content := value.value
+					mut content := eg.extract_string_content(value.value)
 					if content.starts_with('__py2v_t__') {
 						content = content['__py2v_t__'.len..]
+					} else if content.starts_with('__py2v_rt__') {
+						content = content['__py2v_rt__'.len..]
 					}
-					content = eg.extract_string_content(content)
-					parts << eg.quote_string_content(content)
+					
+					if parts.len > interpolations.len {
+						last := parts.pop()
+						last_content := eg.extract_string_content(last)
+						parts << eg.quote_string_content(last_content + content, is_raw)
+					} else {
+						parts << eg.quote_string_content(content, is_raw)
+					}
 				}
 				ast.FormattedValue {
 					if i == 0 {
@@ -258,7 +284,7 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 					if format_spec_node := value.format_spec {
 						format_spec = eg.visit(format_spec_node)
 					}
-					interpolations << 'Interpolation{value: ${expr_text}, expression: ${eg.quote_string_content(expr_text)}, conversion: ${conversion}, format_spec: ${format_spec}}'
+					interpolations << 'Interpolation{value: ${expr_text}, expression: ${eg.quote_string_content(expr_text, false)}, conversion: ${conversion}, format_spec: ${format_spec}}'
 					if i == values.len - 1 {
 						parts << "''"
 					}
@@ -272,8 +298,6 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 		}
 
 		return 'Template{strings: [${parts.join(', ')}], interpolations: [${interpolations.join(', ')}]}'
-	}
-	return ''
 }
 
 pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
@@ -286,18 +310,23 @@ pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
 	if node.value == 'False' {
 		return 'false'
 	}
+	if node.value == 'Ellipsis' || node.value == '...' {
+		return '/* ... */'
+	}
 	if node.value.starts_with("b'") || node.value.starts_with('b"') {
 		content := eg.extract_string_content(node.value[1..])
 		return eg.bytes_literal_to_v(content)
 	}
-	if node.token.typ == .tstring_tok || node.value.starts_with('__py2v_t__')
-		|| node.value.starts_with('t\'') || node.value.starts_with('t"') {
-		mut content := node.value
+	if node.token.typ == .tstring_tok || node.value.contains('__py2v_t__') || node.value.contains('__py2v_rt__')
+		|| node.value.starts_with('t\'') || node.value.starts_with('t"') || node.value.starts_with('rt\'') || node.value.starts_with('rt"') {
+		mut content := eg.extract_string_content(node.value)
+		is_raw := content.starts_with('__py2v_rt__') || content.starts_with('rt\'') || content.starts_with('rt"')
 		if content.starts_with('__py2v_t__') {
 			content = content['__py2v_t__'.len..]
+		} else if content.starts_with('__py2v_rt__') {
+			content = content['__py2v_rt__'.len..]
 		}
-		content = eg.extract_string_content(content)
-		return 'Template{strings: [${eg.quote_string_content(content)}], interpolations: []}'
+		return 'Template{strings: [${eg.quote_string_content(content, is_raw)}], interpolations: []}'
 	}
 	if node.token.typ == .string_tok || node.token.typ == .fstring_tok {
 		if node.value.starts_with("'") || node.value.starts_with('"') || node.value.starts_with('t\'')
@@ -410,15 +439,24 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 	}
 	
 	mut values := []string{}
+	mut inner_v_type := ''
+	if eg.target_type.starts_with('[]') {
+		inner_v_type = eg.target_type[2..]
+	}
+
 	for elt in node.elements {
-		values << eg.visit(elt)
+		mut v := eg.visit(elt)
+		if inner_v_type.len > 0 && (inner_v_type.starts_with('SumType_') || inner_v_type.contains(' | ')) && !v.contains('(') {
+			v = '${inner_v_type}(${v})'
+		}
+		values << v
 	}
 	
 	if has_starred {
 		eg.state.used_list_concat = true
 		mut args := []string{}
-		for elt in node.elements {
-			val := eg.visit(elt)
+		for i, elt in node.elements {
+			val := values[i]
 			if elt is ast.Starred {
 				if val.starts_with('...') {
 					args << val[3..]
@@ -447,11 +485,25 @@ pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
 		return "map[string]Any{}"
 	}
 	mut items := []string{}
+	mut val_v_type := ''
+	if dict_type.starts_with('map[') {
+		bracket_idx := dict_type.index(']') or { -1 }
+		if bracket_idx != -1 {
+			val_v_type = dict_type[bracket_idx + 1..]
+		}
+	}
+
 	for i, key in node.keys {
 		if i >= node.values.len {
 			break
 		}
-		val := eg.visit(node.values[i])
+		mut val := eg.visit(node.values[i])
+		if !is_struct {
+			if val_v_type.len > 0 && (val_v_type.starts_with('SumType_') || val_v_type.contains(' | ')) && !val.contains('(') {
+				val = '${val_v_type}(${val})'
+			}
+		}
+
 		if is_struct && key is ast.Constant && (key.token.typ == .string_tok || key.token.typ == .fstring_tok) {
 			items << '${key.value.trim('\'"')}: ${val}'
 			continue

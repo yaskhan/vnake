@@ -84,7 +84,8 @@ fn (c CompatibilityLayer) preprocess_tstrings(source string) string {
 					result << quote
 					result << quote
 				}
-				result << '__py2v_t__'.bytes()
+				marker := if raw_prefix { '__py2v_rt__' } else { '__py2v_t__' }
+				result << marker.bytes()
 				i = prefix_end + quote_len
 				continue
 			}

@@ -63,6 +63,9 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 		}
 		ast.Name { 
 			res := t.get_type(node.id)
+			if res == 'Any' && node.id.len > 0 && node.id[0].is_capital() {
+				return node.id
+			}
 			return if res == 'Any' { 'int' } else { res }
 		}
 		ast.Call {

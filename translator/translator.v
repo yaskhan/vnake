@@ -123,8 +123,8 @@ fn (t &Translator) is_declared_local(name string) bool {
 }
 
 fn (mut t Translator) visit_expr(node ast.Expression) string {
-	// eprintln('EXPR VISIT')
 	mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
+	eg.target_type = t.state.current_assignment_type
 	return eg.visit(node)
 }
 

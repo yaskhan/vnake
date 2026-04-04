@@ -904,7 +904,8 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 
 pub fn (mut eg ExprGen) handle_via_mapper(node ast.Call, module_name string, func_name string, args []string) ?string {
 	if module_name == 'typing' && func_name == 'cast' && args.len >= 2 {
-		return '(${args[1]} as ${args[0]})'
+		typ := args[0].trim("'").trim('"')
+		return '(${args[1]} as ${typ})'
 	}
 	if module_name == 'typing' && func_name == 'NewType' && args.len >= 2 {
 		name := args[0].trim("'").trim('"')
