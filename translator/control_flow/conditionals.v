@@ -7,29 +7,46 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 	if node is ast.Call {
 		if node.func is ast.Name {
 			name_id := node.func.id
-			if name_id == 'isinstance' && node.args.len >= 2 {
-				arg0 := node.args[0]
-				arg1 := node.args[1]
-				if arg0 is ast.Name {
-					var_name := arg0.id
-					if positive {
-						mut v_type := if arg1 is ast.Tuple {
-							mut parts := []string{}
-							for elt in arg1.elements {
-								parts << m.visit_expr(elt)
+				if name_id == 'isinstance' && node.args.len >= 2 {
+					arg0 := node.args[0]
+					arg1 := node.args[1]
+					if arg0 is ast.Name {
+						var_name := arg0.id
+						if positive {
+							mut v_type := if arg1 is ast.Tuple {
+								mut parts := []string{}
+								for elt in arg1.elements {
+									parts << m.visit_expr(elt)
+								}
+								m.register_sum_type(parts.join(' | '))
+								parts.join(' | ')
+							} else {
+								m.visit_expr(arg1)
 							}
-							m.register_sum_type(parts.join(' | '))
-							parts.join(' | ')
-						} else {
-							m.visit_expr(arg1)
+							if v_type == 'str' { v_type = 'string' }
+							if v_type !in ['Any', 'void', 'unknown'] {
+								res[var_name] = v_type
+							}
 						}
-						if v_type == 'str' { v_type = 'string' }
-						if v_type !in ['Any', 'void', 'unknown'] {
-							res[var_name] = v_type
+					}
+				} else if tg := m.env.state.type_guards[name_id] {
+					if node.args.len > 0 && node.args[0] is ast.Name {
+						var_name := (node.args[0] as ast.Name).id
+						if positive {
+							res[var_name] = tg.narrowed_type
+						} else if tg.is_type_is {
+							// For TypeIs, we can also narrow in the negative branch if it's a simple union
+							base_type := m.guess_type(ast.Name{id: var_name})
+							if base_type.contains('|') || base_type.starts_with('SumType_') {
+								// We need to find the "other" type.
+								// For now, only for SumType_IntString style.
+								if base_type in ['SumType_IntString', 'int | string'] {
+									res[var_name] = if tg.narrowed_type == 'int' { 'string' } else { 'int' }
+								}
+							}
 						}
 					}
 				}
-			}
 		}
 	} else if node is ast.Compare && node.comparators.len == 1 {
 		op := node.ops[0].value
@@ -169,7 +186,13 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 		}
 	}
 
+	m.env.state.walrus_assignments = []string{}
 	test_expr := m.wrap_bool(node.test, false)
+	for assign in m.env.state.walrus_assignments {
+		m.emit(assign)
+	}
+	m.env.state.walrus_assignments = []string{}
+
 	if is_elif { m.emit('} else if ${test_expr} {') }
 	else { m.emit('if ${test_expr} {') }
 	

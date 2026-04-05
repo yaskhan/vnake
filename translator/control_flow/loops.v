@@ -128,8 +128,13 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 	}
 	m.push_loop_ctx(flag_name)
 
+	m.env.state.walrus_assignments = []string{}
 	mut target := m.visit_expr(node.target)
 	mut iter_expr := m.visit_expr(node.iter)
+	for assign in m.env.state.walrus_assignments {
+		m.emit(assign)
+	}
+	m.env.state.walrus_assignments = []string{}
 	iter_type := m.guess_type(node.iter)
 	if iter_type.starts_with('PyGenerator') {
 		m.emit('for ${target} in ${iter_expr}.out {')

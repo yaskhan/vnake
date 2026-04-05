@@ -576,7 +576,3 @@ pub fn is_literal_string_expr(node ast.Expression, ctx TypeGuessingContext) bool
 	}
 	return false
 }
-
-fn is_string_type(typ string) bool {
-	return typ == 'string' || typ == 'LiteralString'
-}
