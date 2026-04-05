@@ -62,10 +62,23 @@ fn convert_arguments(args ast.Arguments) ([]Argument, []string, []ArgKind) {
 	// regular args
 	for arg in args.args {
 		kind := if arg.default_ == none { ArgKind.arg_pos } else { ArgKind.arg_opt }
+		mut typ := ?MypyTypeNode(none)
+		if ann := arg.annotation {
+			typ = convert_mypy_type(ann, convert_context(arg.token))
+			if t := typ {
+				eprintln("BRIDGE ARG: ${arg.arg} TYPE: ${t.type_str()}")
+			}
+		}
 		res_args << Argument{
-			variable: Var{name: arg.arg, fullname: arg.arg, base: NodeBase{ctx: convert_context(arg.token)}}
-			kind: kind
-			base: NodeBase{ctx: convert_context(arg.token)}
+			variable: Var{
+				name:     arg.arg
+				fullname: arg.arg
+				base:     NodeBase{ctx: convert_context(arg.token)}
+				type_:    typ
+			}
+			type_annotation: typ
+			kind:            kind
+			base:            NodeBase{ctx: convert_context(arg.token)}
 		}
 		res_names << arg.arg
 		res_kinds << kind
@@ -113,24 +126,35 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 	match stmt {
 		ast.FunctionDef {
 			args, names, kinds := convert_arguments(stmt.args)
+			mut ret_type := ?MypyTypeNode(none)
+			if rt := stmt.returns {
+				ret_type = convert_mypy_type(rt, ctx)
+			}
 			func_def := FuncDef{
-				name: stmt.name
-				fullname: stmt.name
-				base: NodeBase{ctx: ctx}
-				body: convert_block(stmt.body)
+				name:      stmt.name
+				fullname:  stmt.name
+				base:      NodeBase{ctx: ctx}
+				body:      convert_block(stmt.body)
 				arguments: args
 				arg_names: names
 				arg_kinds: kinds
+				type_:     ret_type // Mypy semantic analyzer expects the returns type here or a full CallableType
 			}
 			return Statement(func_def)
 		}
 		ast.ClassDef {
+			mut base_exprs := []Expression{}
+			for b in stmt.bases {
+				if e := convert_expression(b) {
+					base_exprs << e
+				}
+			}
 			class_def := ClassDef{
-				name: stmt.name
-				fullname: stmt.name
-				base: NodeBase{ctx: ctx}
-				defs: convert_block(stmt.body)
-				// TODO: bases
+				name:            stmt.name
+				fullname:        stmt.name
+				base:            NodeBase{ctx: ctx}
+				defs:            convert_block(stmt.body)
+				base_type_exprs: base_exprs
 			}
 			return Statement(class_def)
 		}
@@ -300,10 +324,88 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 			}
 			return Statement(raise_stmt)
 		}
+		ast.AnnAssign {
+			mut rvalue := if v := stmt.value { convert_expression(v) } else { none }
+			mut target := convert_expression(stmt.target) or { return none }
+			
+			// For Mypy, AnnAssign is often represented as AssignmentStmt with type_annotation
+			// If value is none, it might be just a declaration.
+			assign_stmt := AssignmentStmt{
+				lvalues: [target]
+				rvalue:  if r := rvalue { r } else { Expression(TempNode{base: NodeBase{ctx: ctx}}) }
+				type_annotation: convert_mypy_type(stmt.annotation, ctx)
+				base:    NodeBase{ctx: ctx}
+			}
+			return Statement(assign_stmt)
+		}
+		ast.AugAssign {
+			mut rvalue := convert_expression(stmt.value) or { return none }
+			mut target := convert_expression(stmt.target) or { return none }
+			if mut lval := target.as_lvalue() {
+				aug_stmt := OperatorAssignmentStmt{
+					lvalue: lval
+					rvalue: rvalue
+					op:     stmt.op.value
+					base:   NodeBase{ctx: ctx}
+				}
+				return Statement(aug_stmt)
+			}
+			return none
+		}
 		else {
 			return none
 		}
 	}
+}
+
+fn convert_mypy_type(expr ast.Expression, ctx Context) ?MypyTypeNode {
+	match expr {
+		ast.Name {
+			return MypyTypeNode(UnboundType{
+				name:   expr.id
+				line:   ctx.line
+				column: ctx.column
+			})
+		}
+		ast.Constant {
+			// Handle string literal types (forward refs)
+			return MypyTypeNode(UnboundType{
+				name:   expr.value
+				line:   ctx.line
+				column: ctx.column
+			})
+		}
+		ast.Subscript {
+			// e.g. Optional[Packet]
+			match expr.value {
+				ast.Name {
+					name := expr.value.id
+					match expr.slice {
+						ast.Name {
+							slice := expr.slice.id
+							return MypyTypeNode(UnboundType{
+								name:   '${name}[${slice}]'
+								line:   ctx.line
+								column: ctx.column
+							})
+						}
+						ast.Constant {
+							slice := expr.slice.value
+							return MypyTypeNode(UnboundType{
+								name:   '${name}[${slice}]'
+								line:   ctx.line
+								column: ctx.column
+							})
+						}
+						else {}
+					}
+				}
+				else {}
+			}
+		}
+		else {}
+	}
+	return none
 }
 
 fn convert_expression(expr ast.Expression) ?Expression {

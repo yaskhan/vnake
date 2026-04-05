@@ -67,7 +67,7 @@ pub fn (h ClassBasesHandler) process_bases(node ast.ClassDef, struct_name string
 			}
 			
 			type_str := env.map_annotation_fn(base_expr)
-			v_type := map_python_type(type_str, struct_name, false, mut env)
+			v_type := map_python_type(type_str, struct_name, false, mut env, '')
 			env.state.current_class_generic_bases[b_name] = v_type
 			if !v_type.starts_with('[]') && !v_type.starts_with('map[') {
 				is_split := b_name in env.state.known_interfaces

@@ -512,7 +512,7 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 	}
 
 	mut plugin_analyzer := new_mypy_plugin_analyzer()
-	plugin_analyzer.collect_file_with_checker(mut file, &tc)
+	plugin_analyzer.collect_file_with_checker(mut file, tc)
 	return plugin_analyzer.store
 }
 
@@ -529,8 +529,8 @@ fn (mut a MypyPluginAnalyzer) remember(node_key string) bool {
 }
 
 fn (mut a MypyPluginAnalyzer) record_checker_type(expr mypy.Expression) {
-	if checker := a.checker {
-		if typ := checker.lookup_type_or_none(expr) {
+	if mut checker := a.checker {
+		if typ := checker.lookup_persistent_type(expr) {
 			ctx := expr.get_context()
 			key := '${ctx.line}:${ctx.column}'
 			typ_str := typ.type_str()

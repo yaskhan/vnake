@@ -106,7 +106,7 @@ pub mut:
 }
 
 pub fn (n NodeBase) str() string {
-	return 'Node(...)'
+	return 'Node'
 }
 
 pub fn (n NodeBase) get_context() Context {
@@ -270,6 +270,16 @@ pub type MypyNode = AssertStmt
 	| StarredPattern
 	| MappingPattern
 	| ClassPattern
+
+pub fn (n MypyNode) str() string {
+	if e := n.as_expression() {
+		return e.str()
+	}
+	if n is Var {
+		return n.name
+	}
+	return 'Node'
+}
 
 
 pub fn (mut n MypyNode) is_statement() bool {
@@ -512,6 +522,18 @@ pub type Expression = AssignmentExpr
 	| AssertTypeExpr
 	| YieldExpr
 	| YieldFromExpr
+
+pub fn (e Expression) str() string {
+	return match e {
+		NameExpr { e.name }
+		MemberExpr { e.expr.str() + '.' + e.name }
+		IntExpr { e.value.str() }
+		StrExpr { e.value }
+		CallExpr { e.callee.str() + '(...)' }
+		IndexExpr { e.base_.str() + '[' + e.index.str() + ']' }
+		else { 'Expression' }
+	}
+}
 
 pub type Lvalue = ListExpr | MemberExpr | NameExpr | StarExpr | TupleExpr | IndexExpr
 
@@ -1029,6 +1051,7 @@ pub fn (mut n Decorator) accept(mut v NodeVisitor) !AnyNode {
 }
 
 // Var — a variable / field / parameter
+@[heap]
 pub struct Var {
 pub mut:
 	base                    NodeBase
@@ -1058,6 +1081,10 @@ pub fn (n Var) get_context() Context {
 
 pub fn (mut n Var) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_var(mut n)!
+}
+
+pub fn (n Var) str() string {
+	return n.name
 }
 
 @[heap]
@@ -1213,6 +1240,10 @@ pub fn (mut n NameExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_name_expr(mut n)!
 }
 
+pub fn (n NameExpr) str() string {
+	return n.name
+}
+
 @[heap]
 pub struct MemberExpr {
 pub mut:
@@ -1231,6 +1262,10 @@ pub fn (n MemberExpr) get_context() Context {
 
 pub fn (mut n MemberExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_member_expr(mut n)!
+}
+
+pub fn (n MemberExpr) str() string {
+	return n.expr.str() + '.' + n.name
 }
 
 pub struct YieldFromExpr {
@@ -2113,6 +2148,3 @@ pub fn (mut n RefExpr) accept(mut v NodeVisitor) !AnyNode {
 	}
 }
 
-pub fn (e Expression) str() string {
-	return 'Expression(...)'
-}

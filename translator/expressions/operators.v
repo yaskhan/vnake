@@ -204,14 +204,21 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) string {
 	left_type := eg.guess_type(node.left)
 	right_type := eg.guess_type(node.right)
+	
+	l_val := eg.visit(node.left)
+	r_val := eg.visit(node.right)
+	
+	// Idiomatic V 'or' block for Optional types
+	if !is_and && (left_type.starts_with('?') || (left_type == 'Any' && l_val.contains(' as '))) {
+		return "${l_val} or { ${r_val} }"
+	}
+
 	if left_type == 'bool' && right_type == 'bool' {
 		l := eg.wrap_bool(node.left, false)
 		r := eg.wrap_bool(node.right, false)
 		return if is_and { "${l} && ${r}" } else { "${l} || ${r}" }
 	}
 	l_cond := eg.wrap_bool(node.left, false)
-	l_val := eg.visit(node.left)
-	r_val := eg.visit(node.right)
 	
 	mut l_expr := l_val
 	mut r_expr := r_val

@@ -1224,7 +1224,8 @@ fn (mut sa SemanticAnalyzer) add_function_to_symbol_table(mut func_def FuncDef) 
 pub fn (mut sa SemanticAnalyzer) add_symbol(name string, node SymbolNodeRef, context Context, module_public bool, module_hidden bool, can_defer bool) bool {
 	// Check if symbol already exists in current scope
 	if sa.locals.len > 0 {
-		if mut locals := sa.locals.last() {
+		last_idx := sa.locals.len - 1
+		if mut locals := sa.locals[last_idx] {
 			if name in locals.symbols {
 				// Symbol already defined in current scope
 				return false
@@ -1233,6 +1234,7 @@ pub fn (mut sa SemanticAnalyzer) add_symbol(name string, node SymbolNodeRef, con
 				kind: 0 // LDEF for local
 				node: node
 			}
+			sa.locals[last_idx] = locals // Re-assign back to the array!
 			return true
 		}
 	}
@@ -1393,12 +1395,12 @@ fn (mut sa SemanticAnalyzer) analyze_function_body(mut defn FuncItem) ! {
 	match mut defn {
 		FuncDef {
 			for mut arg in defn.arguments {
-				mut var := Var{
+				mut var := &Var{
 					name:  arg.variable.name
 					type_: arg.variable.type_
 				}
 				var.fullname = sa.qualified_name(arg.variable.name)
-				sa.add_symbol(arg.variable.name, SymbolNodeRef(var), arg.variable.get_context(), true, false, true)
+				sa.add_symbol(arg.variable.name, SymbolNodeRef(*var), arg.variable.get_context(), true, false, true)
 			}
 		}
 		else {}

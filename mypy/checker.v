@@ -47,12 +47,14 @@ pub mut:
 	errors                   Errors
 	msg                      MessageBuilder
 	type_maps                []TypeMap
+	all_type_maps            []TypeMap
+	persistent_type_map      TypeMap
 	binder                   ConditionalTypeBinder
 	expr_checker             ExpressionChecker
 	pattern_checker          PatternChecker
 	tscope                   Scope
 	scope                    CheckerScope
-	active_type              ?TypeInfo
+	active_type              ?&TypeInfo
 	return_types             []MypyTypeNode
 	dynamic_funcs            []bool
 	partial_types            []PartialTypeScope
@@ -82,18 +84,20 @@ pub mut:
 }
 
 // new_type_checker creates a new TypeChecker
-pub fn new_type_checker(errors Errors, modules map[string]MypyFile, options Options, tree MypyFile, path string, plugin Plugin) TypeChecker {
+pub fn new_type_checker(errors Errors, modules map[string]MypyFile, options Options, tree MypyFile, path string, plugin Plugin) &TypeChecker {
 	msg := MessageBuilder{
-		errors:  unsafe { nil }
-		options: unsafe { nil }
+		errors:  &errors
+		options: &options
 		modules: map[string]&MypyFile{}
 	}
-	return TypeChecker{
+	mut tc := &TypeChecker{
 		is_stub:                  tree.is_stub
 		errors:                   errors
 		msg:                      msg
 		type_maps:                [TypeMap{}]
-		binder:                   ConditionalTypeBinder{}
+		all_type_maps:            []TypeMap{}
+		persistent_type_map:      TypeMap{}
+		binder:                   *new_conditional_type_binder(&options)
 		tscope:                   Scope{}
 		scope:                    new_checker_scope(tree)
 		active_type:              none
@@ -123,32 +127,22 @@ pub fn new_type_checker(errors Errors, modules map[string]MypyFile, options Opti
 		checking_missing_await:   false
 		allow_abstract_call:      false
 		recurse_into_functions:   true
-		expr_checker:             ExpressionChecker{
-			chk:                       unsafe { nil }
-			msg:                       msg
-			strfrm_checker:            StringFormatterChecker{
-				chk: unsafe { nil }
-				msg: unsafe { nil }
-			}
-			plugin:                    plugin
-			type_context:              []?MypyTypeNode{}
-			type_overrides:            map[string]MypyTypeNode{}
-			per_line_checking_time_ns: map[int]int{}
-			expr_cache:                map[string]MypyTypeNode{}
-		}
-		pattern_checker:          PatternChecker{
-			chk:          unsafe { nil }
-			type_context: []MypyTypeNode{}
-		}
 	}
+	tc.expr_checker = new_expression_checker(tc, msg, plugin)
+	tc.pattern_checker = PatternChecker{
+		chk:          tc
+		type_context: []MypyTypeNode{}
+	}
+	return tc
 }
 
 // reset clears state for reuse
 pub fn (mut tc TypeChecker) reset() {
 	tc.partial_reported.clear()
 	tc.module_refs.clear()
-	tc.binder = ConditionalTypeBinder{}
+	tc.binder = *new_conditional_type_binder(&tc.options)
 	tc.type_maps = [TypeMap{}]
+	tc.all_type_maps = []TypeMap{}
 	tc.deferred_nodes = []
 	tc.partial_types = []
 	tc.inferred_attribute_types = none
@@ -200,11 +194,12 @@ pub fn (mut tc TypeChecker) check_top_level(node MypyFile) {
 // accept accepts a node for checking
 pub fn (mut tc TypeChecker) accept(stmt Statement) {
 	mut stmt_mut := stmt
-	stmt_mut.accept(mut tc) or {}
+	stmt_mut.accept(mut tc) or { eprintln("### TC ACCEPT ERR: ${err}") }
 }
 
 // visit_func_def checks function definition
 pub fn (mut tc TypeChecker) visit_func_def(mut defn FuncDef) !AnyNode {
+	eprintln("### TC VISIT FUNC: ${defn.name}")
 	if !tc.recurse_into_functions {
 		return ''
 	}
@@ -228,6 +223,34 @@ pub fn (mut tc TypeChecker) check_func_item(defn FuncItem, name string) {
 // check_func_def checks function definition
 fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 	_ = name
+	tc.type_maps << TypeMap{}
+	
+	// Manually add parameters to the current type map
+	for arg in defn.arguments {
+		arg_name := arg.variable.name
+		mut typ := ?MypyTypeNode(none)
+		
+		if t := arg.variable.type_ {
+			typ = t
+		} else if arg_name == 'self' {
+			if active := tc.active_type {
+				typ = MypyTypeNode(Instance{
+					type_: active
+					args:  []MypyTypeNode{}
+				})
+			}
+		}
+		
+		if t := typ {
+			tc.type_maps.last()[arg_name] = t
+			
+			// Store with correct location for persistent lookup
+			ctx := arg.variable.get_context()
+			pkey := '${ctx.line}:${ctx.column}:${arg_name}'
+			tc.persistent_type_map[pkey] = t
+		}
+	}
+
 	if typ := defn.type_ {
 		if typ is CallableType {
 			tc.return_types << typ.ret_type
@@ -240,29 +263,42 @@ fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 	if tc.return_types.len > 0 {
 		tc.return_types.pop()
 	}
+	tc.all_type_maps << tc.type_maps.pop()
 }
 
 // visit_class_def checks class definition
 pub fn (mut tc TypeChecker) visit_class_def(mut defn ClassDef) !AnyNode {
+	eprintln("### TC VISIT CLASS: ${defn.name}")
+	if !tc.recurse_into_functions {
+		return ''
+	}
 	typ := defn.info or { return '' }
 
 	// Check that base classes are not final
-	for base in typ.mro[1..] {
-		if base.is_final {
-			tc.fail('Cannot inherit from final class "${base.name}"', defn.base.ctx)
+	if typ.mro.len > 1 {
+		for base in typ.mro[1..] {
+			if base.is_final {
+				tc.fail('Cannot inherit from final class "${base.name}"', defn.base.ctx)
+			}
 		}
 	}
 
 	tc.active_type = typ
-	defn.defs.accept(mut tc) or {}
+	eprintln("  TC VISITING CLASS BODY: ${defn.name}")
+	defn.defs.accept(mut tc) or { eprintln("### VISIT CLASS BODY ERR: ${err}") }
+	eprintln("  TC VISITED CLASS BODY: ${defn.name}")
 	tc.active_type = none
 	return ''
 }
 
 // visit_assignment_stmt checks assignment
 pub fn (mut tc TypeChecker) visit_assignment_stmt(mut s AssignmentStmt) !AnyNode {
-	rvalue_type := tc.expr_checker.accept(s.rvalue)
+	mut rvalue_type := tc.expr_checker.accept(s.rvalue)
 	
+	if ann := s.type_annotation {
+		rvalue_type = ann
+	}
+
 	// Check each lvalue
 	for mut lvalue in s.lvalues {
 		if mut lval := lvalue.as_lvalue() {
@@ -412,7 +448,7 @@ pub fn (mut tc TypeChecker) visit_block(mut b Block) !AnyNode {
 		return ''
 	}
 	for mut s in b.body {
-		s.accept(mut tc) or {}
+		s.accept(mut tc) or { eprintln("### STMT ACCEPT ERR: ${err}") }
 	}
 	return ''
 }
@@ -495,13 +531,26 @@ pub fn (mut tc TypeChecker) note(msg string, context Context) {
 
 // store_type saves node type
 pub fn (mut tc TypeChecker) store_type(node Expression, typ MypyTypeNode) {
-	tc.type_maps.last()[node.str()] = typ
+	key := node.str()
+	tc.type_maps.last()[key] = typ
+	
+	// Store in persistent map for plugin
+	ctx := node.get_context()
+	pkey := '${ctx.line}:${ctx.column}:${key}'
+	tc.persistent_type_map[pkey] = typ
+}
+
+pub fn (tc &TypeChecker) lookup_persistent_type(node Expression) ?MypyTypeNode {
+	ctx := node.get_context()
+	pkey := '${ctx.line}:${ctx.column}:${node.str()}'
+	return tc.persistent_type_map[pkey]
 }
 
 // has_type checks if node has a type
 pub fn (tc TypeChecker) has_type(node Expression) bool {
+	key := node.str()
 	for m in tc.type_maps {
-		if node.str() in m {
+		if key in m {
 			return true
 		}
 	}
@@ -510,9 +559,10 @@ pub fn (tc TypeChecker) has_type(node Expression) bool {
 
 // lookup_type looks up node type
 pub fn (tc TypeChecker) lookup_type(node Expression) MypyTypeNode {
+	key := node.str()
 	for i := tc.type_maps.len - 1; i >= 0; i-- {
-		m := tc.type_maps[i].clone()
-		if typ := m[node.str()] {
+		m := tc.type_maps[i]
+		if typ := m[key] {
 			return typ
 		}
 	}
@@ -521,9 +571,10 @@ pub fn (tc TypeChecker) lookup_type(node Expression) MypyTypeNode {
 
 // lookup_type_or_none looks up node type or returns none
 pub fn (tc TypeChecker) lookup_type_or_none(node Expression) ?MypyTypeNode {
+	key := node.str()
 	for i := tc.type_maps.len - 1; i >= 0; i-- {
-		m := tc.type_maps[i].clone()
-		if typ := m[node.str()] {
+		m := tc.type_maps[i]
+		if typ := m[key] {
 			return typ
 		}
 	}

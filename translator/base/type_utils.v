@@ -69,6 +69,11 @@ pub fn is_numeric_type(v_type string) bool {
 
 // wrap_bool lowers Python truthiness into explicit V boolean checks.
 pub fn wrap_bool(node ast.Expression, expr string, v_type string, invert bool) string {
+	// Skip py_bool for expressions that already return a bool in V
+	if node is ast.Compare || (node is ast.UnaryOp && node.op.value == 'not') {
+		return if invert { '!(${expr})' } else { expr }
+	}
+
 	if v_type.starts_with('?') {
 		inner := v_type[1..]
 		inner_cond := bool_condition(expr, inner, invert)

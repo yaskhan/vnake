@@ -22,7 +22,7 @@ pub fn (mut api MypyAPI) analyze(mut file MypyFile, modules map[string]MypyFile)
 }
 
 // check performs type checking on a single file.
-pub fn (mut api MypyAPI) check(mut file MypyFile, modules map[string]MypyFile) !TypeChecker {
+pub fn (mut api MypyAPI) check(mut file MypyFile, modules map[string]MypyFile) !&TypeChecker {
 	// 1. Semantic Analysis (required before type checking)
 	api.analyze(mut file, modules)!
 	if api.errors.is_errors() {
@@ -31,7 +31,7 @@ pub fn (mut api MypyAPI) check(mut file MypyFile, modules map[string]MypyFile) !
 
 	// 2. Type Checking
 	mut tc := new_type_checker(*api.errors, modules, *api.options, file, file.path, Plugin{})
-	file.accept(mut tc)!
+	tc.check_first_pass()
 	if api.errors.is_errors() {
 		return error('Type checking reported errors')
 	}

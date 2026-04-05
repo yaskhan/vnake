@@ -133,9 +133,9 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 			arg_name := sanitize_name(arg.arg, false)
 			mut a_type := 'int'
 			if ann := arg.annotation {
-				a_type = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
+				a_type = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env, arg_name)
 				} else if arg_name in env.analyzer.type_map {
-					a_type = map_python_type(env.analyzer.type_map[arg_name], struct_name, false, mut env)
+					a_type = map_python_type(env.analyzer.type_map[arg_name], struct_name, false, mut env, arg_name)
 				}
 			if is_v_class_type(a_type) {
 				a_type = '&${a_type}'
@@ -145,10 +145,10 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 
 		mut ret_type := 'void'
 		if ret := method.returns {
-			ret_type = map_python_type(env.visit_expr_fn(ret), struct_name, true, mut env)
+			ret_type = map_python_type(env.visit_expr_fn(ret), struct_name, true, mut env, '${method.name}@return')
 		} else if '${method.name}@return' in env.analyzer.type_map {
 			ret_type = map_python_type(env.analyzer.type_map['${method.name}@return'], struct_name,
-				true, mut env)
+				true, mut env, '${method.name}@return')
 		}
 		if is_v_class_type(ret_type) {
 			ret_type = '&${ret_type}'

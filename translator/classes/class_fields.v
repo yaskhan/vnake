@@ -136,7 +136,10 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			added_fields[field_name] = true
 
 			mut f_type := 'Any'
-			if t1 := env.analyzer.type_map['${self_name}.${orig_name}'] {
+			// Try qualified name first (Class.attr), then self.attr, then just attr
+			if t0 := env.analyzer.type_map['${struct_name}.${orig_name}'] {
+				f_type = t0
+			} else if t1 := env.analyzer.type_map['${self_name}.${orig_name}'] {
 				f_type = t1
 			} else if t2 := env.analyzer.type_map[orig_name] {
 				f_type = t2
@@ -160,7 +163,7 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 						if inf_full != 'Any' && inf_full != '' { f_type = inf_full }
 					}
 				}
-								fields << h.get_field_def_info(field_name, map_python_type(f_type, struct_name, false, mut env), struct_name, '', orig_name, mut env)
+								fields << h.get_field_def_info(field_name, map_python_type(f_type, struct_name, false, mut env, orig_name), struct_name, '', orig_name, mut env)
 		}
 	} else if target is ast.Tuple {
 		for elt in target.elements { h.walk_init_expr(elt, self_name, none, mut fields, mut added_fields, struct_name, arg_type_map, mut env) }
@@ -231,7 +234,7 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 					added_fields[field_name] = true
 					if is_dataclass { d_field_order << field_name }
 
-					field_type := map_python_type(guess_type(stmt.value, &env), struct_name, false, mut env)
+					field_type := map_python_type(guess_type(stmt.value, &env), struct_name, false, mut env, orig_name)
 					default_val := env.visit_expr_fn(stmt.value)
 					h.set_class_var(struct_name, field_name, field_type, default_val, mut env)
 				}
@@ -304,14 +307,14 @@ fn (h ClassFieldsHandler) generate_dataclass_factory(struct_name string, datacla
 				if is_class_var { continue }
 
 				f_type := if is_init_var {
-					mut t := map_python_type(raw_type, struct_name, false, mut env)
+					mut t := map_python_type(raw_type, struct_name, false, mut env, name)
 					if t.starts_with('InitVar[') && t.ends_with(']') {
 						t['InitVar['.len..t.len - 1]
 					} else if t == 'InitVar' {
 						'Any'
 					} else { t }
 				} else {
-					map_python_type(raw_type, struct_name, false, mut env)
+					map_python_type(raw_type, struct_name, false, mut env, name)
 				}
 				
 				factory_args << '${name} ${f_type}'

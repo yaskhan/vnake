@@ -2,6 +2,7 @@ module classes
 
 import ast
 import base
+import analyzer
 
 fn noop_sum_type_registrar(_ string) string {
 	return ''
@@ -26,7 +27,33 @@ fn (env &ClassVisitEnv) type_utils_context() base.TypeUtilsContext {
 	}
 }
 
-fn map_python_type(type_str string, struct_name string, is_return bool, mut env ClassVisitEnv) string {
+fn map_python_type(type_str string, struct_name string, is_return bool, mut env ClassVisitEnv, field_name string) string {
+	mut real_type := type_str
+	
+	// If it's Any, try to look up a better type from analyzer/mypy
+	if real_type == 'Any' && field_name.len > 0 {
+		mut lookup_keys := ['${struct_name}.${field_name}', 'self.${field_name}', field_name]
+		eprintln("LOOKUP ${struct_name}.${field_name} starting...")
+		for key in lookup_keys {
+			if t := env.analyzer.type_map[key] {
+				if t != 'Any' {
+					real_type = t
+					break
+				}
+			}
+			if env.analyzer.mypy_store.collected_types.len > 0 {
+				if loc_map := env.analyzer.mypy_store.collected_types[key] {
+					for loc, typ in loc_map {
+						eprintln("  FOUND IN MYPY: ${key} -> ${typ} at ${loc}")
+						real_type = analyzer.map_python_type_to_v(typ)
+						break
+					}
+					if real_type != 'Any' { break }
+				}
+			}
+		}
+	}
+
 	opts := base.TypeMapOptions{
 		struct_name:        struct_name
 		allow_union:        false
@@ -37,37 +64,29 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 	mut ctx := env.type_utils_context()
 	
 	// Check if this is a self-referential type (e.g., Packet -> Optional['Packet'])
-	// We need to detect this BEFORE mapping, so we can return a pointer type
-	is_optional := type_str.starts_with('?') || type_str.starts_with('Optional[') || type_str.contains('typing.Optional')
-	mut clean_type := type_str.trim_left('?')
+	is_optional := real_type.starts_with('?') || real_type.starts_with('Optional[') || real_type.contains('typing.Optional') || real_type.contains('| None')
+	mut clean_type := real_type.trim_left('?')
+	// ... (rest of optional cleanup logic)
 	if clean_type.starts_with('Optional[') && clean_type.ends_with(']') {
 		clean_type = clean_type['Optional['.len..clean_type.len-1]
 	}
 	if clean_type.starts_with('typing.Optional[') && clean_type.ends_with(']') {
 		clean_type = clean_type['typing.Optional['.len..clean_type.len-1]
 	}
-	// Check if clean_type refers to the current struct (self-reference)
-	if clean_type == struct_name || clean_type.replace('_Impl', '') == struct_name || clean_type == struct_name.replace('_Impl', '') {
-		// Self-referential type: use pointer type ?&StructName or &StructName
-		real_name := struct_name.replace('_Impl', '')
-		if is_optional {
-			return '?&${real_name}'
-		} else {
-			return '&${real_name}'
-		}
+	if clean_type.ends_with(' | None') {
+		clean_type = clean_type.all_before(' | None')
 	}
-	// Also check for the non-_Impl version
-	if clean_type.len > 0 && clean_type[0].is_capital() && clean_type in env.state.defined_classes {
-		if is_optional {
-			// Check if this type is defined and is not the current struct
-			if clean_type != struct_name && clean_type != struct_name.replace('_Impl', '') {
-				// It's a different struct, might still need a pointer
-				// But for now only handle self-references
-			}
-		}
+	if clean_type.starts_with('None | ') {
+		clean_type = clean_type.all_after('None | ')
+	}
+	clean_type = clean_type.trim('\'"')
+
+	if clean_type == struct_name || clean_type.replace('_Impl', '') == struct_name || clean_type == struct_name.replace('_Impl', '') {
+		real_name := struct_name.replace('_Impl', '')
+		return if is_optional { '?&${real_name}' } else { '&${real_name}' }
 	}
 	
-	return base.map_type(type_str, opts, mut ctx, fn [mut env] (name string) string {
+	return base.map_type(real_type, opts, mut ctx, fn [mut env] (name string) string {
 		env.state.generated_sum_types[name] = ''
 		return name
 	}, noop_literal_registrar, noop_tuple_registrar)

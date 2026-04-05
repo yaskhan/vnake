@@ -5,8 +5,8 @@ module mypy
 
 pub struct MessageBuilder {
 pub mut:
-	errors  &Errors
-	options &Options
+	errors  ?&Errors
+	options ?&Options
 	modules map[string]&MypyFile
 
 	disable_type_names_stack []bool
@@ -18,8 +18,9 @@ pub fn (mut m MessageBuilder) report(msg string, context Context, severity strin
 	if cod := code {
 		c = cod.code
 	}
+	mut errs := m.errors or { panic('msg.errors') }
 	info := &ErrorInfo{
-		file:       m.errors.file
+		file:       errs.file
 		line:       context.line
 		column:     context.column
 		end_line:   context.end_line
@@ -28,12 +29,12 @@ pub fn (mut m MessageBuilder) report(msg string, context Context, severity strin
 		severity:   severity
 		code:       c
 	}
-	if info.file !in m.errors.error_info_map {
-		m.errors.error_info_map[info.file] = []&ErrorInfo{}
+	if info.file !in errs.error_info_map {
+		errs.error_info_map[info.file] = []&ErrorInfo{}
 	}
-	mut infos := m.errors.error_info_map[info.file] or { []&ErrorInfo{} }
+	mut infos := errs.error_info_map[info.file] or { []&ErrorInfo{} }
 	infos << info
-	m.errors.error_info_map[info.file] = infos
+	errs.error_info_map[info.file] = infos
 }
 
 pub fn (mut m MessageBuilder) fail(msg string, context Context, serious bool, blocker bool, code ?ErrorCode) {

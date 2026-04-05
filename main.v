@@ -174,7 +174,7 @@ pub fn transpile_file(source_file string, config TranspilerConfig, mut global_he
 	}
 
 	mut plugin_analyzer := analyzer.new_mypy_plugin_analyzer()
-	plugin_analyzer.collect_file_with_checker(mut file, &tc)
+	plugin_analyzer.collect_file_with_checker(mut file, tc)
 
 	// Translation
 	mut trans := translator.new_translator()

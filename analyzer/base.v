@@ -98,7 +98,14 @@ pub fn (mut t TypeInferenceBase) set_type(name string, typ string) {
 }
 
 pub fn (t &TypeInferenceBase) get_type(name string) string {
-	return t.type_map[name] or { 'Any' }
+	if name in t.type_map { return t.type_map[name] }
+	if !name.contains('.') && t.scope_names.len > 0 {
+		for i := t.scope_names.len - 1; i >= 0; i-- {
+			qual := t.scope_names[..i+1].join('.') + '.' + name
+			if qual in t.type_map { return t.type_map[qual] }
+		}
+	}
+	return 'Any'
 }
 
 pub fn (t &TypeInferenceBase) has_type(name string) bool {

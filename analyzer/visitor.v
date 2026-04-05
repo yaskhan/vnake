@@ -1197,9 +1197,24 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 					}
 				}
 				if target.value is ast.Name && target.value.id == 'self' {
-					curr_attr_type := t.get_type(target.attr)
-					if value_type != 'none' || curr_attr_type == 'Any' {
+					// Field assignment: self.attr = value
+					// Find the nearest class scope
+					mut cls_name := ''
+					for i := t.scope_names.len - 1; i >= 0; i-- {
+						s := t.scope_names[i]
+						if s.len > 0 && s[0].is_capital() {
+							cls_name = s
+							break
+						}
+					}
+					
+					curr_attr_type_single := t.get_type(target.attr) 
+					if value_type != 'none' || curr_attr_type_single == 'Any' {
+						if cls_name.len > 0 {
+							t.type_map['${cls_name}.${target.attr}'] = value_type
+						}
 						t.store_type(target.attr, value_type)
+						t.type_map['self.' + target.attr] = value_type
 					}
 				}
 			}
@@ -1320,7 +1335,15 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 
 	if target_name.len > 0 {
 		if is_self_attr {
-			t.store_type('self.${target_name}', v_type)
+			t.type_map['self.${target_name}'] = v_type
+			// Also store with class prefix if we can find it
+			for i := t.scope_names.len - 1; i >= 0; i-- {
+				s := t.scope_names[i]
+				if s.len > 0 && s[0].is_capital() {
+					t.type_map['${s}.${target_name}'] = v_type
+					break
+				}
+			}
 		}
 		if t.scope_names.len > 0 {
 			curr_scope := t.scope_names[t.scope_names.len - 1]
@@ -1333,7 +1356,6 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 		} else {
 			t.store_type(target_name, v_type)
 		}
-		
 	}
 
 	if value_expr := node.value {

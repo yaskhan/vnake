@@ -108,13 +108,13 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 				arg := method.args.args[i]
 				mut ann_str := 'Any'
 				if ann := arg.annotation {
-					ann_str = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
+					ann_str = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env, arg.arg)
 				}
 				arg_name := sanitize_name(arg.arg, false)
 				p_args << '${arg_name} ${ann_str}'
 			}
 			ret := if ann := method.returns {
-				r_type := map_python_type(env.visit_expr_fn(ann), struct_name, true, mut env)
+				r_type := map_python_type(env.visit_expr_fn(ann), struct_name, true, mut env, '${method.name}@return')
 				if is_v_class_type(r_type) && !r_type.starts_with('&') && !r_type.starts_with('[]') {
 					' &' + r_type
 				} else {
