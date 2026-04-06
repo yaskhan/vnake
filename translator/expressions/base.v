@@ -5,6 +5,7 @@ import ast
 import functions
 import base
 import models
+import strings
 
 @[heap]
 pub struct ExprGen {
@@ -160,20 +161,21 @@ pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
 	is_literal_goal := eg.target_type == 'LiteralString' || eg.state.current_ann_raw == 'LiteralString' || eg.state.current_ann_raw == 'typing.LiteralString'
 	
 	// Use double quotes to allow single quotes in content - V requires double quotes for interpolation
-	mut res := '"'
+	mut res := strings.new_builder(node.values.len * 16)
+	res.write_byte(`"`)
 	for val_node in node.values {
 		if val_node is ast.Constant {
 			mut content := eg.extract_string_content(val_node.value)
 			content = content.replace('$', '\\$')
 			content = content.replace('"', '\\"')
-			res += content
+			res.write_string(content)
 		} else if val_node is ast.FormattedValue {
 			if is_literal_goal && val_node.value is ast.Constant {
 				// Flatten literal interpolation
 				mut inner_c := eg.extract_string_content(val_node.value.value)
 				inner_c = inner_c.replace('$', '\\$')
 				inner_c = inner_c.replace('"', '\\"')
-				res += inner_c
+				res.write_string(inner_c)
 			} else {
 				mut inner := eg.visit(val_node.value)
 				mut suffix := ''
@@ -191,12 +193,16 @@ pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
 						suffix = ':' + eg.extract_string_content(spec.value)
 					}
 				}
-				res += '$' + '{' + inner + suffix + '}'
+				res.write_byte(`$`)
+				res.write_byte(`{`)
+				res.write_string(inner)
+				res.write_string(suffix)
+				res.write_byte(`}`)
 			}
 		}
 	}
-	res += '"'
-	return res
+	res.write_byte(`"`)
+	return res.str()
 }
 
 fn (eg &ExprGen) quote_string_content(value string, is_raw bool) string {
