@@ -51,10 +51,10 @@ pub fn (mut m MessageBuilder) note(msg string, context Context, code ?ErrorCode)
 
 pub fn (mut m MessageBuilder) has_no_attr(original_type MypyTypeNode, typ MypyTypeNode, member string, context Context) MypyTypeNode {
 	if m.are_type_names_disabled() {
-		m.fail("Item has no attribute '${member}'", context, false, false, none)
+		m.fail("Item has no attribute '${member}'", context, false, false, *attr_defined)
 	} else {
 		type_str := m.format_type(original_type)
-		m.fail("${type_str} has no attribute '${member}'", context, false, false, none) // TODO: error code attr-defined
+		m.fail("${type_str} has no attribute '${member}'", context, false, false, *attr_defined)
 	}
 	return MypyTypeNode(AnyType{
 		type_of_any: .from_error
