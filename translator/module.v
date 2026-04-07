@@ -313,8 +313,9 @@ fn (m &ModuleTranslator) collect_names_from_expr(expr ast.Expression, mut names 
 fn (m &ModuleTranslator) collect_global_refs(node ast.ASTNode, top_level map[string]bool, mut assigned_locally map[string]bool, mut globals map[string]bool) {
 	if node is ast.Module {
 		for s in node.body {
+			eprintln('DEBUG: collect_global_refs STMT: ${s.str()}')
 			if s is ast.FunctionDef || s is ast.ClassDef {
-				m.walk_stmt_refs(s, top_level, assigned_locally, mut globals)
+				m.walk_stmt_refs(s, top_level, mut assigned_locally, mut globals)
 			}
 		}
 	} else if node is ast.FunctionDef {
@@ -326,11 +327,11 @@ fn (m &ModuleTranslator) collect_global_refs(node ast.ASTNode, top_level map[str
 		if ka := node.args.kwarg { inner_assigned[ka.arg] = true }
 		
 		m.collect_inner_assignments(node.body, mut inner_assigned)
-		m.collect_inner_refs(node.body, top_level, inner_assigned, mut globals)
+		m.collect_inner_refs(node.body, top_level, mut inner_assigned, mut globals)
 	} else if node is ast.ClassDef {
 		mut inner_assigned := assigned_locally.clone()
 		m.collect_inner_assignments(node.body, mut inner_assigned)
-		m.collect_inner_refs(node.body, top_level, inner_assigned, mut globals)
+		m.collect_inner_refs(node.body, top_level, mut inner_assigned, mut globals)
 	}
 }
 
@@ -376,13 +377,13 @@ fn (m &ModuleTranslator) collect_inner_assignments(body []ast.Statement, mut ass
 	}
 }
 
-fn (m &ModuleTranslator) collect_inner_refs(body []ast.Statement, top_level map[string]bool, assigned map[string]bool, mut globals map[string]bool) {
+fn (m &ModuleTranslator) collect_inner_refs(body []ast.Statement, top_level map[string]bool, mut assigned map[string]bool, mut globals map[string]bool) {
 	for stmt in body {
-		m.walk_stmt_refs(stmt, top_level, assigned, mut globals)
+		m.walk_stmt_refs(stmt, top_level, mut assigned, mut globals)
 	}
 }
 
-fn (m &ModuleTranslator) walk_stmt_refs(s ast.Statement, top_level map[string]bool, assigned map[string]bool, mut globals map[string]bool) {
+fn (m &ModuleTranslator) walk_stmt_refs(s ast.Statement, top_level map[string]bool, mut assigned map[string]bool, mut globals map[string]bool) {
 	match s {
 		ast.Expr { m.walk_expr_refs(s.value, top_level, assigned, mut globals) }
 		ast.Assign {
@@ -396,22 +397,28 @@ fn (m &ModuleTranslator) walk_stmt_refs(s ast.Statement, top_level map[string]bo
 		ast.Return { if v := s.value { m.walk_expr_refs(v, top_level, assigned, mut globals) } }
 		ast.If {
 			m.walk_expr_refs(s.test, top_level, assigned, mut globals)
-			for item in s.body { m.walk_stmt_refs(item, top_level, assigned, mut globals) }
-			for item in s.orelse { m.walk_stmt_refs(item, top_level, assigned, mut globals) }
+			for item in s.body { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
+			for item in s.orelse { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
 		}
 		ast.While {
 			m.walk_expr_refs(s.test, top_level, assigned, mut globals)
-			for item in s.body { m.walk_stmt_refs(item, top_level, assigned, mut globals) }
-			for item in s.orelse { m.walk_stmt_refs(item, top_level, assigned, mut globals) }
+			for item in s.body { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
+			for item in s.orelse { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
 		}
 		ast.For {
 			m.walk_expr_refs(s.target, top_level, assigned, mut globals)
 			m.walk_expr_refs(s.iter, top_level, assigned, mut globals)
-			for item in s.body { m.walk_stmt_refs(item, top_level, assigned, mut globals) }
-			for item in s.orelse { m.walk_stmt_refs(item, top_level, assigned, mut globals) }
+			for item in s.body { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
+			for item in s.orelse { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
 		}
 		ast.Global {
 			for name in s.names { globals[name] = true }
+		}
+		ast.FunctionDef {
+			m.collect_global_refs(s, top_level, mut assigned, mut globals)
+		}
+		ast.ClassDef {
+			m.collect_global_refs(s, top_level, mut assigned, mut globals)
 		}
 		else {}
 	}
@@ -495,6 +502,7 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 	m.collect_global_refs(node, top_level_names, mut assigned_locally, mut globals)
 
 	for name, _ in globals {
+		eprintln('DEBUG: scan_module_symbols FOUND GLOBAL: ${name}')
 		m.state.global_vars[name] = true
 	}
 }

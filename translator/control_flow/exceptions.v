@@ -55,6 +55,14 @@ pub fn (mut m ControlFlowModule) visit_raise(node ast.Raise) {
 			val := m.visit_expr(exc)
 			m.emit("vexc.raise('Exception', '${val}')")
 		}
+		// Emit terminal return to satisfy V compiler if within a function
+		if m.env.state.current_function_return_type.len > 0 {
+			if m.env.state.current_function_return_type == 'void' {
+				m.emit('return')
+			} else {
+				m.emit('return none')
+			}
+		}
 	} else {
 		m.emit('if vexc.get_curr_exc().name != "" {')
 		m.env.state.indent_level++

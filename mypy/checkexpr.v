@@ -133,6 +133,9 @@ pub fn (mut ec ExpressionChecker) accept(node Expression) MypyTypeNode {
 			}
 		}
 	}
+	if mut tc := ec.chk {
+		tc.store_type(node, typ)
+	}
 	return typ
 }
 
@@ -178,6 +181,7 @@ pub fn (mut ec ExpressionChecker) analyze_ref_expr(e RefExpr) MypyTypeNode {
 			MemberExpr { Expression(e) }
 		}
 		if typ := chk.lookup_type_or_none(expr) {
+			eprintln('DEBUG: analyze_ref_expr NameExpr name=${e.name} typ=${typ.type_str()}')
 			return typ
 		}
 	}

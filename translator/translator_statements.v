@@ -258,7 +258,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	if target is ast.Name && node.value is ast.Name {
 		rhs_id := node.value.id
 		is_capital_rhs := rhs_id.len > 0 && rhs_id[0].is_capital()
-		if is_capital_rhs || rhs_id in t.state.defined_classes || rhs_id in ['int', 'float', 'str', 'bool', 'Any', 'object', 'dict', 'list', 'set', 'tuple', 'List', 'Dict', 'Set', 'Tuple'] {
+		is_capital_target := id.len > 0 && id[0].is_capital()
+		if (is_capital_rhs && is_capital_target) || rhs_id in t.state.defined_classes || rhs_id in ['int', 'float', 'str', 'bool', 'Any', 'object', 'dict', 'list', 'set', 'tuple', 'List', 'Dict', 'Set', 'Tuple'] {
 			mut v_type := if res := t.analyzer.get_type(id) { res } else { t.map_annotation(node.value) }
 			t.emit_indented('type ${id} = ${v_type}')
 			t.declare_local(id)
@@ -483,7 +484,11 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
 		
 		if t.state.indent_level == 0 && (id.is_upper() || id in t.state.global_vars) && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
-			v_id := if id in t.state.global_vars { id } else { base.to_snake_case(id) }
+			v_id := if id in t.state.global_vars { id.to_lower() } else { base.to_snake_case(id).to_lower() }
+			eprintln('DEBUG CONST PROMOTION: id=${id} v_id=${v_id}')
+			if v_id != id {
+				t.state.name_remap[id] = v_id
+			}
 			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
 			t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 			t.declare_local(lhs)
@@ -491,7 +496,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		}
 
 		if t.state.indent_level == 0 && ((id.is_upper() && id.len > 1) || id in t.state.global_vars) {
-			v_id := if id in t.state.global_vars { id } else { base.to_snake_case(id) }
+			v_id := if id in t.state.global_vars { id.to_lower() } else { base.to_snake_case(id).to_lower() }
+			if v_id != id {
+				t.state.name_remap[id] = v_id
+			}
 			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
 			mut v_type := v_lhs_t
 			if v_type == 'unknown' || v_type == 'Any' {
@@ -654,11 +662,30 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			}
 			ann_raw := t.annotation_raw_name(node.annotation)
 			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
-				target_final := node.target
-				id_final := target_final.get_token().value
-				v_id := base.to_snake_case(id_final)
-				pub_prefix := if t.state.is_exported(id_final) { 'pub ' } else { '' }
-				t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
+				v_id := base.to_snake_case(id_inv).to_lower()
+				mut is_mutated := false
+				if m_info := t.analyzer.get_mutability(id_inv) {
+					is_mutated = m_info.is_mutated
+				}
+				
+				// Detect if it's a struct/class type or mutated
+				c_type := t.state.current_assignment_type.trim_left('?&')
+				is_t_struct := c_type.len > 0 && c_type[0].is_capital() && c_type !in ['Any', 'LiteralString', 'Self', 'NoneType']
+				is_rhs_ptr := rhs_text.contains('&') || rhs_text.contains('new_')
+				is_struct := is_t_struct || is_rhs_ptr
+
+				eprintln('DEBUG: Final variable=${id_inv} type=${t.state.current_assignment_type} is_struct=${is_struct.str()} is_mutated=${is_mutated.str()}')
+
+				if v_id != id_inv {
+					t.state.name_remap[id_inv] = v_id
+				}
+				pub_prefix := if t.state.is_exported(id_inv) { 'pub ' } else { '' }
+				
+				if is_mutated || is_struct {
+					t.emit_indented('__global ${v_id} = ${rhs_text}')
+				} else {
+					t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
+				}
 				t.state.current_assignment_type = prev_assignment_type
 				return
 			}

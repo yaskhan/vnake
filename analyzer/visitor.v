@@ -109,8 +109,8 @@ fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 	if name.len == 0 || typ.len == 0 {
 		return
 	}
-	if !t.has_type(name) || (t.raw_type_map[name] == 'map[string]Any' && typ.starts_with('map[')) || (t.raw_type_map[name] == '[]Any' && typ.starts_with('[]')) {
-		t.raw_type_map[name] = typ
+	if name == 'Task.link' {
+		eprintln('DEBUG: store_type name=${name} typ=${typ}')
 	}
 	t.type_map[name] = typ
 	if !name.contains('.') && !name.contains('@') {
@@ -119,10 +119,7 @@ fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 			t.type_map[qualified] = typ
 		}
 	} else if name.contains('.') {
-		short := name.all_after_last('.')
-		if short.len > 0 && (!t.has_type(short) || t.get_type(short) == 'Any') {
-			t.type_map[short] = typ
-		}
+		// Do not auto-store into unqualified map to avoid cross-class contamination
 	}
 }
 
@@ -1208,13 +1205,10 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 						}
 					}
 					
-					curr_attr_type_single := t.get_type(target.attr) 
-					if value_type != 'none' || curr_attr_type_single == 'Any' {
+					if value_type != 'none' {
 						if cls_name.len > 0 {
 							t.type_map['${cls_name}.${target.attr}'] = value_type
 						}
-						t.store_type(target.attr, value_type)
-						t.type_map['self.' + target.attr] = value_type
 					}
 				}
 			}

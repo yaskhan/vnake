@@ -155,10 +155,8 @@ pub fn (mut sa SemanticAnalyzer) prepare_file(mut file_node MypyFile) {
 }
 
 // prepare_builtins_namespace adds special definitions to builtins
-fn (mut sa SemanticAnalyzer) prepare_builtins_namespace(mut file_node MypyFile) {
-	mut names := file_node.names
-
-	// Add empty definitions for base classes
+fn (sa &SemanticAnalyzer) prepare_builtins_namespace(mut file MypyFile) {
+	mut names := file.names
 	for name in core_builtin_classes {
 		cdef := ClassDef{
 			name: name
@@ -170,56 +168,50 @@ fn (mut sa SemanticAnalyzer) prepare_builtins_namespace(mut file_node MypyFile) 
 		info.fullname = 'builtins.${name}'
 		names.symbols[name] = SymbolTableNode{
 			kind: gdef
-			node: SymbolNodeRef(info)
+			node: SymbolNodeRef(*info)
 		}
 	}
-
-	// Add special variables
-	bool_node := names.symbols['bool'].node or { panic('bool not found') }
-	bool_info := bool_node as TypeInfo
-
+	
 	special_names := ['None', 'reveal_type', 'reveal_locals', 'True', 'False', '__debug__']
-	special_types := [
-		MypyTypeNode(NoneType{}),
-		MypyTypeNode(AnyType{
-			type_of_any: .special_form
-		}),
-		MypyTypeNode(AnyType{
-			type_of_any: .special_form
-		}),
-		MypyTypeNode(Instance{
-			type_:     &bool_info
-			args:      []
-			type_name: 'builtins.bool'
-		}),
-		MypyTypeNode(Instance{
-			type_:     &bool_info
-			args:      []
-			type_name: 'builtins.bool'
-		}),
-		MypyTypeNode(Instance{
-			type_:     &bool_info
-			args:      []
-			type_name: 'builtins.bool'
-		}),
-	]
 
-	for i, name in special_names {
-		typ := special_types[i]
-		mut v := Var{
+	for name in special_names {
+		mut v := &Var{
 			name:     name
 			fullname: 'builtins.${name}'
-			type_:    typ
+			type_:    MypyTypeNode(Instance{
+				type_name: 'bool'
+				args:      []MypyTypeNode{}
+			})
 		}
+		if name == 'None' {
+			v.type_ = MypyTypeNode(Instance{
+				type_name: 'NoneType'
+				args:      []MypyTypeNode{}
+			})
+		}
+		
 		names.symbols[name] = SymbolTableNode{
 			kind: gdef
-			node: SymbolNodeRef(v)
+			node: SymbolNodeRef(*v)
 		}
 	}
+	
+	eprintln('DEBUG: prepare_builtins_namespace done. True in builtins: ${"True" in names.symbols}')
 }
 
 // visit_mypy_file handles MypyFile
 pub fn (mut sa SemanticAnalyzer) visit_mypy_file(mut file_node MypyFile) !AnyNode {
+	// Ensure builtins are prepared
+	if 'builtins' !in sa.modules && file_node.fullname != 'builtins' {
+		mut builtins_file := MypyFile{
+			fullname: 'builtins'
+			path:     'builtins.py'
+		}
+		sa.prepare_builtins_namespace(mut builtins_file)
+		sa.modules['builtins'] = builtins_file
+	}
+	sa.prepare_file(mut file_node)
+
 	sa.cur_mod_node = file_node
 	sa.cur_mod_id = file_node.fullname
 
@@ -1500,11 +1492,13 @@ pub fn (mut sa SemanticAnalyzer) report_hang() {
 // Helper types
 // new_type_info — helper for creating TypeInfo
 pub fn new_type_info(mut _ SymbolTable, defn &ClassDef, module_name string) &TypeInfo {
-	return &TypeInfo{
+	mut info := &TypeInfo{
 		name:        defn.name
 		fullname:    if module_name.len > 0 { module_name + '.' + defn.name } else { defn.name }
 		module_name: module_name
 		names:       SymbolTable{symbols: map[string]SymbolTableNode{}}
 		defn:        defn
 	}
+	info.mro = [info]
+	return info
 }

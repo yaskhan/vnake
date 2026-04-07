@@ -511,9 +511,28 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 		return new_mypy_plugin_store()
 	}
 
-	mut plugin_analyzer := new_mypy_plugin_analyzer()
-	plugin_analyzer.collect_file_with_checker(mut file, tc)
-	return plugin_analyzer.store
+	mut a := new_mypy_plugin_analyzer()
+
+	// Bulk import persistent types
+	for pkey, typ in tc.persistent_type_map {
+		// pkey is "line:col:expr_str"
+		parts := pkey.split(':')
+		if parts.len >= 3 {
+			loc := '${parts[0]}:${parts[1]}'
+			expr_str := parts[2..].join(':')
+			typ_str := typ.type_str()
+			a.store.collect_type(expr_str, loc, typ_str)
+			a.store.collect_type('@', loc, typ_str)
+			
+			if expr_str.contains('.') {
+				p := expr_str.split('.')
+				a.store.collect_type(p[p.len-1], loc, typ_str)
+			}
+		}
+	}
+	
+	a.collect_file_with_checker(mut file, tc)
+	return a.store
 }
 
 fn ctx_key(ctx mypy.Context, tag string) string {

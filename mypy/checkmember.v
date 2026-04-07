@@ -2,6 +2,7 @@
 module mypy
 
 pub fn analyze_member_access(name string, typ MypyTypeNode, context Context, is_lvalue bool, is_super bool, is_operator bool, original_type MypyTypeNode, mut chk TypeChecker, in_literal_context bool) MypyTypeNode {
+	eprintln('DEBUG: analyze_member_access name=${name} type=${typ.type_str()}')
 	_ = is_lvalue
 	_ = is_super
 	_ = is_operator
@@ -42,6 +43,7 @@ pub fn analyze_instance_member_access(name string, inst Instance, context Contex
 		})
 	}
 	if sym := lookup_typeinfo_member(name, info) {
+		eprintln('DEBUG: analyze_instance_member_access found ${name} in ${info.fullname}')
 		if node := sym.node {
 			return match node {
 				Var {
@@ -96,6 +98,7 @@ fn lookup_typeinfo_member(name string, info &TypeInfo) ?SymbolTableNode {
 	if name in info.names.symbols {
 		return info.names.symbols[name]
 	}
+	eprintln('DEBUG: lookup_typeinfo_member ${name} NOT FOUND in ${info.fullname}. Available: ${info.names.symbols.keys()}')
 	for base in info.mro {
 		if name in base.names.symbols {
 			return base.names.symbols[name]

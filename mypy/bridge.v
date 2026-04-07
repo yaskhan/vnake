@@ -418,7 +418,6 @@ fn convert_expression(expr ast.Expression) ?Expression {
 			})
 		}
 		ast.Constant {
-			// Try to infer type from value string or token
 			if expr.token.typ == .number {
 				if expr.value.contains('.') {
 					return Expression(FloatExpr{
@@ -429,6 +428,12 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				return Expression(IntExpr{
 					value: expr.value.i64()
 					base:  NodeBase{ctx: ctx}
+				})
+			}
+			if expr.value in ['True', 'False', 'None'] {
+				return Expression(NameExpr{
+					name: expr.value
+					base: NodeBase{ctx: ctx}
 				})
 			}
 			return Expression(StrExpr{
@@ -538,6 +543,33 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				items: entries
 				base:  NodeBase{ctx: ctx}
 			})
+		}
+		ast.IfExp {
+			eprintln('BRIDGE: IfExp found')
+			mut cond := convert_expression(expr.test) or { return none }
+			mut if_true := convert_expression(expr.body) or { return none }
+			mut if_false := convert_expression(expr.orelse) or { return none }
+			return Expression(ConditionalExpr{
+				base:      NodeBase{ctx: ctx}
+				cond:      cond
+				if_expr:   if_true
+				else_expr: if_false
+			})
+		}
+		ast.BoolOp {
+			eprintln('BRIDGE: BoolOp found op=${expr.op.value}')
+			if expr.values.len < 1 { return none }
+			mut res_ := convert_expression(expr.values[0]) or { return none }
+			for i in 1 .. expr.values.len {
+				right := convert_expression(expr.values[i]) or { continue }
+				res_ = Expression(OpExpr{
+					base:  NodeBase{ctx: ctx}
+					op:    expr.op.value
+					left:  res_
+					right: right
+				})
+			}
+			return res_
 		}
 		else {
 			return none

@@ -240,6 +240,7 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) string {
 	v_type := eg.guess_type(node)
 	expr := eg.visit(node)
+	eprintln('DEBUG: build_truthiness_for_or expr=${expr} type=${v_type} is_or=${is_or}')
 	
 	// For Any type (sum type), use is NoneType check for proper none detection
 	if v_type == 'Any' {

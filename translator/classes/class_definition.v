@@ -10,6 +10,12 @@ pub mut:
 }
 
 pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut env ClassVisitEnv, mut classes ClassesModule) {
+	eprintln('DEBUG: visit_class_def START name=${node.name}')
+	if node.name == 'TaskState' {
+		for i, stmt in node.body {
+			eprintln('DEBUG: TaskState body[${i}]=${stmt.str()}')
+		}
+	}
 	mut struct_name := sanitize_name(node.name, true)
 	if h.class_stack.len > 0 {
 		struct_name = h.class_stack.join('') + struct_name

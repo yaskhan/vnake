@@ -47,8 +47,13 @@ pub fn (eg &ExprGen) guess_type_no_loc(node ast.Expression) string {
 }
 
 pub fn (mut eg ExprGen) wrap_bool(node ast.Expression, invert bool) string {
-	expr := eg.visit(node)
 	v_type := eg.guess_type(node)
+	expr := eg.visit(node)
+	eprintln('DEBUG: ExprGen.wrap_bool expr=${expr} type=${v_type} invert=${invert}')
+	if v_type == 'Any' || v_type.starts_with('?') {
+		eprintln('DEBUG: wrap_bool marking py_bool used for expr=${expr} type=${v_type}')
+		eg.state.used_builtins['py_bool'] = true
+	}
 	return base.wrap_bool(node, expr, v_type, invert)
 }
 
@@ -82,7 +87,10 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 		ast.GeneratorExp { return eg.visit_generator_exp(node, '') or { '[]' } }
 		ast.DictComp { return eg.visit_dict_comp(node, '') or { '{}' } }
 		ast.SetComp { return eg.visit_set_comp(node, '') or { '{}' } }
-		ast.IfExp { return eg.visit_if_exp(node) }
+		ast.IfExp {
+			eprintln('DEBUG: ExprGen.visit IfExp node=${node.str()}')
+			return eg.visit_if_exp(node)
+		}
 		ast.Starred { return eg.visit_starred(node) }
 		ast.JoinedStr { return eg.visit_joined_str(node) }
 		ast.FormattedValue { return eg.visit_formatted_value(node) }

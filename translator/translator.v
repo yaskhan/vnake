@@ -532,6 +532,28 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 		t.analyzer.type_map['${name}@return'] = 'PyGenerator[${yield_type}]'
 	}
 
+	// Pre-scan for globals even if not using ModuleTranslator
+	mut top_level_names := map[string]bool{}
+	for stmt in module_node.body {
+		if stmt is ast.FunctionDef { top_level_names[stmt.name] = true }
+		else if stmt is ast.ClassDef { top_level_names[stmt.name] = true }
+		else if stmt is ast.Assign {
+			for target in stmt.targets {
+				if target is ast.Name { top_level_names[target.id] = true }
+			}
+		}
+	}
+	
+	mut globals := map[string]bool{}
+	mut assigned_locally := map[string]bool{}
+	// Reuse logic from ModuleTranslator if possible? No, Translator is in same module but ModuleTranslator is local to its file.
+	// Actually, ModuleTranslator is in same module as Translator!
+	mut mt_for_scan := new_module_translator(mut t.state, fn [mut t] (stmt ast.Statement) { t.visit_stmt(stmt) })
+	mt_for_scan.collect_global_refs(module_node, top_level_names, mut assigned_locally, mut globals)
+	for name, _ in globals {
+		t.state.global_vars[name] = true
+	}
+
 	for k, v in t.analyzer.class_hierarchy {
 		t.state.class_hierarchy[k] = v.clone()
 	}
@@ -563,8 +585,8 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 		}
 	}
 
-	// Use structured output ONLY for specific tests that expect it
-	if filename.contains('test_full_module_generation') {
+	// Use structured output if requested
+	if t.state.is_full_module {
 		mut mt := new_module_translator(mut t.state, fn [mut t] (stmt ast.Statement) {
 			t.visit_stmt(stmt)
 		})

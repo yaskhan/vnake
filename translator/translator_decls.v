@@ -121,6 +121,16 @@ fn (mut t Translator) emit_function_code(s string) {
 	e.add_function(s)
 }
 
+fn (mut t Translator) emit_helper_function_code(s string) {
+	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
+	e.add_helper_function(s)
+}
+
+fn (mut t Translator) emit_helper_struct_code(s string) {
+	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
+	e.add_helper_struct(s)
+}
+
 fn (mut t Translator) emit_constant_code(s string) {
 	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
 	e.add_constant(s)

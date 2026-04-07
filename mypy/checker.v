@@ -128,6 +128,7 @@ pub fn new_type_checker(errors Errors, modules map[string]MypyFile, options Opti
 		allow_abstract_call:      false
 		recurse_into_functions:   true
 	}
+
 	tc.expr_checker = new_expression_checker(tc, msg, plugin)
 	tc.pattern_checker = PatternChecker{
 		chk:          tc
@@ -199,11 +200,24 @@ pub fn (mut tc TypeChecker) accept(stmt Statement) {
 
 // visit_func_def checks function definition
 pub fn (mut tc TypeChecker) visit_func_def(mut defn FuncDef) !AnyNode {
-	eprintln("### TC VISIT FUNC: ${defn.name}")
-	if !tc.recurse_into_functions {
-		return ''
-	}
+	tc.scope.push_function(FuncItem(defn))
 	tc.check_func_item(defn, defn.name)
+	tc.scope.pop_function()
+	return ''
+}
+
+// visit_class_def checks class definition
+pub fn (mut tc TypeChecker) visit_class_def(mut defn ClassDef) !AnyNode {
+	typ := defn.info or { return '' }
+
+	old_active := tc.active_type
+	tc.active_type = typ
+	tc.scope.push_class(*typ)
+	for mut stmt in defn.defs.body {
+		stmt.accept(mut tc)!
+	}
+	tc.scope.pop_class()
+	tc.active_type = old_active
 	return ''
 }
 
@@ -226,13 +240,13 @@ fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 	tc.type_maps << TypeMap{}
 	
 	// Manually add parameters to the current type map
-	for arg in defn.arguments {
+	for i, arg in defn.arguments {
 		arg_name := arg.variable.name
 		mut typ := ?MypyTypeNode(none)
 		
 		if t := arg.variable.type_ {
 			typ = t
-		} else if arg_name == 'self' {
+		} else if arg_name == 'self' || i == 0 {
 			if active := tc.active_type {
 				typ = MypyTypeNode(Instance{
 					type_: active
@@ -266,30 +280,7 @@ fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 	tc.all_type_maps << tc.type_maps.pop()
 }
 
-// visit_class_def checks class definition
-pub fn (mut tc TypeChecker) visit_class_def(mut defn ClassDef) !AnyNode {
-	eprintln("### TC VISIT CLASS: ${defn.name}")
-	if !tc.recurse_into_functions {
-		return ''
-	}
-	typ := defn.info or { return '' }
 
-	// Check that base classes are not final
-	if typ.mro.len > 1 {
-		for base in typ.mro[1..] {
-			if base.is_final {
-				tc.fail('Cannot inherit from final class "${base.name}"', defn.base.ctx)
-			}
-		}
-	}
-
-	tc.active_type = typ
-	eprintln("  TC VISITING CLASS BODY: ${defn.name}")
-	defn.defs.accept(mut tc) or { eprintln("### VISIT CLASS BODY ERR: ${err}") }
-	eprintln("  TC VISITED CLASS BODY: ${defn.name}")
-	tc.active_type = none
-	return ''
-}
 
 // visit_assignment_stmt checks assignment
 pub fn (mut tc TypeChecker) visit_assignment_stmt(mut s AssignmentStmt) !AnyNode {
@@ -336,8 +327,27 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		}
 		MemberExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
-			// TODO: handle member assignment (setting attributes)
 			tc.expr_checker.accept(lvalue.expr)
+			
+			// If assigning to self.name, register it in the class TypeInfo
+			if mut active := tc.active_type {
+				if lvalue.expr is NameExpr {
+					base_name := (lvalue.expr as NameExpr).name
+					if base_name.trim_space() == 'self' {
+						if lvalue.name !in active.names.symbols {
+							mut v := &Var{
+								name:     lvalue.name
+								fullname: active.fullname + '.' + lvalue.name
+								type_:    rvalue_type
+							}
+							active.names.symbols[lvalue.name] = SymbolTableNode{
+								kind: mdef
+								node: SymbolNodeRef(v)
+							}
+						}
+					}
+				}
+			}
 		}
 		TupleExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
@@ -585,12 +595,11 @@ pub fn (mut tc TypeChecker) note(msg string, context Context) {
 
 // store_type saves node type
 pub fn (mut tc TypeChecker) store_type(node Expression, typ MypyTypeNode) {
-	key := node.str()
-	tc.type_maps.last()[key] = typ
-	
-	// Store in persistent map for plugin
+	if typ is AnyType && (typ as AnyType).type_of_any == .from_error {
+		return
+	}
 	ctx := node.get_context()
-	pkey := '${ctx.line}:${ctx.column}:${key}'
+	pkey := '${ctx.line}:${ctx.column}:${node.str()}'
 	tc.persistent_type_map[pkey] = typ
 }
 
@@ -632,6 +641,14 @@ pub fn (tc TypeChecker) lookup_type_or_none(node Expression) ?MypyTypeNode {
 			return typ
 		}
 	}
+	
+	// Fallback for built-in constants if not in local maps
+	if key == 'True' || key == 'False' {
+		return MypyTypeNode(tc.named_type('bool'))
+	} else if key == 'None' {
+		return MypyTypeNode(tc.named_type('NoneType'))
+	}
+	
 	return none
 }
 

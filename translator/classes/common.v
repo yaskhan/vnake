@@ -29,11 +29,13 @@ fn (env &ClassVisitEnv) type_utils_context() base.TypeUtilsContext {
 
 fn map_python_type(type_str string, struct_name string, is_return bool, mut env ClassVisitEnv, field_name string) string {
 	mut real_type := type_str
+	if struct_name == 'Task' && field_name == 'link' {
+		eprintln('DEBUG: map_python_type Task.link input_type=${type_str}')
+	}
 	
 	// If it's Any, try to look up a better type from analyzer/mypy
 	if real_type == 'Any' && field_name.len > 0 {
-		mut lookup_keys := ['${struct_name}.${field_name}', 'self.${field_name}', field_name]
-		eprintln("LOOKUP ${struct_name}.${field_name} starting...")
+		mut lookup_keys := ['${struct_name}.${field_name}']
 		for key in lookup_keys {
 			if t := env.analyzer.type_map[key] {
 				if t != 'Any' {
@@ -44,7 +46,6 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 			if env.analyzer.mypy_store.collected_types.len > 0 {
 				if loc_map := env.analyzer.mypy_store.collected_types[key] {
 					for loc, typ in loc_map {
-						eprintln("  FOUND IN MYPY: ${key} -> ${typ} at ${loc}")
 						real_type = analyzer.map_python_type_to_v(typ)
 						break
 					}
@@ -86,10 +87,28 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 		return if is_optional { '?&${real_name}' } else { '&${real_name}' }
 	}
 	
-	return base.map_type(real_type, opts, mut ctx, fn [mut env] (name string) string {
+	mapped := base.map_type(real_type, opts, mut ctx, fn [mut env] (name string) string {
 		env.state.generated_sum_types[name] = ''
 		return name
 	}, noop_literal_registrar, noop_tuple_registrar)
+
+	// Prepend & for class types if missing
+	mut final_v := mapped
+	pure_v := final_v.trim_left('?')
+	if is_v_class_type(pure_v) && !pure_v.starts_with('&') && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') {
+		if pure_v in env.state.known_interfaces {
+			return if final_v.starts_with('?') { '?' + pure_v } else { pure_v }
+		}
+		if final_v.starts_with('?') {
+			final_v = '?&' + pure_v
+		} else {
+			final_v = '&' + final_v
+		}
+	}
+	if struct_name == 'Task' && field_name == 'link' {
+		eprintln('DEBUG: map_python_type Task.link FINAL result=${final_v}')
+	}
+	return final_v
 }
 
 fn guess_type(node ast.Expression, env &ClassVisitEnv) string {

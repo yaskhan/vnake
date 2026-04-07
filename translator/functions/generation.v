@@ -459,6 +459,9 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	env.state.current_function_return_type = ret_type
 	
 	env.push_scope_fn()
+	if is_method && receiver_name.len > 0 {
+		env.analyzer.type_map[receiver_name] = struct_name
+	}
 	for name_arg in args_names { env.declare_local_fn(name_arg) }
 	if is_nested { env.state.scope_stack.last()[func_name] = true }
 

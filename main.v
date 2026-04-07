@@ -453,6 +453,7 @@ fn print_dependency_report(path string, recursive bool, config TranspilerConfig)
 }
 
 fn main() {
+	println('DEBUG: main.v START')
 	if os.args.len == 1 {
 		print_banner()
 		return
