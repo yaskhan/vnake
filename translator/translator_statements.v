@@ -485,7 +485,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		
 		if t.state.indent_level == 0 && (id.is_upper() || id in t.state.global_vars) && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
 			v_id := if id in t.state.global_vars { id.to_lower() } else { base.to_snake_case(id).to_lower() }
-			eprintln('DEBUG CONST PROMOTION: id=${id} v_id=${v_id}')
 			if v_id != id {
 				t.state.name_remap[id] = v_id
 			}
@@ -672,9 +671,8 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				c_type := t.state.current_assignment_type.trim_left('?&')
 				is_t_struct := c_type.len > 0 && c_type[0].is_capital() && c_type !in ['Any', 'LiteralString', 'Self', 'NoneType']
 				is_rhs_ptr := rhs_text.contains('&') || rhs_text.contains('new_')
-				is_struct := is_t_struct || is_rhs_ptr
-
-				eprintln('DEBUG: Final variable=${id_inv} type=${t.state.current_assignment_type} is_struct=${is_struct.str()} is_mutated=${is_mutated.str()}')
+				is_call := rhs_text.contains('(')
+				is_struct := is_t_struct || is_rhs_ptr || is_call
 
 				if v_id != id_inv {
 					t.state.name_remap[id_inv] = v_id

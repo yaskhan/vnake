@@ -1614,6 +1614,8 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 				m.emitter.add_helper_function(line)
 			} else if stmt is ast.ClassDef {
 				m.emitter.add_helper_struct(line) // For now, handle as block
+			} else if line.trim_space().starts_with('const ') || line.trim_space().starts_with('pub const ') || line.trim_space().starts_with('__global ') {
+				m.emitter.add_constant(line.trim_space())
 			} else {
 				m.emitter.add_init_statement(line.trim_space())
 			}

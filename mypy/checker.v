@@ -606,7 +606,7 @@ pub fn (mut tc TypeChecker) store_type(node Expression, typ MypyTypeNode) {
 pub fn (tc &TypeChecker) lookup_persistent_type(node Expression) ?MypyTypeNode {
 	ctx := node.get_context()
 	pkey := '${ctx.line}:${ctx.column}:${node.str()}'
-	return tc.persistent_type_map[pkey]
+	return tc.persistent_type_map[pkey] or { none }
 }
 
 // has_type checks if node has a type

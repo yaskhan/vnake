@@ -525,7 +525,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.analyzer.analyze(module_node)
 
 	// Infill semantic information from Mypy
-	t.analyzer.mypy_store = analyzer.run_mypy_analysis(preprocessed, filename)
+	// t.analyzer.mypy_store = analyzer.run_mypy_analysis(preprocessed, filename)
 
 	t.coroutine_handler.scan_module(module_node)
 	for name, yield_type in t.coroutine_handler.generators {
@@ -640,7 +640,6 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	for line in t.state.output {
 		trimmed := line.trim_space()
-		eprintln('PROCESSING OUTPUT LINE: "${trimmed}"')
 		if trimmed.starts_with('import ') {
 			e.add_import(trimmed['import '.len..].trim_space())
 		} else if trimmed.starts_with('const ') || trimmed.starts_with('pub const ') {

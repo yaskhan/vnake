@@ -545,7 +545,6 @@ fn convert_expression(expr ast.Expression) ?Expression {
 			})
 		}
 		ast.IfExp {
-			eprintln('BRIDGE: IfExp found')
 			mut cond := convert_expression(expr.test) or { return none }
 			mut if_true := convert_expression(expr.body) or { return none }
 			mut if_false := convert_expression(expr.orelse) or { return none }
@@ -557,7 +556,6 @@ fn convert_expression(expr ast.Expression) ?Expression {
 			})
 		}
 		ast.BoolOp {
-			eprintln('BRIDGE: BoolOp found op=${expr.op.value}')
 			if expr.values.len < 1 { return none }
 			mut res_ := convert_expression(expr.values[0]) or { return none }
 			for i in 1 .. expr.values.len {

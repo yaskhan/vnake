@@ -195,8 +195,6 @@ fn (sa &SemanticAnalyzer) prepare_builtins_namespace(mut file MypyFile) {
 			node: SymbolNodeRef(*v)
 		}
 	}
-	
-	eprintln('DEBUG: prepare_builtins_namespace done. True in builtins: ${"True" in names.symbols}')
 }
 
 // visit_mypy_file handles MypyFile
