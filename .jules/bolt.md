@@ -9,3 +9,7 @@
 ## 2025-05-15 - [V-Lang String and Map Performance]
 **Learning:** Repeated string concatenation in V is $O(N^2)$ due to its immutable nature and frequent re-allocations. Furthermore, local map literals are re-allocated and populated on every function call, adding significant heap overhead.
 **Action:** Use index-based string slicing instead of character-by-character concatenation in loops. Replace local mapping maps with `match` expressions to avoid redundant allocations.
+
+## 2026-04-08 - [Single-pass Type Homogeneity Tracking]
+**Learning:** Allocating temporary arrays or maps to determine the common type of collection elements (e.g., in list or dict literals) during recursive AST traversal creates significant GC pressure and overhead.
+**Action:** Use a single-pass loop with state variables to track homogeneity and nullability, returning early or defaulting to a base type if an inconsistency is detected.

@@ -84,7 +84,6 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		} else { 
 			'Any' 
 		}
-		eprintln('DEBUG: guess_type IfExp bt=${bt} ot=${ot} res=${res}')
 		return res
 	}
 	return 'Any'
@@ -262,31 +261,38 @@ fn guess_type_list(node ast.Expression, ctx TypeGuessingContext) string {
 	return '[]Any'
 }
 
+// guess_type_elements infers the type of a list or tuple.
+// Optimization: Tracks type homogeneity in a single pass to avoid temporary array allocations.
 fn guess_type_elements(elements []ast.Expression, ctx TypeGuessingContext) string {
 	if elements.len == 0 {
 		return '[]Any'
 	}
 
-	mut element_types := []string{}
+	mut first_type := ''
+	mut all_same := true
 	mut has_none := false
+	mut has_elements := false
+
 	for elt in elements {
+		mut current_type := ''
 		if elt is ast.Starred {
-			element_types << 'Any'
-		} else if elt is ast.Constant && elt.value == 'None' {
+			current_type = 'Any'
+		} else if (elt is ast.Constant && elt.value == 'None') || (elt is ast.Name && elt.id in ['None', 'none']) {
 			has_none = true
-		} else if elt is ast.Name && elt.id in ['None', 'none'] {
-			has_none = true
+			continue
 		} else {
-			element_types << guess_type(elt, ctx, true)
+			current_type = guess_type(elt, ctx, true)
+		}
+
+		has_elements = true
+		if first_type == '' {
+			first_type = current_type
+		} else if all_same && current_type != first_type {
+			all_same = false
 		}
 	}
 
-	mut lcs := 'Any'
-	if element_types.len > 0 {
-		if element_types.all(it == element_types[0]) {
-			lcs = element_types[0]
-		}
-	}
+	mut lcs := if has_elements && all_same { first_type } else { 'Any' }
 	if has_none {
 		return '[]?${lcs}'
 	}
@@ -316,6 +322,8 @@ fn guess_type_set(node ast.Set, ctx TypeGuessingContext) string {
 	return 'datatypes.Set[string]'
 }
 
+// guess_type_dict infers the type of a dictionary literal.
+// Optimization: Avoids map allocations by tracking key/value type homogeneity in one pass.
 fn guess_type_dict(node ast.Dict, ctx TypeGuessingContext) string {
 	if ctx.target_type.len > 0 && ctx.target_type in ctx.defined_classes {
 		return ctx.target_type
@@ -323,29 +331,44 @@ fn guess_type_dict(node ast.Dict, ctx TypeGuessingContext) string {
 	if node.keys.len == 0 {
 		return 'map[string]Any'
 	}
-	mut key_types := map[string]bool{}
-	mut val_types := map[string]bool{}
+
+	mut first_k_type := ''
+	mut first_v_type := ''
+	mut all_k_same := true
+	mut all_v_same := true
+
 	for i, k in node.keys {
 		v := node.values[i]
+		mut current_k := ''
+		mut current_v := ''
+
 		if k is ast.NoneExpr {
-			key_types['string'] = true
-			val_types['Any'] = true
+			current_k = 'string'
+			current_v = 'Any'
 		} else {
-			key_types[guess_type(k, ctx, true)] = true
-			val_types[guess_type(v, ctx, true)] = true
+			current_k = guess_type(k, ctx, true)
+			current_v = guess_type(v, ctx, true)
+		}
+
+		if first_k_type == '' {
+			first_k_type = current_k
+			first_v_type = current_v
+		} else {
+			if all_k_same && current_k != first_k_type {
+				all_k_same = false
+			}
+			if all_v_same && current_v != first_v_type {
+				all_v_same = false
+			}
 		}
 	}
-	mut k_type := 'string'
-	if key_types.len == 1 {
-		for k, _ in key_types { k_type = k; break }
-	}
+
+	mut k_type := if all_k_same { first_k_type } else { 'string' }
 	if k_type == 'Any' {
 		k_type = 'string'
 	}
-	mut v_type := 'Any'
-	if val_types.len == 1 {
-		for k, _ in val_types { v_type = k; break }
-	}
+	mut v_type := if all_v_same { first_v_type } else { 'Any' }
+
 	return 'map[${k_type}]${v_type}'
 }
 
@@ -431,15 +454,8 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 
 	val_type := guess_type(node.value, ctx, false)
 	base_type := val_type.trim_left('?&')
-	if node.attr == 'taskList' {
-		full_name := analyzer.expr_name(node)
-		res := ctx.type_map["${base_type}.${node.attr}"] or { "MISSING" }
-		eprintln('DEBUG: guess_type_attribute attr=taskList full_name=${full_name} base_type=${base_type} result=${res}')
-	}
 	if base_type != 'Any' && base_type != 'int' {
 		attr_name := '${base_type}.${node.attr}'
-		res := ctx.type_map[attr_name] or { 'MISSING' }
-		eprintln('DEBUG: guess_type_attribute lookup=${attr_name} res=${res}')
 		if attr_name in ctx.type_map { return ctx.type_map[attr_name] }
 		if ctx.analyzer != unsafe { nil } {
 			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
