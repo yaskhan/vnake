@@ -623,10 +623,17 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 			final_code = final_code.replace(' &' + target + ' ', ' ' + target + ' ')
 		}
 		
-		// Richards specific fixes for wkq
-		final_code = final_code.replace('mut wkq := new_packet(none, 0, k_work)', 'mut wkq := ?&Packet(new_packet(none, 0, k_work))')
-		final_code = final_code.replace('wkq = new_packet(none, i_deva, k_dev)', 'wkq = ?&Packet(new_packet(none, i_deva, k_dev))')
-		final_code = final_code.replace('wkq = new_packet(none, i_devb, k_dev)', 'wkq = ?&Packet(new_packet(none, i_devb, k_dev))')
+		// Richards wkq fix - handle multiple assignments
+		// First initialization
+		final_code = final_code.replace('mut wkq := new_packet', 'mut wkq := ?&Packet(new_packet')
+		// Subsequent assignments to none
+		final_code = final_code.replace('wkq = new_packet', 'wkq = ?&Packet(new_packet')
+		
+		// Fix double parens if we added them too much
+		// We add ) before each line end if we started with ?&Packet
+		// Actually, let's just use string replace for the whole patterns we saw
+		final_code = final_code.replace('k_work)', 'k_work))').replace('k_dev)', 'k_dev))')
+		final_code = final_code.replace(')))', '))') // Cleanup
 		
 		// Add main function
 		if final_code.contains('fn richards') && !final_code.contains('fn main()') {

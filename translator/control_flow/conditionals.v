@@ -90,13 +90,25 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		base_type := m.guess_type(ast.Name{id: var_name})
 		
 		mut is_auto := false
-		if base_type.starts_with('?') && narrowed_type == base_type[1..] { is_auto = true }
-		else if (base_type.contains('|') || base_type.starts_with('SumType_')) && !narrowed_type.contains('|') { is_auto = true }
+		if base_type.starts_with('?') && (narrowed_type == base_type[1..] || '&' + narrowed_type == base_type[1..] || narrowed_type == '&' + base_type[1..]) {
+			is_auto = true
+		} else if (base_type.contains('|') || base_type.starts_with('SumType_')) && !narrowed_type.contains('|') {
+			is_auto = false // SumTypes need explicit 'as'
+		}
 		
 		if is_auto { continue }
 
 		if narrowed_type !in ['Any', 'void', 'none'] {
-			narrowed_expr := '(${sanitized} as ${narrowed_type})'
+			mut narrowed_expr := ''
+			if base_type.starts_with('?') {
+				// For Options, if V doesn't auto-narrow (e.g. shared or field), we'd need another approach,
+				// but for locals, we just skip it as V does it.
+				// If we MUST force it:
+				narrowed_expr = '(${sanitized} or { panic("narrowing failed") })'
+			} else {
+				narrowed_expr = '(${sanitized} as ${narrowed_type})'
+			}
+			
 			if var_name in m.env.state.name_remap {
 				original_remaps[var_name] = m.env.state.name_remap[var_name]
 			} else {

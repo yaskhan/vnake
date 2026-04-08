@@ -149,7 +149,26 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 			should_cast = true
 		}
 		if !eg.state.in_assignment_lhs && should_cast && (current != original_type || eg.state.current_file_name.contains('narrowing')) {
-			res = "(${res} as ${current})"
+			if original_type.starts_with('?') && !current.starts_with('?') {
+				// Avoid redundant 'or' block if it's a local variable (V 0.5 auto-narrows locals)
+				if node.value is ast.Name {
+					// No cast needed for auto-narrowed Options in V 0.5
+					return res
+				} else {
+					res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
+				}
+			} else {
+				res = "(${res} as ${current})"
+			}
+		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
+			// Auto-unwrap Option if we are accessing a field and it's not a local variable auto-narrowed by V
+			if node.value !is ast.Name {
+				res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
+			}
+		}
+	} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
+		if node.value !is ast.Name {
+			res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 		}
 	}
 

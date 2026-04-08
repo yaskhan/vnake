@@ -30,7 +30,6 @@ fn (env &ClassVisitEnv) type_utils_context() base.TypeUtilsContext {
 fn map_python_type(type_str string, struct_name string, is_return bool, mut env ClassVisitEnv, field_name string) string {
 	mut real_type := type_str
 	if struct_name == 'Task' && field_name == 'link' {
-		e
 	}
 	
 	// If it's Any, try to look up a better type from analyzer/mypy
@@ -112,7 +111,6 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 		}
 	}
 	if struct_name == 'Task' && field_name == 'link' {
-		e
 	}
 	if final_v.contains('TaskState') { return final_v.replace('&', '') }
 	return final_v

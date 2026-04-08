@@ -96,8 +96,24 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 		res << '${pub_prefix}interface ${struct_name}${generics_str} {'
 		/* V interfaces cannot have fields */
 
+		mut has_methods := false
 		for method in methods {
 			if method.name == '__init__' { continue }
+			is_static := false
+			for dec in method.decorator_list {
+				name := env.visit_expr_fn(dec)
+				if name in ['staticmethod', 'abstractstaticmethod'] {
+					is_static = true
+					break
+				}
+			}
+			if is_static { continue }
+
+			if !has_methods {
+				res << 'mut:'
+				has_methods = true
+			}
+
 			mut p_args := []string{}
 			start_index := if method.args.args.len > 0 && method.args.args[0].arg in ['self', 'cls'] { 1 } else { 0 }
 			for i := start_index; i < method.args.args.len; i++ {

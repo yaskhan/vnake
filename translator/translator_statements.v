@@ -627,7 +627,11 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	t.state.in_assignment_lhs = true
 	lhs_expr := t.visit_expr(target)
 	t.state.in_assignment_lhs = false
-	t.emit_indented('${lhs_expr} = ${rhs}')
+	if target is ast.Attribute || target is ast.Subscript {
+		t.emit_indented('unsafe { ${lhs_expr} = ${rhs} }')
+	} else {
+		t.emit_indented('${lhs_expr} = ${rhs}')
+	}
 }
 
 fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {

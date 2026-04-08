@@ -119,7 +119,7 @@ pub fn is_v_reserved_keyword(name string) bool {
 		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface',
 		'enum', 'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared',
 		'spawn', 'assert', 'sizeof', 'typeof', '__global', 'as', 'in', 'is', 'none', 'map',
-		'array', 'string', 'bool', 'Any', 'union' {
+		'array', 'string', 'bool', 'Any', 'union', 'layout', 'stop', 'start' {
 			true
 		}
 		else {
