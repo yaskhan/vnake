@@ -164,17 +164,17 @@ pub fn (mut spa SemanticAnalyzerPreAnalysis) visit_match_stmt(mut s MatchStmt) {
 	}
 }
 
-// visit_assignment_stmt — optimization: do not visit nested expressions
+// visit_assignment_stmt — optimization: do not visit nested Expressions
 pub fn (spa SemanticAnalyzerPreAnalysis) visit_assignment_stmt(s AssignmentStmt) {
 	// Do nothing
 }
 
-// visit_expression_stmt — optimization: do not visit nested expressions
+// visit_expression_stmt — optimization: do not visit nested Expressions
 pub fn (spa SemanticAnalyzerPreAnalysis) visit_expression_stmt(s ExpressionStmt) {
 	// Do nothing
 }
 
-// visit_return_stmt — optimization: do not visit nested expressions
+// visit_return_stmt — optimization: do not visit nested Expressions
 pub fn (spa SemanticAnalyzerPreAnalysis) visit_return_stmt(s ReturnStmt) {
 	// Do nothing
 }

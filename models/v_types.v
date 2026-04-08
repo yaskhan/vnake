@@ -367,7 +367,7 @@ fn split_generic_args(s string) []string {
 }
 
 // map_basic_type maps common Python type names to V equivalents.
-// Optimization: Uses a match expression instead of a map literal to avoid re-allocation
+// Optimization: Uses a match Expression instead of a map literal to avoid re-allocation
 // on every call. Redundant prefixed entries (e.g. typing.Any) are removed as they are
 // already handled by prefix-stripping logic.
 fn map_basic_type(name string) string {

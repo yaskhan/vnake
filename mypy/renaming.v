@@ -250,7 +250,7 @@ fn (mut v VariableRenameVisitor) visit_lvalue(mut lval Lvalue) {
 	}
 }
 
-// visit_expression handles expression
+// visit_expression handles Expression
 fn (mut v VariableRenameVisitor) visit_expression(mut expr Expression) {
 	match mut expr {
 		NameExpr {

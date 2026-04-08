@@ -235,7 +235,7 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 	else { return "if ${l_cond} { ${l_expr} } else { ${r_expr} }" }
 }
 
-// build_truthiness_for_or builds the truthiness check for or/and expressions
+// build_truthiness_for_or builds the truthiness check for or/and Expressions
 // with proper none handling, matching the mature pythontovlang transpiler.
 fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) string {
 	v_type := eg.guess_type(node)

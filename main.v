@@ -152,7 +152,7 @@ pub fn transpile_file(source_file string, config TranspilerConfig, mut global_he
 	
 	file.path = source_file
 
-	tc := api.check(mut file, map[string]mypy.MypyFile{}) or {
+	tc := api.check(mut file, map[string]&mypy.MypyFile{}) or {
 		println('Mypy analysis error in ${source_file}: ${err}')
 		// Report errors from Mypy reporter if any
 		mut error_output := []string{}

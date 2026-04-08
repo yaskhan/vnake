@@ -1648,7 +1648,7 @@ fn (mut p Parser) parse_joined_str(tok Token) ?[]Expression {
 			mut sub_parser := new_parser(sub_lexer)
 			parsed_expr := sub_parser.parse_expression() or {
 				p.errors << ParseError{
-					message: 'failed to parse f-string expression: ${expr_str}'
+					message: 'failed to parse f-string Expression: ${expr_str}'
 					token:   tok
 				}
 				return none
@@ -1790,7 +1790,7 @@ fn (mut p Parser) parse_primary_expr(allow_in bool, allow_ternary bool) ?Express
 		}
 		else {
 			p.errors << ParseError{
-				message: 'unexpected token in expression: ${tok.value}'
+				message: 'unexpected token in Expression: ${tok.value}'
 				token:   tok
 			}
 			return none
@@ -1811,7 +1811,7 @@ fn (mut p Parser) parse_paren_expr(allow_in bool, allow_ternary bool) ?Expressio
 	}
 	expr := p.parse_expression_limited(allow_in, allow_ternary) or { return none }
 
-	// Generator expression
+	// Generator Expression
 	if p.current_is_keyword('for') {
 		gens := p.parse_comprehensions()
 		p.expect(.rparen)

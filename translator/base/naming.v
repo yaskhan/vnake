@@ -113,7 +113,7 @@ pub fn get_factory_name(struct_name string, hierarchy map[string][]string) strin
 }
 
 // is_v_reserved_keyword checks if the name is a V reserved keyword.
-// This is optimized to use a match expression for faster lookup.
+// This is optimized to use a match Expression for faster lookup.
 pub fn is_v_reserved_keyword(name string) bool {
 	return match name {
 		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface',
@@ -129,7 +129,7 @@ pub fn is_v_reserved_keyword(name string) bool {
 }
 
 // is_v_reserved_type checks if the name is a V reserved type.
-// This is optimized to use a match expression for faster lookup.
+// This is optimized to use a match Expression for faster lookup.
 pub fn is_v_reserved_type(name string) bool {
 	return match name {
 		'int', 'string', 'bool', 'f64', 'f32', 'i64', 'byte', 'rune', 'void', 'Any', 'none',

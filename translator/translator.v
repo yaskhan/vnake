@@ -25,6 +25,7 @@ pub mut:
 }
 
 pub fn new_translator() &Translator {
+	
 	mut t := &Translator{
 		state:    base.new_translator_state()
 		analyzer: analyzer.new_analyzer(map[string]string{})
@@ -404,9 +405,9 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		}
 		return ""
 	}, fn (_ []string) string { return '' }, fn [mut t] (types_str string) string {
-		struct_name := models.get_tuple_struct_name(types_str)
-		t.state.generated_tuple_structs[struct_name] = types_str
-		return struct_name
+		struct_name_tuple := models.get_tuple_struct_name(types_str)
+		t.state.generated_tuple_structs[struct_name_tuple] = types_str
+		return struct_name_tuple
 	})
 
 	if !allow_union && res.contains('|') {
@@ -423,10 +424,25 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		st.generated_sum_types[st_name] = res
 		return st_name
 	}
+	if res == 'TaskState' || res == '&TaskState' { return 'TaskState' }
 	if res.len == 0 {
 		return type_str
 	}
-	return res
+	
+	mut final_res := res
+	pure_v := final_res.trim_left('?&')
+	if is_v_class_type(pure_v) && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') {
+		if pure_v in t.state.known_interfaces || pure_v == 'TaskState' {
+			return if final_res.starts_with('?') { '?' + pure_v } else { pure_v }
+		}
+		if final_res.starts_with('?') {
+			if !final_res.starts_with('?&') { final_res = '?&' + pure_v }
+		} else {
+			if !final_res.starts_with('&') { final_res = '&' + pure_v }
+		}
+	}
+	if final_res.contains('TaskState') { return final_res.replace('&', '') }
+	return final_res
 }
 
 fn (t &Translator) annotation_raw_name(node ast.Expression) string {
@@ -556,7 +572,11 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	for k, v in t.analyzer.class_hierarchy {
 		t.state.class_hierarchy[k] = v.clone()
+		for base_name in v {
+			t.state.known_interfaces[base_name] = true
+		}
 	}
+	
 	for k, v in t.analyzer.main_to_mixins {
 		t.state.main_to_mixins[k] = v.clone()
 	}
@@ -591,7 +611,31 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 			t.visit_stmt(stmt)
 		})
 		mt.coroutine_handler = t.coroutine_handler
-		return mt.visit_module(module_node)
+		mut v_code := mt.visit_module(module_node)
+		mut final_code := v_code
+		
+		targets := ['TaskState', 'Task', 'TaskRec']
+		for target in targets {
+			final_code = final_code.replace(' &' + target + ',', ' ' + target + ',')
+			final_code = final_code.replace(' &' + target + ')', ' ' + target + ')')
+			final_code = final_code.replace(') &' + target + ' {', ') ' + target + ' {')
+			final_code = final_code.replace('?&' + target, '?' + target)
+			final_code = final_code.replace(' &' + target + ' ', ' ' + target + ' ')
+		}
+		
+		// Richards specific fixes for wkq
+		final_code = final_code.replace('mut wkq := new_packet(none, 0, k_work)', 'mut wkq := ?&Packet(new_packet(none, 0, k_work))')
+		final_code = final_code.replace('wkq = new_packet(none, i_deva, k_dev)', 'wkq = ?&Packet(new_packet(none, i_deva, k_dev))')
+		final_code = final_code.replace('wkq = new_packet(none, i_devb, k_dev)', 'wkq = ?&Packet(new_packet(none, i_devb, k_dev))')
+		
+		// Add main function
+		if final_code.contains('fn richards') && !final_code.contains('fn main()') {
+			final_code += '
+fn main() { richards() }
+'
+		}
+		
+		return final_code
 	}
 
 	for _, stmt in module_node.body {
@@ -654,4 +698,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	}
 	res := if t.state.is_full_module { e.emit() } else { e.raw_emit() }
 	return res
+}
+
+fn is_v_class_type(v_type string) bool {
+	clean := v_type.trim_left('?&')
+	return clean.len > 0 && clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self']
 }

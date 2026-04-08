@@ -19,7 +19,7 @@ pub fn check_experimental_type(mut warnings []string, type_str string, line int,
 	}
 }
 
-// is_literal_string_expr checks if expression can be treated as LiteralString.
+// is_literal_string_expr checks if Expression can be treated as LiteralString.
 pub fn is_literal_string_expr_state(node ast.Expression, type_map map[string]string) bool {
 	if node is ast.Constant {
 		return node.token.typ == .string_tok || node.token.typ == .fstring_tok

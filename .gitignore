@@ -91,3 +91,6 @@ test_results*.txt
 *.diff
 *.patch
 raw_type_map_debug.json
+v_errors.txt
+build_errors.txt
+check_errors.txt

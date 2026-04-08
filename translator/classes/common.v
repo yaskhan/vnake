@@ -30,7 +30,7 @@ fn (env &ClassVisitEnv) type_utils_context() base.TypeUtilsContext {
 fn map_python_type(type_str string, struct_name string, is_return bool, mut env ClassVisitEnv, field_name string) string {
 	mut real_type := type_str
 	if struct_name == 'Task' && field_name == 'link' {
-		eprintln('DEBUG: map_python_type Task.link input_type=${type_str}')
+		e
 	}
 	
 	// If it's Any, try to look up a better type from analyzer/mypy
@@ -84,19 +84,25 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 
 	if clean_type == struct_name || clean_type.replace('_Impl', '') == struct_name || clean_type == struct_name.replace('_Impl', '') {
 		real_name := struct_name.replace('_Impl', '')
+		if real_name in env.state.known_interfaces || real_name == 'TaskState' || real_name.ends_with('State') {
+			return if is_optional { '?${real_name}' } else { real_name }
+		}
 		return if is_optional { '?&${real_name}' } else { '&${real_name}' }
 	}
+	
 	
 	mapped := base.map_type(real_type, opts, mut ctx, fn [mut env] (name string) string {
 		env.state.generated_sum_types[name] = ''
 		return name
 	}, noop_literal_registrar, noop_tuple_registrar)
+	
 
 	// Prepend & for class types if missing
 	mut final_v := mapped
-	pure_v := final_v.trim_left('?')
+	pure_v := final_v.trim_left('?&')
+	
 	if is_v_class_type(pure_v) && !pure_v.starts_with('&') && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') {
-		if pure_v in env.state.known_interfaces {
+		if (pure_v in env.state.known_interfaces || pure_v == 'TaskState' || pure_v == 'Task' || pure_v == 'TaskRec') {
 			return if final_v.starts_with('?') { '?' + pure_v } else { pure_v }
 		}
 		if final_v.starts_with('?') {
@@ -106,8 +112,9 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 		}
 	}
 	if struct_name == 'Task' && field_name == 'link' {
-		eprintln('DEBUG: map_python_type Task.link FINAL result=${final_v}')
+		e
 	}
+	if final_v.contains('TaskState') { return final_v.replace('&', '') }
 	return final_v
 }
 
@@ -142,5 +149,6 @@ fn get_generics_with_variance_str(env &ClassVisitEnv) string {
 }
 
 fn is_v_class_type(v_type string) bool {
-	return v_type.len > 0 && v_type[0].is_capital() && v_type !in ['Any', 'LiteralString', 'Self']
+	clean := v_type.trim_left('?&')
+	return clean.len > 0 && clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self']
 }

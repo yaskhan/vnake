@@ -69,10 +69,12 @@ pub fn is_numeric_type(v_type string) bool {
 
 // wrap_bool lowers Python truthiness into explicit V boolean checks.
 pub fn wrap_bool(node ast.Expression, expr string, v_type string, invert bool) string {
-	eprintln('DEBUG: base.wrap_bool expr=${expr} type=${v_type} invert=${invert}')
-	// Skip py_bool for expressions that already return a bool in V
-	if node is ast.Compare || (node is ast.UnaryOp && node.op.value == 'not') {
-		return if invert { '!(${expr})' } else { expr }
+	if node is ast.BoolOp || node is ast.Compare || node is ast.UnaryOp {
+		if node is ast.UnaryOp && node.op.value != 'not' {
+			// pass
+		} else {
+			return if invert { '!(${expr})' } else { expr }
+		}
 	}
 
 	if v_type.starts_with('?') {
@@ -124,7 +126,7 @@ fn bool_condition(expr string, v_type string, invert bool) string {
 // build_truthiness_check builds a V condition that checks Python truthiness for a value.
 // For optional types, it checks both != none AND the inner type's truthiness.
 // For Any types, it uses py_bool and checks for none.
-// This is used for `or`/`and` expressions to correctly handle None values.
+// This is used for `or`/`and` Expressions to correctly handle None values.
 pub fn build_truthiness_check(expr string, v_type string) string {
 	// Optional types: must check != none first, then check inner value
 	if v_type.starts_with('?') {

@@ -12,7 +12,7 @@ pub fn (c CompatibilityLayer) is_v_reserved(name string) bool {
 }
 
 // is_v_reserved_keyword checks if the name is a V reserved keyword.
-// This is optimized to use a match expression for faster lookup.
+// This is optimized to use a match Expression for faster lookup.
 fn is_v_reserved_keyword(name string) bool {
 	return match name {
 		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface',

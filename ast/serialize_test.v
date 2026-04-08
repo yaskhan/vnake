@@ -688,7 +688,7 @@ fn test_serialize_boolop_or() {
 	assert bytes.len > 0
 }
 
-// --- IfExp (conditional expression) ---
+// --- IfExp (conditional Expression) ---
 fn test_serialize_ifexp() {
 	source := 'x = "pos" if n > 0 else "neg"\n'
 	bytes := serialize_source(source, 'ifexp.py')
@@ -793,7 +793,7 @@ fn test_serialize_joinedstr_format_spec() {
 	r.expect_tag(literal_int) // conversion
 	r.read_int_bare()
 	r.expect_tag(literal_true) // has format_spec
-	// Format spec is an expression (usually JoinedStr)
+	// Format spec is an Expression (usually JoinedStr)
 	r.expect_tag(nodes_joined_str)
 }
 

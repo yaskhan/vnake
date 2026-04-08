@@ -59,7 +59,7 @@ pub mut:
 pub type TypeInfoOrFuncItemOrMypyFile = TypeInfo | FuncItem | MypyFile
 
 // new_checker_scope creates a new CheckerScope
-pub fn new_checker_scope(mod MypyFile) CheckerScope {
+pub fn new_checker_scope(mod &MypyFile) CheckerScope {
 	return CheckerScope{
 		stack: [TypeInfoOrFuncItemOrMypyFile(mod)]
 	}

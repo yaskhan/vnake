@@ -597,9 +597,11 @@ fn (mut b ASTReadBuffer) read_func_def() FuncDef {
 }
 
 fn (mut b ASTReadBuffer) read_argument() Argument {
-	mut node := Argument{}
+	v_ := b.read_var()
+	mut node := Argument{
+		variable: v_
+	}
 	b.read_loc(mut node.base)
-	node.variable = b.read_var()
 	if b.read_bool() {
 		node.initializer = b.read_expression()
 	}
@@ -608,8 +610,8 @@ fn (mut b ASTReadBuffer) read_argument() Argument {
 	return node
 }
 
-fn (mut b ASTReadBuffer) read_var() Var {
-	mut node := Var{}
+fn (mut b ASTReadBuffer) read_var() &Var {
+	mut node := &Var{}
 	b.read_loc(mut node.base)
 	node.name = b.read_str()
 	node.fullname = b.read_str()
@@ -635,12 +637,16 @@ fn (mut b ASTReadBuffer) read_class_def() ClassDef {
 }
 
 fn (mut b ASTReadBuffer) read_decorator() Decorator {
-	mut node := Decorator{}
-	b.read_loc(mut node.base)
-	node.func = b.read_func_def()
+	f_ := b.read_func_def()
 	b.expect_end_tag()
-	node.decorators = b.read_list_expr()
-	node.var_ = b.read_var()
+	decos_ := b.read_list_expr()
+	v_ := b.read_var()
+	mut node := Decorator{
+		func:       f_
+		decorators: decos_
+		var_:       v_
+	}
+	b.read_loc(mut node.base)
 	node.is_overload = b.read_bool()
 	return node
 }
@@ -1258,7 +1264,7 @@ fn (mut b ASTReadBuffer) read_type_info() TypeInfo {
 // Native Parse API
 // ---------------------------------------------------------------------------
 
-pub fn native_parse(filename string, options Options, skip_function_bodies bool, imports_only bool) !(MypyFile, []RawParseError, map[int][]string) {
+pub fn native_parse(filename string, options Options, skip_function_bodies bool, imports_only bool) !(&MypyFile, []RawParseError, map[int][]string) {
 	_ = skip_function_bodies
 	source := os.read_file(filename)!
 	mut errors := new_errors(options)
@@ -1272,3 +1278,6 @@ fn (mut b ASTReadBuffer) read_u8_or_zero() u8 {
 	b.pos++
 	return v
 }
+
+
+

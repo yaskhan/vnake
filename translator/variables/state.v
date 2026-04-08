@@ -204,7 +204,7 @@ pub fn (mut m VariablesModule) capture_value(node ast.Expression) (string, []str
 		return m.visit_expr(node), []string{}
 	}
 	tmp := m.state.create_temp()
-	return tmp, ['${m.indent()}${tmp} := ${m.visit_expr(node)}']
+	return tmp, ['${m.indent()}mut ${tmp} := ${m.visit_expr(node)}']
 }
 
 pub fn (mut m VariablesModule) capture_target_expr(node ast.Expression) (string, []string) {
@@ -236,6 +236,9 @@ pub fn (mut m VariablesModule) capture_target_expr(node ast.Expression) (string,
 		all_setup << setup
 		all_setup << idx_setup
 		return '${base_expr}[${idx_expr}]', all_setup
+	}
+	if node is ast.Call {
+		return m.capture_value(node)
 	}
 	return m.visit_expr(node), []string{}
 }

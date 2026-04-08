@@ -52,25 +52,25 @@ pub fn (mut a NewTypeAnalyzer) process_newtype_declaration(s &AssignmentStmt) bo
 	return true
 }
 
-pub fn (mut a NewTypeAnalyzer) analyze_newtype_declaration(s &AssignmentStmt) (string, ?&CallExpr) {
+pub fn (mut a NewTypeAnalyzer) analyze_newtype_declaration(s &AssignmentStmt) (string, ?Expression) {
 	if s.lvalues.len == 1 && s.lvalues[0] is NameExpr {
 		r := s.rvalue
 		if r is CallExpr {
-			callee := r.callee
+			callee := (r as CallExpr).callee
 			if callee is NameExpr {
-				if callee.fullname in ['typing.NewType', 'typing_extensions.NewType'] {
-					if s.rvalue is CallExpr {
-						return (s.lvalues[0] as NameExpr).name, (&s.rvalue as &CallExpr)
-					}
+				if (callee as NameExpr).fullname in ['typing.NewType', 'typing_extensions.NewType'] {
+					return (s.lvalues[0] as NameExpr).name, s.rvalue
 				}
 			}
 		}
 	}
-	return '', ?&CallExpr(none)
+	return '', none
 }
 
-pub fn (mut a NewTypeAnalyzer) check_newtype_args(name string, call &CallExpr, ctx Context) (?MypyTypeNode, bool) {
-	args := call.args
+pub fn (mut a NewTypeAnalyzer) check_newtype_args(name string, call Expression, ctx Context) (?MypyTypeNode, bool) {
+	if call !is CallExpr { return none, false }
+	c := call as CallExpr
+	args := c.args
 	if args.len != 2 {
 		a.fail('NewType(...) expects exactly two positional arguments', ctx)
 		return none, false

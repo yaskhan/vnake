@@ -94,12 +94,8 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 			res << doc_comment.trim_right('\n')
 		}
 		res << '${pub_prefix}interface ${struct_name}${generics_str} {'
-		for f in fields {
-			if f.starts_with('pub mut:') || f.starts_with('mut:') || f.starts_with('pub:') || f.len == 0 {
-				continue
-			}
-			res << '    ' + f.trim_space()
-		}
+		/* V interfaces cannot have fields */
+
 		for method in methods {
 			if method.name == '__init__' { continue }
 			mut p_args := []string{}
@@ -115,11 +111,7 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 			}
 			ret := if ann := method.returns {
 				r_type := map_python_type(env.visit_expr_fn(ann), struct_name, true, mut env, '${method.name}@return')
-				if is_v_class_type(r_type) && !r_type.starts_with('&') && !r_type.starts_with('[]') {
-					' &' + r_type
-				} else {
-					' ' + r_type
-				}
+				' ' + r_type
 			} else { '' }
 			mut m_name := sanitize_name(method.name, false)
 			if m_name == '__next__' {

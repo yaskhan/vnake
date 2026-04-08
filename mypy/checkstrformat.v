@@ -1,5 +1,5 @@
 // Work in progress by Cline. Started: 2026-03-22 15:04
-// checkstrformat.v — Format expression type checker
+// checkstrformat.v — Format Expression type checker
 // Bridge implementation aligned with the current V AST/type layer.
 
 module mypy

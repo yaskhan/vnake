@@ -133,7 +133,7 @@ pub struct BuildResult {
 pub mut:
 	manager    BuildManager
 	graph      Graph
-	files      map[string]MypyFile
+	files      map[string]&MypyFile
 	types      map[string]MypyTypeNode
 	used_cache bool
 	errors     []string

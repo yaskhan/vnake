@@ -7,7 +7,7 @@ pub interface ASTNode {
 	str() string
 }
 
-// ==================== EXPRESSIONS ====================
+// ==================== ExpressionS ====================
 
 pub interface Expression {
 	get_token() Token

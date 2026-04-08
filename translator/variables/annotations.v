@@ -136,7 +136,7 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		if m.state.in_main && node.target is ast.Name && node.target.id.is_upper()
 			&& m.is_compile_time_evaluable(value_expr) {
 			pub_prefix := if m.is_exported(node.target.id) { 'pub ' } else { '' }
-			m.emitter.add_constant('${pub_prefix}${m.to_snake_case(node.target.id)} = ${m.visit_expr(value_expr)}')
+			m.emitter.add_constant('${pub_prefix}const ${m.to_snake_case(node.target.id)} = ${m.visit_expr(value_expr)}')
 			return
 		}
 
@@ -159,8 +159,21 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 			return
 		}
 
-		if m.state.in_main && node.target is ast.Name && node.target.id in m.state.global_vars {
-			m.emitter.add_init_statement('${target_expr} = ${rhs}')
+		if m.state.in_main && node.target is ast.Name {
+			if node.target.id in m.state.global_vars {
+				m.emitter.add_init_statement('${target_expr} = ${rhs}')
+				return
+			}
+			
+			mut v_type_for_global := v_type
+			if v_type_for_global == 'unknown' || v_type_for_global == 'Any' {
+				v_type_for_global = m.guess_type(value_expr, true)
+			}
+			if v_type_for_global == 'unknown' { v_type_for_global = 'Any' }
+			
+			m.emit('__global ${target_expr} ${v_type_for_global}')
+			m.emit('${target_expr} = ${rhs}')
+			m.local_vars_in_scope[target_expr] = true
 			return
 		}
 

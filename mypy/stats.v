@@ -1,4 +1,4 @@
-// stats.v — Utilities for calculating and reporting statistics about types
+// stats.v вЂ” Utilities for calculating and reporting statistics about types
 // Translated from mypy/stats.py to V 0.5.x
 //
 // I, Antigravity, am working on this file. Started: 2026-03-22 12:30
@@ -16,15 +16,15 @@ pub const type_any = 4
 
 pub const precision_names = ['empty', 'unanalyzed', 'precise', 'imprecise', 'any']
 
-// ImportStmt — sum-type for imports
+// ImportStmt вЂ” sum-type for imports
 pub type ImportStmt = ImportFrom | ImportAll
 
-// StatisticsVisitor — visitor for gathering type statistics
+// StatisticsVisitor вЂ” visitor for gathering type statistics
 pub struct StatisticsVisitor {
 pub mut:
 	inferred           bool
 	filename           string
-	modules            map[string]MypyFile
+	modules            map[string]&MypyFile
 	typemap            ?map[string]MypyTypeNode
 	all_nodes          bool
 	visit_untyped_defs bool
@@ -44,7 +44,7 @@ pub mut:
 	line     int
 	line_map map[int]int
 
-	type_of_any_counter map[int]int // Counter[int] → map[int]int
+	type_of_any_counter map[int]int // Counter[int] в†’ map[int]int
 	any_line_map        map[int][]AnyType
 
 	// For each scope (top level/function), whether the scope
@@ -54,14 +54,14 @@ pub mut:
 	output []string
 
 	// Internal fields
-	cur_mod_node MypyFile
+	cur_mod_node ?&MypyFile
 	cur_mod_id   string
 }
 
 // new_statistics_visitor creates a new StatisticsVisitor
 pub fn new_statistics_visitor(inferred bool,
 	filename string,
-	modules map[string]MypyFile,
+	modules map[string]&MypyFile,
 	typemap ?map[string]MypyTypeNode,
 	all_nodes bool,
 	visit_untyped_defs bool) StatisticsVisitor {
@@ -78,12 +78,13 @@ pub fn new_statistics_visitor(inferred bool,
 		any_line_map:        map[int][]AnyType{}
 		checked_scopes:      [true]
 		output:              []string{}
+		cur_mod_node:        none
 	}
 	return v
 }
 
 // visit_mypy_file visits the root node of the file
-pub fn (mut v StatisticsVisitor) visit_mypy_file(o MypyFile) {
+pub fn (mut v StatisticsVisitor) visit_mypy_file(o &MypyFile) {
 	v.cur_mod_node = o
 	v.cur_mod_id = o.fullname
 	// Continue traversal
@@ -188,7 +189,7 @@ pub fn (mut v StatisticsVisitor) visit_class_def(o ClassDef) {
 	for base_expr in o.base_type_exprs {
 		v.process_node(base_expr)
 	}
-	// While base_type_exprs are technically expressions, type analyzer does not visit them
+	// While base_type_exprs are technically Expressions, type analyzer does not visit them
 	for _ in o.decorators {
 		// Decorators are intentionally ignored here.
 	}
@@ -207,7 +208,7 @@ pub fn (mut v StatisticsVisitor) visit_type_application(o TypeApplication) {
 pub fn (mut v StatisticsVisitor) visit_assignment_stmt(o AssignmentStmt) {
 	v.line = o.base.ctx.line
 	if o.type_annotation != none {
-		// If there is an explicit type, don't visit the l.h.s. as an expression
+		// If there is an explicit type, don't visit the l.h.s. as an Expression
 		v.type_node(o.type_annotation)
 		// o.rvalue.accept(self)
 		return
@@ -225,7 +226,7 @@ pub fn (mut v StatisticsVisitor) visit_assignment_stmt(o AssignmentStmt) {
 	}
 }
 
-// visit_expression_stmt visits an expression statement
+// visit_expression_stmt visits an Expression statement
 pub fn (mut v StatisticsVisitor) visit_expression_stmt(o ExpressionStmt) {
 	// if isinstance(o.expr, (StrExpr, BytesExpr)):
 	//     # Docstring
@@ -312,7 +313,7 @@ pub fn (mut v StatisticsVisitor) visit_index_expr(o IndexExpr) {
 	v.process_node(o)
 }
 
-// visit_assignment_expr visits an assignment expression (:=)
+// visit_assignment_expr visits an assignment Expression (:=)
 pub fn (mut v StatisticsVisitor) visit_assignment_expr(o AssignmentExpr) {
 	v.process_node(o)
 }
@@ -423,7 +424,7 @@ pub fn (mut v StatisticsVisitor) record_precise_if_checked_scope(node Node) {
 // type_node analyzes a type and records statistics
 pub fn (mut v StatisticsVisitor) type_node(t ?MypyTypeNode) {
 	node_t := t or {
-		// If an expression does not have a type, it is often due to dead code.
+		// If an Expression does not have a type, it is often due to dead code.
 		v.record_line(v.line, type_unanalyzed)
 		return
 	}
@@ -508,9 +509,9 @@ pub fn (mut v StatisticsVisitor) record_line(line int, precision int) {
 }
 
 // dump_type_stats outputs tree statistics
-pub fn dump_type_stats(tree MypyFile,
+pub fn dump_type_stats(tree &MypyFile,
 	path string,
-	modules map[string]MypyFile,
+	modules map[string]&MypyFile,
 	inferred bool,
 	typemap ?map[string]MypyTypeNode) {
 	if is_special_module(path) {
@@ -583,3 +584,4 @@ pub fn is_complex(t MypyTypeNode) bool {
 pub fn is_special_form_any(t AnyType) bool {
 	return t.type_of_any == TypeOfAny.special_form
 }
+

@@ -576,3 +576,4 @@ pub fn new_unification_variable(t MypyTypeNode) MypyTypeNode {
 		}
 	}
 }
+

@@ -111,7 +111,7 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	if name == 'int' { return "int" }
 	if name == 'bool' { return "bool" }
 
-	// If name is already a complex expression (e.g. from narrowing: "(obj as Derived)"), 
+	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
 	// don't sanitize it again, as it contains V syntax.
 	if name.contains('(') || name.contains(' ') || name.contains(' as ') {
 		return name

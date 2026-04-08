@@ -302,7 +302,7 @@ pub fn (s &TranslatorState) is_top_level_symbol(name string) bool {
 	return true
 }
 
-// is_compile_time_evaluable checks if expression is compile-time evaluable
+// is_compile_time_evaluable checks if Expression is compile-time evaluable
 pub fn is_compile_time_evaluable(node ast.Expression) bool {
 	if node is ast.Constant {
 		return true

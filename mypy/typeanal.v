@@ -6,7 +6,7 @@ module mypy
 
 // analyze_type_alias analyzes the right side of a type alias definition
 // Returns the type and the set of alias names it depends on
-pub fn analyze_type_alias(typ MypyTypeNode, api SemanticAnalyzerCoreInterface, tvar_scope TypeVarLikeScope, plugin Plugin, options Options, cur_mod_node MypyFile, is_typeshed_stub bool, allow_placeholder bool, in_dynamic_func bool, global_scope bool, allowed_alias_tvars []TypeVarLikeType, alias_type_params_names []string, python_3_12_type_alias bool) !(MypyTypeNode, map[string]bool) {
+pub fn analyze_type_alias(typ MypyTypeNode, api SemanticAnalyzerCoreInterface, tvar_scope TypeVarLikeScope, plugin Plugin, options Options, cur_mod_node &MypyFile, is_typeshed_stub bool, allow_placeholder bool, in_dynamic_func bool, global_scope bool, allowed_alias_tvars []TypeVarLikeType, alias_type_params_names []string, python_3_12_type_alias bool) !(MypyTypeNode, map[string]bool) {
 	mut analyzer := TypeAnalyser{
 		api:                     api
 		tvar_scope:              tvar_scope

@@ -29,7 +29,7 @@ pub:
 	active_typeinfo ?TypeInfo
 }
 
-// TypeMap — mapping of expressions to types
+// TypeMap — mapping of Expressions to types
 pub type TypeMap = map[string]MypyTypeNode
 
 // PartialTypeScope — scope for partial types
@@ -54,14 +54,14 @@ pub mut:
 	pattern_checker          PatternChecker
 	tscope                   Scope
 	scope                    CheckerScope
-	active_type              ?&TypeInfo
+	active_type               ?&TypeInfo
 	return_types             []MypyTypeNode
 	dynamic_funcs            []bool
 	partial_types            []PartialTypeScope
 	partial_reported         map[string]bool
 	widened_vars             []string
 	globals                  SymbolTable
-	modules                  map[string]MypyFile
+	modules                  map[string]&MypyFile
 	deferred_nodes           []DeferredNode
 	pass_num                 int
 	last_pass                int
@@ -84,7 +84,7 @@ pub mut:
 }
 
 // new_type_checker creates a new TypeChecker
-pub fn new_type_checker(errors Errors, modules map[string]MypyFile, options Options, tree MypyFile, path string, plugin Plugin) &TypeChecker {
+pub fn new_type_checker(errors Errors, modules map[string]&MypyFile, options Options, tree &MypyFile, path string, plugin Plugin) &TypeChecker {
 	msg := MessageBuilder{
 		errors:  &errors
 		options: &options
@@ -185,7 +185,7 @@ pub fn (mut tc TypeChecker) check_second_pass() bool {
 }
 
 // check_top_level checks only the top level of a module
-pub fn (mut tc TypeChecker) check_top_level(node MypyFile) {
+pub fn (mut tc TypeChecker) check_top_level(node &MypyFile) {
 	tc.recurse_into_functions = false
 	for d in node.defs {
 		tc.accept(d)
@@ -335,7 +335,7 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 					base_name := (lvalue.expr as NameExpr).name
 					if base_name.trim_space() == 'self' {
 						if lvalue.name !in active.names.symbols {
-							mut v := &Var{
+							mut v := Var{
 								name:     lvalue.name
 								fullname: active.fullname + '.' + lvalue.name
 								type_:    rvalue_type
@@ -523,7 +523,7 @@ pub fn (mut tc TypeChecker) visit_decorator(mut e Decorator) !AnyNode {
 	return ''
 }
 
-// visit_expression_stmt checks expression statement
+// visit_expression_stmt checks Expression statement
 pub fn (mut tc TypeChecker) visit_expression_stmt(mut s ExpressionStmt) !AnyNode {
 	tc.expr_checker.accept(s.expr)
 	return ''
@@ -1034,3 +1034,8 @@ pub fn (mut tc TypeChecker) visit_lvalue(mut o Lvalue) !AnyNode {
 	}
 	return ''
 }
+
+
+
+
+

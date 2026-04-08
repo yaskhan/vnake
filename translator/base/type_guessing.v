@@ -6,7 +6,7 @@ import analyzer
 
 pub type TypeGuessingContext = models.TypeGuessingContext
 
-// guess_type infers a best-effort V type for an expression node.
+// guess_type infers a best-effort V type for an Expression node.
 pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location bool) string {
 	if use_location {
 		loc_key := '${node.get_token().line}:${node.get_token().column}'

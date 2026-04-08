@@ -1,8 +1,8 @@
 // Work in progress by Antigravity. Started: 2026-03-22 14:00
-// evalexpr.v — Evaluate expression at runtime
+// evalexpr.v — Evaluate Expression at runtime
 module mypy
 
-// NodeEvaluator — visitor for evaluating expressions
+// NodeEvaluator — visitor for evaluating Expressions
 pub struct NodeEvaluator {
 mut:
 	line   int
@@ -419,7 +419,7 @@ pub fn (mut e NodeEvaluator) visit_lvalue(mut o Lvalue) !AnyNode {
 	}
 }
 
-// evaluate_expression evaluates expression at runtime (simplified to string for debugging)
+// evaluate_expression evaluates Expression at runtime (simplified to string for debugging)
 pub fn evaluate_expression(mut expr Expression) !AnyNode {
 	mut evaluator := NodeEvaluator{}
 	return expr.accept(mut evaluator)

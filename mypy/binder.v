@@ -175,3 +175,8 @@ fn chk_literal_hash(node Expression) ?string {
 	}
 	return none
 }
+
+
+
+
+

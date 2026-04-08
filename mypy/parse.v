@@ -35,8 +35,8 @@ fn capitalize_first_word(message string) string {
 	return first + message[1..]
 }
 
-fn empty_tree(fnam string, mod_name ?string) MypyFile {
-	return MypyFile{
+fn empty_tree(fnam string, mod_name ?string) &MypyFile {
+	return &MypyFile{
 		defs:                    []Statement{}
 		imports:                 []ImportBase{}
 		names:                   SymbolTable{
@@ -50,7 +50,7 @@ fn empty_tree(fnam string, mod_name ?string) MypyFile {
 	}
 }
 
-pub fn parse(source string, fnam string, mod_name ?string, mut errors Errors, options Options, raise_on_error bool, imports_only bool) MypyFile {
+pub fn parse(source string, fnam string, mod_name ?string, mut errors Errors, options Options, raise_on_error bool, imports_only bool) &MypyFile {
 	mut src := source
 	if options.native_parser && os.exists(fnam) {
 		ignore_errors := options.ignore_errors || fnam in errors.ignored_files
@@ -79,7 +79,7 @@ pub fn parse(source string, fnam string, mod_name ?string, mut errors Errors, op
 	return tree
 }
 
-pub fn load_from_raw(fnam string, mod_name ?string, raw_data FileRawData, mut errors Errors, options Options) MypyFile {
+pub fn load_from_raw(fnam string, mod_name ?string, raw_data FileRawData, mut errors Errors, options Options) &MypyFile {
 	mut tree := empty_tree(fnam, mod_name)
 	tree.ignored_lines = raw_data.ignored_lines.keys()
 	tree.is_partial_stub_package = raw_data.is_partial_stub_package

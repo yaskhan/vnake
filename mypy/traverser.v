@@ -240,7 +240,7 @@ pub fn (mut t NodeTraverser) visit_decorator(mut o Decorator) !AnyNode {
 	return AnyNode(MypyNode(o))
 }
 
-// --- expressions ---
+// --- Expressions ---
 pub fn (mut t NodeTraverser) visit_int_expr(mut o IntExpr) !AnyNode {
 	return AnyNode(MypyNode(o))
 }
@@ -692,3 +692,8 @@ pub fn pattern_accept(mut p PatternNode, mut v NodeVisitor) !AnyNode {
 		ClassPattern { v.visit_class_pattern(mut p)! }
 	}
 }
+
+
+
+
+

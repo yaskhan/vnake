@@ -1,5 +1,5 @@
 // I, Cline, am working on this file. Started: 2026-03-22 20:31
-// semanal.v — The semantic analyzer
+// semanal.v вЂ” The semantic analyzer
 // Translated from mypy/semanal.py
 // Note: this is a very large file (~3000 lines), translated main structures and key functions
 
@@ -12,7 +12,7 @@ pub const scope_func = 2
 pub const scope_comprehension = 3
 pub const scope_annotation = 4
 
-// FUTURE_IMPORTS — mapping of future imports to flags
+// FUTURE_IMPORTS вЂ” mapping of future imports to flags
 pub const future_imports = {
 	'__future__.nested_scopes':    'nested_scopes'
 	'__future__.generators':       'generators'
@@ -26,21 +26,21 @@ pub const future_imports = {
 	'__future__.annotations':      'annotations'
 }
 
-// CORE_BUILTIN_CLASSES — basic builtins classes
+// CORE_BUILTIN_CLASSES вЂ” basic builtins classes
 pub const core_builtin_classes = ['object', 'type', 'list', 'dict', 'str', 'int', 'float', 'bool', 'bytes', 'tuple', 'set']
 
-// SemanticAnalyzer — mypy semantic analyzer
+// SemanticAnalyzer вЂ” mypy semantic analyzer
 pub struct SemanticAnalyzer {
 pub mut:
-	modules                              map[string]MypyFile
+	modules                              map[string]&MypyFile
 	globals                              SymbolTable
 	global_decls                         []map[string]bool
 	nonlocal_decls                       []map[string]bool
 	locals                               []?SymbolTable
 	scope_stack                          []int
 	block_depth                          []int
-	cur_type                             ?&TypeInfo
-	type_stack                           []?&TypeInfo
+	cur_type                             ?TypeInfo
+	type_stack                           []?TypeInfo
 	tvar_scope                           TypeVarLikeScope
 	options                              Options
 	function_stack                       []FuncItem
@@ -74,7 +74,7 @@ pub mut:
 }
 
 // new_semantic_analyzer creates a new SemanticAnalyzer
-pub fn new_semantic_analyzer(modules map[string]MypyFile, errors Errors, plugin Plugin, options Options) SemanticAnalyzer {
+pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin Plugin, options Options) SemanticAnalyzer {
 	return SemanticAnalyzer{
 		modules:                              modules
 		globals:                              SymbolTable{}
@@ -84,7 +84,7 @@ pub fn new_semantic_analyzer(modules map[string]MypyFile, errors Errors, plugin 
 		scope_stack:                          [scope_global]
 		block_depth:                          [0]
 		cur_type:                             none
-		type_stack:                           []?&TypeInfo{}
+		type_stack:                           []?TypeInfo{}
 		tvar_scope:                           TypeVarLikeScope{}
 		options:                              options
 		function_stack:                       []FuncItem{}
@@ -122,7 +122,7 @@ pub fn new_semantic_analyzer(modules map[string]MypyFile, errors Errors, plugin 
 }
 
 // type returns the current TypeInfo
-pub fn (sa SemanticAnalyzer) type() ?&TypeInfo {
+pub fn (sa SemanticAnalyzer) type() ?TypeInfo {
 	return sa.cur_type
 }
 
@@ -175,7 +175,7 @@ fn (sa &SemanticAnalyzer) prepare_builtins_namespace(mut file MypyFile) {
 	special_names := ['None', 'reveal_type', 'reveal_locals', 'True', 'False', '__debug__']
 
 	for name in special_names {
-		mut v := &Var{
+		mut v := Var{
 			name:     name
 			fullname: 'builtins.${name}'
 			type_:    MypyTypeNode(Instance{
@@ -192,16 +192,16 @@ fn (sa &SemanticAnalyzer) prepare_builtins_namespace(mut file MypyFile) {
 		
 		names.symbols[name] = SymbolTableNode{
 			kind: gdef
-			node: SymbolNodeRef(*v)
+			node: SymbolNodeRef(v)
 		}
 	}
 }
 
-// visit_mypy_file handles MypyFile
+// visit_mypy_file handles &MypyFile
 pub fn (mut sa SemanticAnalyzer) visit_mypy_file(mut file_node MypyFile) !AnyNode {
 	// Ensure builtins are prepared
 	if 'builtins' !in sa.modules && file_node.fullname != 'builtins' {
-		mut builtins_file := MypyFile{
+		mut builtins_file := &MypyFile{
 			fullname: 'builtins'
 			path:     'builtins.py'
 		}
@@ -534,7 +534,7 @@ pub fn (mut sa SemanticAnalyzer) visit_decorator(mut dec Decorator) !AnyNode {
 	return ''
 }
 
-// visit_expression_stmt handles expression statement
+// visit_expression_stmt handles Expression statement
 pub fn (mut sa SemanticAnalyzer) visit_expression_stmt(mut s ExpressionStmt) !AnyNode {
 	sa.statement = Statement(s)
 	s.expr.accept(mut sa)!
@@ -1181,7 +1181,7 @@ fn (sa SemanticAnalyzer) recurse_into_functions() bool {
 }
 
 // enter_class enters a class
-fn (mut sa SemanticAnalyzer) enter_class(info &TypeInfo) {
+fn (mut sa SemanticAnalyzer) enter_class(info TypeInfo) {
 	sa.type_stack << sa.cur_type
 	sa.locals << none
 	sa.scope_stack << scope_class
@@ -1323,7 +1323,7 @@ fn (sa SemanticAnalyzer) correct_relative_import(node ImportFrom) string {
 
 // set_future_import_flags sets future import flags
 fn (mut sa SemanticAnalyzer) set_future_import_flags(fullname string) {
-	// TODO: handle future imports if field is added to MypyFile
+	// TODO: handle future imports if field is added to &MypyFile
 }
 
 // push_type_args adds type args
@@ -1385,12 +1385,12 @@ fn (mut sa SemanticAnalyzer) analyze_function_body(mut defn FuncItem) ! {
 	match mut defn {
 		FuncDef {
 			for mut arg in defn.arguments {
-				mut var := &Var{
+				mut var := Var{
 					name:  arg.variable.name
 					type_: arg.variable.type_
 				}
 				var.fullname = sa.qualified_name(arg.variable.name)
-				sa.add_symbol(arg.variable.name, SymbolNodeRef(*var), arg.variable.get_context(), true, false, true)
+				sa.add_symbol(arg.variable.name, SymbolNodeRef(var), arg.variable.get_context(), true, false, true)
 			}
 		}
 		else {}
@@ -1488,7 +1488,7 @@ pub fn (mut sa SemanticAnalyzer) report_hang() {
 }
 
 // Helper types
-// new_type_info — helper for creating TypeInfo
+// new_type_info вЂ” helper for creating TypeInfo
 pub fn new_type_info(mut _ SymbolTable, defn &ClassDef, module_name string) &TypeInfo {
 	mut info := &TypeInfo{
 		name:        defn.name
@@ -1500,3 +1500,8 @@ pub fn new_type_info(mut _ SymbolTable, defn &ClassDef, module_name string) &Typ
 	info.mro = [info]
 	return info
 }
+
+
+
+
+

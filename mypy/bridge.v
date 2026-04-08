@@ -3,8 +3,8 @@ module mypy
 
 import ast
 
-// bridge converts V's ast.Module (native parser) to Mypy's MypyFile (semantic nodes).
-pub fn bridge(v_mod ast.Module) !MypyFile {
+// bridge converts V's ast.Module (native parser) to Mypy's &MypyFile (semantic nodes).
+pub fn bridge(v_mod ast.Module) !&MypyFile {
 	mut defs := []Statement{}
 
 	for stmt in v_mod.body {
@@ -13,7 +13,7 @@ pub fn bridge(v_mod ast.Module) !MypyFile {
 		}
 	}
 
-	return MypyFile{
+	return &MypyFile{
 		fullname: v_mod.filename
 		path:     v_mod.filename
 		names:    SymbolTable{symbols: map[string]SymbolTableNode{}}
@@ -574,3 +574,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 		}
 	}
 }
+
+
+
+
+

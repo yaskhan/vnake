@@ -555,7 +555,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			// Decompose list literal for mutable locals if it has elements (for cap optimization)
 			val := node.value
 			if val is ast.List && (id in t.mutable_locals || lhs in t.mutable_locals) {
-				// Avoid decomposition for dynamic lists (with starred expressions)
+				// Avoid decomposition for dynamic lists (with starred Expressions)
 				mut has_starred := false
 				for elt in val.elements { if elt is ast.Starred { has_starred = true; break } }
 				

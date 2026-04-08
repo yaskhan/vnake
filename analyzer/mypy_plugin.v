@@ -507,7 +507,7 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 		return new_mypy_plugin_store()
 	}
 
-	tc := api.check(mut file, map[string]mypy.MypyFile{}) or {
+	tc := api.check(mut file, map[string]&mypy.MypyFile{}) or {
 		return new_mypy_plugin_store()
 	}
 

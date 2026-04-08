@@ -1145,6 +1145,31 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	}
 	obj_type := eg.map_python_type(obj_type_raw, false)
 	mut recv := "${obj}"
+
+	// Check if this is a mutable method call that needs a mutable receiver
+	mut is_mut_receiver := false
+	if obj_type_raw != 'Any' && obj_type_raw != '' {
+		key := '${obj_type_raw}.${attr}.self'
+		if info := eg.analyzer.get_mutability(key) {
+			if info.is_mutated {
+				is_mut_receiver = true
+			}
+		}
+	}
+
+	if is_mut_receiver {
+		// If it's a simple variable, we just make it mut.
+		// If it's a complex expression (like a call), we must capture it.
+		if receiver_expr !is ast.Name {
+			tmp := eg.state.create_temp_with_prefix('py_mut_tmp_')
+			eg.emit('mut ${tmp} := ${obj}')
+			recv = 'mut ${tmp}'
+			obj = tmp // for subsequent uses if any
+		} else {
+			recv = 'mut ${obj}'
+		}
+	}
+
 	if attr == 'pop' {
 		if args.len == 0 { return '${obj}.pop()' }
 		// Heuristic: if first arg is a string, it's likely a dict pop
@@ -1274,7 +1299,13 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 		if attr == 'replace' { return if args.len == 2 { '${recv}.replace(${args[0]}, ${args[1]})' } else { '${recv}.replace_n(${args[0]}, ${args[1]}, ${args[2]})' } }
 	}
 
-	return none
+	// For any other method call, return the translated result with the (possibly captured) receiver
+	mut final_args := args.clone()
+	for k, v in keyword_args {
+		final_args << '${k}=${v}'
+	}
+	processed_args := eg.process_mutated_args('${obj_type_raw}.${attr}', final_args, none)
+	return '${recv}.${attr}(${processed_args.join(', ')})'
 }
 
 pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string, call_sig ?analyzer.CallSignature) []string {

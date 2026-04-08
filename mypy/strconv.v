@@ -70,7 +70,7 @@ pub fn (mut sc StrConv) func_helper(o FuncItem) []DumpNode {
 		LambdaExpr {
 			for arg in o.arguments {
 				if arg.kind.is_required() {
-					// Lambda has expression
+					// Lambda has Expression
 				}
 			}
 		}
@@ -79,8 +79,8 @@ pub fn (mut sc StrConv) func_helper(o FuncItem) []DumpNode {
 	return args
 }
 
-// visit_mypy_file processes a MypyFile
-pub fn (mut sc StrConv) visit_mypy_file(o MypyFile) string {
+// visit_mypy_file processes a &MypyFile
+pub fn (mut sc StrConv) visit_mypy_file(o &MypyFile) string {
 	mut a := o.defs.map(DumpNode(it))
 	return sc.dump(a, o)
 }
