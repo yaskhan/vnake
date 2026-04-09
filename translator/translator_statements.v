@@ -809,7 +809,8 @@ fn (mut t Translator) visit_aug_assign(node ast.AugAssign) {
 		rhs := if target_type in ['f64', 'float'] {
 			'math.floor(${target_expr} / ${value_expr})'
 		} else {
-			'int(math.floor(f64(${target_expr}) / f64(${value_expr})))'
+			out_type := if target_type == 'i64' { 'i64' } else { 'int' }
+			'${out_type}(math.floor(f64(${target_expr}) / f64(${value_expr})))'
 		}
 		t.emit_indented('${target_expr} = ${rhs}')
 		return

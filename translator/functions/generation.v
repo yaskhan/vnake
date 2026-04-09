@@ -82,7 +82,14 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 			if dec_info.is_property { is_mutated = false }
 
-			mut mut_pfx := if dec_info.is_setter || is_mutated { 'mut ' } else { '' }
+			mut is_interface_impl := false
+			if struct_name.ends_with('_Impl') {
+				base_name := struct_name.all_before_last('_Impl')
+				if base_name in env.state.known_interfaces {
+					is_interface_impl = true
+				}
+			}
+			mut mut_pfx := if dec_info.is_setter || is_mutated || is_interface_impl { 'mut ' } else { '' }
 			gen_s := if env.state.current_class_generics.len > 0 {
 				mut v_gens := []string{}
 				for g in env.state.current_class_generics {
