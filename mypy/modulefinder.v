@@ -310,8 +310,8 @@ pub fn compute_search_paths(sources []MypyBuildSource, options Options, data_dir
 	mypypath << options.mypy_path
 
 	// Package path (site-packages)
-	package_path := []string{} // TODO: get from pyinfo
-
+	python_exe := options.python_executable or { "python3" }
+	_, package_path := getsearch_dirs(python_exe)
 	return SearchPaths{
 		python_path:   python_path.reverse()
 		mypy_path:     mypypath
