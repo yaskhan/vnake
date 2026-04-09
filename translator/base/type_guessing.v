@@ -84,7 +84,6 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		} else { 
 			'Any' 
 		}
-		return res
 	}
 	return 'Any'
 }
@@ -258,7 +257,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 				if res.starts_with('fn (') {
 					return res.all_after_last(') ').trim_space()
 				}
-				return res
+
 			}
 			ret_key := attr_name + '@return'
 			if ret_key in ctx.type_map { return ctx.type_map[ret_key] }
