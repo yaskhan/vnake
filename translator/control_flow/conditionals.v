@@ -110,7 +110,10 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 				// If we MUST force it:
 				narrowed_expr = '(${sanitized} or { panic("narrowing failed") })'
 			} else {
-				narrowed_expr = '(${sanitized} as ${narrowed_type})'
+				as_expr := '(${sanitized} as ${narrowed_type})'
+				narrowed_var := 'narrowed${branch_suffix}_${sanitized}'
+				m.emit('${narrowed_var} := ${as_expr}')
+				narrowed_expr = narrowed_var
 			}
 
 			if var_name in m.env.state.name_remap {

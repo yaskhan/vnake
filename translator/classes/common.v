@@ -4,7 +4,7 @@ import ast
 import base
 import analyzer
 
-fn noop_sum_type_registrar(_ string) string {
+fn noop_sum_type_registrar(_ string, _ string) string {
 	return ''
 }
 
@@ -90,9 +90,12 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 	}
 	
 	
-	mapped := base.map_type(real_type, opts, mut ctx, fn [mut env] (name string) string {
-		env.state.generated_sum_types[name] = ''
-		return name
+	mapped := base.map_type(real_type, opts, mut ctx, fn [mut env] (name string, def string) string {
+		if name.len > 0 {
+			env.state.generated_sum_types[name] = def
+			return name
+		}
+		return ''
 	}, noop_literal_registrar, noop_tuple_registrar)
 	
 
@@ -148,5 +151,9 @@ fn get_generics_with_variance_str(env &ClassVisitEnv) string {
 
 fn is_v_class_type(v_type string) bool {
 	clean := v_type.trim_left('?&')
-	return clean.len > 0 && clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self']
+	if clean.len == 0 { return false }
+	if clean.starts_with('SumType_') || clean.starts_with('LiteralEnum_') || clean.starts_with('TupleStruct_') {
+		return false
+	}
+	return clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self', 'NoneType']
 }

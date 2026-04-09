@@ -136,7 +136,7 @@ fn (mut t Translator) guess_type(node ast.Expression) string {
 
 pub fn (mut t Translator) map_annotation(node ?ast.Expression) string {
 	res := if n := node {
-		t.map_annotation_str(t.analyzer.render_expr(n), t.state.current_class, true, true, true)
+		t.map_annotation_str(t.analyzer.render_expr(n), t.state.current_class, false, true, true)
 	} else {
 		'Any'
 	}
@@ -400,8 +400,8 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		strict_exports:      t.state.strict_exports
 	}
 	mut st := t.state
-	res := base.map_type(type_str, opts, mut ctx, fn [mut t, actual_struct] (name string) string {
-		if name == 'Self' || name == 'typing.Self' {
+	res := base.map_type(type_str, opts, mut ctx, fn [mut t, actual_struct] (name string, def string) string {
+		if name == 'Self' || name == 'typing.Self' || def == 'Self' || def == 'typing.Self' {
 			mut v_gens := []string{}
 			for gn in t.state.current_class_generics {
 				v_gens << t.state.current_class_generic_map[gn] or { gn }
@@ -409,39 +409,35 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 			gen_s := if v_gens.len > 0 { "[${v_gens.join(', ')}]" } else { "" }
 			return "&" + actual_struct + gen_s
 		}
-		if name.contains("|") {
-			t.state.generated_sum_types[name] = ''
-			return name
+		mut final_name := name
+		if final_name == '' && def.contains('|') {
+			final_name = base.get_sum_type_name(def)
+		}
+		if final_name.len > 0 {
+			t.state.generated_sum_types[final_name] = def
+			return final_name
 		}
 		return ""
-	}, fn (_ []string) string { return '' }, fn [mut t] (types_str string) string {
+	}, fn [mut t] (vals []string) string {
+		enum_name := base.get_literal_enum_name(vals)
+		t.state.generated_literal_enums[enum_name] = vals.join(' | ')
+		return enum_name
+	}, fn [mut t] (types_str string) string {
 		struct_name_tuple := models.get_tuple_struct_name(types_str)
 		t.state.generated_tuple_structs[struct_name_tuple] = types_str
 		return struct_name_tuple
 	})
 
-	if !allow_union && res.contains('|') {
-		// Convert "A | B" to "SumType_AB"
-		mut parts := res.split('|').map(it.trim_space())
-		parts.sort()
-		mut name_parts := []string{}
-		for p in parts {
-			mut part_name := p.capitalize()
-			if part_name == 'Str' { part_name = 'String' }
-			name_parts << part_name
-		}
-		st_name := 'SumType_${name_parts.join("")}'
-		st.generated_sum_types[st_name] = res
-		return st_name
-	}
 	if res == 'TaskState' || res == '&TaskState' { return 'TaskState' }
 	if res.len == 0 {
 		return type_str
 	}
 	
 	mut final_res := res
-	pure_v := final_res.trim_left('?&')
-	if is_v_class_type(pure_v) && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') {
+	pure_v_raw := final_res.trim_left('?&')
+	pure_v := pure_v_raw
+	is_type_var := pure_v in t.state.type_vars || pure_v in t.state.current_class_generics
+	if is_v_class_type(pure_v) && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') && !is_type_var {
 		if pure_v in t.state.known_interfaces || pure_v == 'TaskState' {
 			return if final_res.starts_with('?') { '?' + pure_v } else { pure_v }
 		}
@@ -655,6 +651,15 @@ fn main() { richards() }
 	if t.state.used_builtins['compress.zlib'] {
 		e.add_import('compress.zlib')
 	}
+	if t.state.used_builtins['compress.gzip'] {
+		e.add_import('compress.gzip')
+	}
+	if t.state.used_builtins['net.urllib'] {
+		e.add_import('net.urllib')
+	}
+	if t.state.used_builtins['csv'] {
+		e.add_import('encoding.csv')
+	}
 	if t.state.used_builtins['datatypes'] {
 		e.add_import('datatypes')
 	}
@@ -695,8 +700,9 @@ fn main() { richards() }
 			}
 			// Also check if the module name appears in output code
 			if !is_used {
+				short_name := if imp_name.contains('.') { imp_name.all_after_last('.') } else { imp_name }
 				for code_line in t.state.output {
-					if code_line.contains('${imp_name}.') && !code_line.trim_space().starts_with('import ') {
+					if (code_line.contains('${imp_name}.') || code_line.contains('${short_name}.')) && !code_line.trim_space().starts_with('import ') {
 						is_used = true
 						break
 					}
@@ -725,5 +731,5 @@ fn main() { richards() }
 
 fn is_v_class_type(v_type string) bool {
 	clean := v_type.trim_left('?&')
-	return clean.len > 0 && clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self']
+	return clean.len > 0 && clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self', 'NoneType'] && !clean.starts_with('SumType_') && !clean.starts_with('LiteralEnum_')
 }

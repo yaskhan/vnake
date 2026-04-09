@@ -164,7 +164,7 @@ fn truthiness_condition(expr string, v_type string) string {
 }
 
 // map_type is a centralized Python-to-V type mapper with post-processing.
-pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, sum_type_registrar fn (string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
+pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	if type_str.contains('TypeForm') {
 		ctx.warnings << "Experimental feature 'TypeForm' is used."
 	}
@@ -172,7 +172,7 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 	registrar := if opts.register_sum_types {
 		sum_type_registrar
 	} else {
-		fn (_ string) string {
+		fn (_ string, _ string) string {
 			return ''
 		}
 	}
@@ -229,20 +229,11 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 	}
 
 	if !opts.allow_union && v_type.contains(' | ') {
-		// Convert "A | B" to "SumType_AB", with sorted parts for determinism
-		mut parts := v_type.split(' | ')
-		parts.sort()
-		mut name_parts := []string{}
-		for p in parts {
-			mut part_name := p.capitalize()
-			if part_name == 'Str' {
-				part_name = 'String'
-			}
-			name_parts << part_name
-		}
-		st_name := 'SumType_${name_parts.join('')}'
-		registrar(st_name)
-		return st_name
+		is_opt := v_type.starts_with('?')
+		inner := if is_opt { v_type[1..] } else { v_type }
+		st_name := get_sum_type_name(inner)
+		registrar(st_name, inner)
+		return if is_opt { '?' + st_name } else { st_name }
 	}
 
 	return v_type
@@ -277,4 +268,38 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 		return '${v_type}{}'
 	}
 	return 'none'
+}
+
+pub fn get_sum_type_name(union_str string) string {
+	mut parts := union_str.split(' | ').map(it.trim_space())
+	parts.sort()
+	mut name_parts := []string{}
+	for p in parts {
+		mut cleaned_p := p.trim_left('?&')
+		mut part_name := cleaned_p.capitalize()
+		if part_name == 'Str' {
+			part_name = 'String'
+		}
+		name_parts << part_name
+	}
+	return 'SumType_${name_parts.join('')}'
+}
+
+pub fn get_literal_enum_name(vals []string) string {
+	mut cleaned_vals := []string{}
+	for v in vals {
+		cleaned := v.trim("'\"")
+		cleaned_vals << cleaned
+	}
+	mut name_parts := []string{}
+	for v in cleaned_vals {
+		if v.len > 0 {
+			mut vp := v.capitalize()
+			if vp == 'Str' {
+				vp = 'String'
+			}
+			name_parts << vp
+		}
+	}
+	return 'LiteralEnum_${name_parts.join('')}'
 }

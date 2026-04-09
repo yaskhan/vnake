@@ -504,8 +504,12 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 }
 
 pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
-	dict_type := if eg.target_type.len > 0 { eg.target_type } else { 'Any' }
-	is_struct := dict_type in eg.state.defined_classes
+	mut dict_type := if eg.target_type.len > 0 { eg.target_type } else { 'Any' }
+	mut pure_dict_type := dict_type.trim_left('?&')
+	is_struct := pure_dict_type in eg.state.defined_classes || pure_dict_type in eg.state.typed_dicts
+	if is_struct {
+		dict_type = pure_dict_type
+	}
 
 	if node.keys.len == 0 {
 		if is_struct { return "${dict_type}{}" }
@@ -810,7 +814,7 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 	mut actual_struct := if opts.struct_name.len > 0 && opts.struct_name != 'Self' { opts.struct_name } else { eg.state.current_class }
 	if actual_struct == '' { actual_struct = 'Self' }
 
-	return base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string) string {
+	return base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string, def string) string {
 		if name == 'Self' || name == 'typing.Self' {
 			mut v_gens := []string{}
 			for gn in eg.state.current_class_generics {
@@ -820,14 +824,17 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 			return "&" + actual_struct + gen_s
 		}
 		if name.contains("|") {
-			eg.state.generated_sum_types[name] = ''
+			return ""
+		}
+		if name.len > 0 {
+			eg.state.generated_sum_types[name] = def
 			return name
 		}
 		return ""
 	}, noop_literal_registrar, noop_tuple_registrar)
 }
 
-fn noop_sum_type_registrar(_ string) string {
+fn noop_sum_type_registrar(_ string, _ string) string {
 	return ''
 }
 

@@ -51,7 +51,7 @@ fn noop_visit_expr(_ ast.Expression) string {
 	return ''
 }
 
-fn noop_sum_type_registrar(_ string) string {
+fn noop_sum_type_registrar(_ string, _ string) string {
 	return ''
 }
 
@@ -134,8 +134,37 @@ pub fn (mut m VariablesModule) map_python_type(type_str string, allow_union bool
 		generic_map:        m.state.current_class_generic_map
 	}
 	mut ctx := m.type_utils_context()
-	return base.map_type(type_str, opts, mut ctx, noop_sum_type_registrar, noop_literal_registrar,
-		noop_tuple_registrar)
+	return base.map_type(type_str, opts, mut ctx, fn [mut m] (name string, def string) string {
+		if name.contains('|') {
+			return ''
+		}
+		if name.len > 0 {
+			m.state.generated_sum_types[name] = def
+			return name
+		}
+		return ''
+	}, fn [mut m] (vals []string) string {
+		mut cleaned_vals := []string{}
+		for v in vals {
+			cleaned := v.trim("'\"")
+			cleaned_vals << cleaned
+		}
+		mut name_parts := []string{}
+		for v in cleaned_vals {
+			if v.len > 0 {
+				mut vp := v.capitalize()
+				if vp == 'Str' { vp = 'String' }
+				name_parts << vp
+			}
+		}
+		enum_name := 'LiteralEnum_${name_parts.join("")}'
+		m.state.generated_literal_enums[enum_name] = vals.join(' | ')
+		return enum_name
+	}, fn [mut m] (types_str string) string {
+		struct_name_tuple := models.get_tuple_struct_name(types_str)
+		m.state.generated_tuple_structs[struct_name_tuple] = types_str
+		return struct_name_tuple
+	})
 }
 
 pub fn (m &VariablesModule) sanitize_name(name string, is_type bool) string {

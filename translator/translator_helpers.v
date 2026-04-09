@@ -105,24 +105,31 @@ fn (mut t Translator) append_helpers() {
 		t.emit_helper_function_code('fn py_range(args ...int) []int {\n    mut res := []int{}\n    mut start := 0\n    mut stop := 0\n    mut step := 1\n    if args.len == 1 {\n        stop = args[0]\n    } else if args.len == 2 {\n        start = args[0]\n        stop = args[1]\n    } else if args.len >= 3 {\n        start = args[0]\n        stop = args[1]\n        step = args[2]\n    }\n    if step > 0 {\n        for i := start; i < stop; i += step {\n            res << i\n        }\n    } else if step < 0 {\n        for i := start; i > stop; i += step {\n            res << i\n        }\n    }\n    return res\n}')
 	}
 	if 'py_urlencode' in t.state.used_builtins {
+		t.state.used_builtins['net.urllib'] = true
 		t.emit_helper_function_code('fn py_urlencode(params map[string]string) string {\n    // stub\n    return ""\n}')
 	}
 	if 'py_urlparse' in t.state.used_builtins {
+		t.state.used_builtins['net.urllib'] = true
 		t.emit_helper_function_code('fn py_urlparse(url string) Any {\n    return urllib.parse(url) or { Any(0) }\n}')
 	}
 	if 'py_urllib_unquote' in t.state.used_builtins {
+		t.state.used_builtins['net.urllib'] = true
 		t.emit_helper_function_code('fn py_urllib_unquote(url string) string {\n    return urllib.query_unescape(url)\n}')
 	}
 	if 'py_gzip_compress' in t.state.used_builtins {
+		t.state.used_builtins['compress.gzip'] = true
 		t.emit_helper_function_code('fn py_gzip_compress(data []u8) []u8 {\n    return gzip.compress(data)\n}')
 	}
 	if 'py_gzip_decompress' in t.state.used_builtins {
+		t.state.used_builtins['compress.gzip'] = true
 		t.emit_helper_function_code('fn py_gzip_decompress(data []u8) []u8 {\n    return gzip.decompress(data) or { []u8{} }\n}')
 	}
 	if 'py_zlib_compress' in t.state.used_builtins {
+		t.state.used_builtins['compress.zlib'] = true
 		t.emit_helper_function_code('fn py_zlib_compress(data []u8) []u8 {\n    return zlib.compress(data)\n}')
 	}
 	if 'py_zlib_decompress' in t.state.used_builtins {
+		t.state.used_builtins['compress.zlib'] = true
 		t.emit_helper_function_code('fn py_zlib_decompress(data []u8) []u8 {\n    return zlib.decompress(data) or { []u8{} }\n}')
 	}
 	if t.state.used_builtins['py_struct_pack_I_le'] {
@@ -148,10 +155,12 @@ fn (mut t Translator) append_helpers() {
 		t.emit_helper_function_code('fn py_str_slice(arr string, start ?Any, end ?Any, step ?Any) string {\n    mut s := if st := start {\n        if st is int { int(st) } else { 0 }\n    } else { 0 }\n    mut e := if et := end {\n        if et is int { int(et) } else { arr.len }\n    } else { arr.len }\n    if s < 0 { s = arr.len + s }\n    if e < 0 { e = arr.len + e }\n    if s < 0 { s = 0 } else if s > arr.len { s = arr.len }\n    if e < 0 { e = 0 } else if e > arr.len { e = arr.len }\n    if s >= e { return "" }\n    return arr[s..e]\n}')
 	}
 	if t.state.used_builtins['py_csv_reader'] || t.state.used_builtins['PyCsvReader'] {
+		t.state.used_builtins['csv'] = true
 		t.emit_helper_struct_code('struct PyCsvReader {\n    mut:\n        r &csv.Reader\n}')
 		t.emit_helper_function_code('fn py_csv_reader(f os.File) &PyCsvReader {\n    return &PyCsvReader{r: csv.new_reader(f)}\n}\nfn (mut r PyCsvReader) next() ?[]string {\n    return r.r.read() or { none }\n}\nfn (mut r PyCsvReader) iter() &PyCsvReader {\n    return r\n}')
 	}
 	if t.state.used_builtins['py_csv_writer'] || t.state.used_builtins['PyCsvWriter'] {
+		t.state.used_builtins['csv'] = true
 		t.emit_helper_struct_code('struct PyCsvWriter {\n    mut:\n        w &csv.Writer\n}')
 		t.emit_helper_function_code('fn py_csv_writer(f os.File) &PyCsvWriter {\n    return &PyCsvWriter{w: csv.new_writer(f)}\n}\nfn (mut w PyCsvWriter) writerow(row []string) {\n    w.w.write(row) or { }\n}')
 	}
@@ -268,6 +277,14 @@ fn (mut t Translator) append_helpers() {
         } else if name.len > 0 && def.len > 0 {
             t.emit_helper_struct_code('type ${name} = ${def}')
         }
+    }
+    for name, vals_str in t.state.generated_literal_enums {
+        vals := vals_str.split('|').map(it.trim_space())
+        mut enum_fields := []string{}
+        for v in vals {
+            enum_fields << '    py_${v.trim("\'\"")}'
+        }
+        t.emit_helper_struct_code('enum ${name} {\n${enum_fields.join("\n")}\n}')
     }
     for name, types_str in t.state.generated_tuple_structs {
         parts := types_str.split(',').map(it.trim_space())

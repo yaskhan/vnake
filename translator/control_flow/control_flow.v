@@ -171,7 +171,7 @@ pub fn (m &ControlFlowModule) map_python_type(type_str string, is_return bool) s
 		include_all_symbols: m.env.state.include_all_symbols
 		strict_exports:      m.env.state.strict_exports
 	}
-	return base.map_type(type_str, opts, mut ctx, fn (_ string) string { return '' },
+	return base.map_type(type_str, opts, mut ctx, fn (_ string, _ string) string { return '' },
 		fn (_ []string) string { return '' }, fn (_ string) string { return '' })
 }
 
@@ -192,9 +192,12 @@ pub fn (m &ControlFlowModule) register_sum_type(types_str string) string {
 		strict_exports:      m.env.state.strict_exports
 	}
 	mut st := m.env.state
-	return base.map_type(types_str, opts, mut ctx, fn [mut st] (name string) string {
-		st.generated_sum_types[name] = ''
-		return name
+	return base.map_type(types_str, opts, mut ctx, fn [mut st] (name string, def string) string {
+		if name.len > 0 {
+			st.generated_sum_types[name] = def
+			return name
+		}
+		return ''
 	}, fn (_ []string) string { return '' }, fn (_ string) string { return '' })
 }
 

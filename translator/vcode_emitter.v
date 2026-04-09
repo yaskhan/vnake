@@ -190,6 +190,7 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 		lines << ''
 	}
 	if e.structs.len > 0 { lines << e.structs.join('\n\n'); lines << '' }
+	if e.helper_structs.len > 0 { lines << e.helper_structs.join('\n\n'); lines << '' }
 	if e.globals.len > 0 {
 		for g in e.globals { lines << '__global ${g.replace("pub ", "")}' }
 		lines << ''
@@ -199,6 +200,7 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 		lines << ''
 	}
 	if e.functions.len > 0 { lines << e.functions.join('\n\n'); lines << '' }
+	if e.helper_functions.len > 0 { lines << e.helper_functions.join('\n\n'); lines << '' }
 	if e.main_body.len > 0 { for m in e.main_body { lines << m } }
 	res := lines.join('\n').trim_space()
 	if res.len == 0 && (e.structs.len > 0 || e.functions.len > 0 || e.constants.len > 0) {
