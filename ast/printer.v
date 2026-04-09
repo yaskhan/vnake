@@ -1,24 +1,34 @@
 module ast
 
+import strings
+
 // ==================== AST PRINTER ====================
 // Matches Python's ast.dump(..., indent=2) style
 
 pub struct Printer {
 pub mut:
-	indent_level int
-	output       string
+	indent_level   int
+	output         strings.Builder
+	cached_indents []string
 }
 
 fn (mut p Printer) indent() string {
-	return '  '.repeat(p.indent_level)
+	if p.indent_level < p.cached_indents.len {
+		return p.cached_indents[p.indent_level]
+	}
+	for p.cached_indents.len <= p.indent_level {
+		p.cached_indents << '  '.repeat(p.cached_indents.len)
+	}
+	return p.cached_indents[p.indent_level]
 }
 
 fn (mut p Printer) write(s string) {
-	p.output += s
+	p.output.write_string(s)
 }
 
 fn (mut p Printer) writeln(s string) {
-	p.output += s + '\n'
+	p.output.write_string(s)
+	p.output.write_string('\n')
 }
 
 pub fn (mut p Printer) visit_module(node &Module) {

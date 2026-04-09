@@ -1197,6 +1197,9 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 						t.store_type(target.id, rhs_type)
 					}
 				}
+				if value_type == 'none' && current != '' && current != 'Any' && current != 'none' && !current.starts_with('?') {
+					t.store_type(target.id, '?' + current)
+				}
 				if node.value is ast.Lambda {
 					t.register_lambda_signature(target.id, node.value)
 				}

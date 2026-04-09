@@ -94,3 +94,6 @@ raw_type_map_debug.json
 v_errors.txt
 build_errors.txt
 check_errors.txt
+v_err*.txt
+v_out*.txt
+build_err*.txt

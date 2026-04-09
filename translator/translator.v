@@ -134,7 +134,16 @@ fn (mut t Translator) guess_type(node ast.Expression) string {
 	return eg.guess_type(node)
 }
 
-fn (mut t Translator) map_annotation(node ast.Expression) string {
+pub fn (mut t Translator) map_annotation(node ?ast.Expression) string {
+	res := if n := node {
+		t.map_annotation_str(t.analyzer.render_expr(n), t.state.current_class, true, true, true)
+	} else {
+		'Any'
+	}
+	return res
+}
+
+fn (mut t Translator) map_annotation_internal(node ast.Expression) string {
 	match node {
 		ast.Name {
 			res := match node.id {

@@ -102,10 +102,13 @@ pub fn (e &VCodeEmitter) emit() string {
 	lines << 'module ${e.module_name}'
 	lines << ''
 
-	if e.imports.len > 0 {
-		mut imports := e.imports.clone()
-		imports.sort()
-		for imp in imports {
+	if e.imports.len > 0 || e.helper_imports.len > 0 {
+		mut all_imports := e.imports.clone()
+		for imp in e.helper_imports {
+			if imp !in all_imports { all_imports << imp }
+		}
+		all_imports.sort()
+		for imp in all_imports {
 			lines << 'import ${imp}'
 		}
 		lines << ''
@@ -113,6 +116,11 @@ pub fn (e &VCodeEmitter) emit() string {
 
 	if e.structs.len > 0 {
 		lines << e.structs.join('\n\n')
+		lines << ''
+	}
+	
+	if e.helper_structs.len > 0 {
+		lines << e.helper_structs.join('\n\n')
 		lines << ''
 	}
 
@@ -145,6 +153,11 @@ pub fn (e &VCodeEmitter) emit() string {
 
 	if e.functions.len > 0 {
 		lines << e.functions.join('\n\n')
+		lines << ''
+	}
+	
+	if e.helper_functions.len > 0 {
+		lines << e.helper_functions.join('\n\n')
 		lines << ''
 	}
 
@@ -219,10 +232,26 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		lines << ''
 	}
 
+	lines << 'pub type Any = bool | f64 | i64 | int | string | voidptr | NoneType | Interpolation | Template | []Any | map[string]Any | []u8'
+	lines << ''
+
 	lines << 'pub struct NoneType {}'
 	lines << 'pub fn (n NoneType) str() string {'
 	lines << "    return 'None'"
 	lines << '}'
+	lines << ''
+	
+	lines << 'pub fn py_bool(val Any) bool {
+    if val is bool { return val }
+    if val is int { return val != 0 }
+    if val is i64 { return val != 0 }
+    if val is f64 { return val != 0.0 }
+    if val is string { return val.len > 0 }
+    if val is []Any { return val.len > 0 }
+    if val is map[string]Any { return val.len > 0 }
+    if val is NoneType { return false }
+    return true
+}'
 	lines << ''
 
 	lines << 'pub struct Interpolation {'
@@ -249,6 +278,20 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	lines << '    return res'
 	lines << '}'
 	lines << ''
+	
+	lines << 'pub fn py_bool(val Any) bool {
+    if val is bool { return val }
+    if val is int { return val != 0 }
+    if val is i64 { return val != 0 }
+    if val is f64 { return val != 0.0 }
+    if val is string { return val.len > 0 }
+    if val is []Any { return val.len > 0 }
+    if val is map[string]Any { return val.len > 0 }
+    if val is NoneType { return false }
+    return true
+}'
+	lines << ''
+	lines << ''
 
 	lines << 'pub fn (t1 Template) + (t2 Template) Template {'
 	lines << '    if t1.strings.len == 0 { return t2 }'
@@ -265,9 +308,6 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	lines << '        interpolations: new_interpolations'
 	lines << '    }'
 	lines << '}'
-	lines << ''
-
-	lines << 'pub type Any = Interpolation | NoneType | Template | []Any | []u8 | bool | f64 | i64 | int | map[string]Any | string'
 	lines << ''
 
 	lines << 'pub enum PyAnnotationFormat { value forwardref string }'

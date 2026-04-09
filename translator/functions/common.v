@@ -523,3 +523,68 @@ pub fn is_empty_body(body []ast.Statement) bool {
 	}
 	return true
 }
+
+// ends_with_return checks whether a block of statements ends with a return.
+pub fn ends_with_return(body []ast.Statement) bool {
+	if body.len == 0 {
+		return false
+	}
+	last_stmt := body.last()
+	return stmt_ends_with_return(last_stmt)
+}
+
+fn stmt_ends_with_return(stmt ast.Statement) bool {
+	match stmt {
+		ast.Return {
+			return true
+		}
+		ast.Raise {
+			return true
+		}
+		ast.If {
+			if stmt.orelse.len == 0 {
+				return false
+			}
+			return ends_with_return(stmt.body) && ends_with_return(stmt.orelse)
+		}
+		ast.Try {
+			// If finalbody exists and ends with return, it's enough.
+			if stmt.finalbody.len > 0 && ends_with_return(stmt.finalbody) {
+				return true
+			}
+			// If all paths (body, all handlers, orelse) end with return, it's enough.
+			if !ends_with_return(stmt.body) {
+				return false
+			}
+			for handler in stmt.handlers {
+				if !ends_with_return(handler.body) {
+					return false
+				}
+			}
+			// if orelse exists, it must also end with return (orelse is executed if no exception)
+			if stmt.orelse.len > 0 && !ends_with_return(stmt.orelse) {
+				return false
+			}
+			return true
+		}
+		ast.Match {
+			if stmt.cases.len == 0 { return false }
+			// Find if there's a wildcard case (match anything)
+			mut has_wildcard := false
+			for case in stmt.cases {
+				if case.pattern is ast.MatchAs {
+					if case.pattern.name == none {
+						has_wildcard = true
+					}
+				}
+				if !ends_with_return(case.body) {
+					return false
+				}
+			}
+			return has_wildcard
+		}
+		else {
+			return false
+		}
+	}
+}
