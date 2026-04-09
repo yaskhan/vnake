@@ -6,6 +6,32 @@ import base
 
 pub struct FunctionsGenerationHandler {}
 
+fn find_inherited_method_return_type(
+	class_name string,
+	method_name string,
+	env &FunctionVisitEnv,
+	mut visited map[string]bool,
+) ?string {
+	if class_name.len == 0 || class_name in visited {
+		return none
+	}
+	visited[class_name] = true
+	normalized_class := if class_name.ends_with('_Impl') { class_name.all_before_last('_Impl') } else { class_name }
+	bases := env.state.class_hierarchy[normalized_class] or { []string{} }
+	for base_name in bases {
+		sig_key := '${base_name}.${method_name}'
+		if sig := env.analyzer.call_signatures[sig_key] {
+			if sig.return_type.len > 0 && sig.return_type != 'void' {
+				return sig.return_type
+			}
+		}
+		if inherited := find_inherited_method_return_type(base_name, method_name, env, mut visited) {
+			return inherited
+		}
+	}
+	return none
+}
+
 pub fn (h FunctionsGenerationHandler) generate_function(
 	node &ast.FunctionDef,
 	struct_name string,
@@ -314,6 +340,12 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			p_key_ret := if struct_name.len > 0 { '${struct_name}.${node.name}@return' } else { '${node.name}@return' }
 			inf_ret := env.analyzer.get_type(p_key_ret) or { 'void' }
 			ret_type = env.map_type_fn(inf_ret, struct_name, true, false, false)
+			if ret_type == 'void' && struct_name.len > 0 {
+				mut visited := map[string]bool{}
+				if inherited_ret := find_inherited_method_return_type(struct_name, node.name, &env, mut visited) {
+					ret_type = env.map_type_fn(inherited_ret, struct_name, true, false, false)
+				}
+			}
 		}
 		
 		if node.returns == none && (ret_type == 'fn (...Any) Any' || ret_type.contains('|')) {
@@ -763,4 +795,3 @@ fn replace_generics_with_any(type_str string, generic_scopes []map[string]string
 	}
 	return res
 }
-

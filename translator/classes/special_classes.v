@@ -5,6 +5,23 @@ import base
 
 pub struct SpecialClassesHandler {}
 
+fn resolve_interface_method_return_type(
+	struct_name string,
+	method ast.FunctionDef,
+	mut env ClassVisitEnv,
+) string {
+	if ann := method.returns {
+		return map_python_type(env.visit_expr_fn(ann), struct_name, true, mut env, '${method.name}@return')
+	}
+	sig_key := '${struct_name}.${method.name}'
+	if sig := env.analyzer.call_signatures[sig_key] {
+		if sig.return_type.len > 0 && sig.return_type != 'void' {
+			return env.map_type_fn(sig.return_type, struct_name, true, true, false)
+		}
+	}
+	return ''
+}
+
 pub fn (h SpecialClassesHandler) process_enum_body(node ast.ClassDef, is_flag bool, mut env ClassVisitEnv) []string {
 	_ = h
 	_ = is_flag
@@ -161,10 +178,8 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 				m_name = if has_str_method { 'repr' } else { 'str' }
 			}
 			
-			mut ret := if ann := method.returns {
-				r_type := map_python_type(env.visit_expr_fn(ann), struct_name, true, mut env, '${method.name}@return')
-				' ' + r_type
-			} else { '' }
+			mut ret_type := resolve_interface_method_return_type(struct_name, method, mut env)
+			mut ret := if ret_type.len > 0 { ' ' + ret_type } else { '' }
 			// Ensure ? suffix consistency for interface methods
 			if ret.len > 1 && !ret.ends_with('?') {
 				// Check if method should return optional type (e.g., next() methods)
