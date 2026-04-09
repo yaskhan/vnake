@@ -5,6 +5,8 @@ import base
 
 pub struct SpecialClassesHandler {}
 
+// resolve_interface_method_return_type resolves interface method signatures by preferring explicit annotations
+// and otherwise reusing analyzed call signatures so generated interfaces stay consistent with implementations.
 fn resolve_interface_method_return_type(struct_name string,
 	method ast.FunctionDef,
 	mut env ClassVisitEnv) string {

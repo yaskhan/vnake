@@ -6,6 +6,7 @@ import base
 
 pub struct FunctionsGenerationHandler {}
 
+// find_inherited_method_return_type walks base classes and returns the first non-void method return type it finds.
 fn find_inherited_method_return_type(class_name string,
 	method_name string,
 	env &FunctionVisitEnv,
