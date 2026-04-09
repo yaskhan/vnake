@@ -301,12 +301,137 @@ pub fn (mut tc TypeChecker) visit_assignment_stmt(mut s AssignmentStmt) !AnyNode
 
 // check_assignment checks assignment
 fn (mut tc TypeChecker) check_assignment(mut lvalue Lvalue, rvalue Expression, rvalue_type MypyTypeNode) {
-	if lvalue is TupleExpr || lvalue is ListExpr {
-		// TODO: multiple assignment implementation (unpacking)
-		tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
-	} else {
-		tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
+	match mut lvalue {
+		TupleExpr {
+			tc.check_unpacking_assignment(mut lvalue, lvalue.items, rvalue, rvalue_type)
+		}
+		ListExpr {
+			tc.check_unpacking_assignment(mut lvalue, lvalue.items, rvalue, rvalue_type)
+		}
+		else {
+			tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
+		}
 	}
+}
+
+
+// check_unpacking_assignment handles multiple assignment unpacking
+fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Expression, rvalue Expression, rvalue_type MypyTypeNode) {
+	tc.store_type(lvalue_to_expression(lvalue), rvalue_type)
+	proper_rvalue := get_proper_type(rvalue_type)
+
+	mut star_index := -1
+	for i, item in items {
+		if item is StarExpr {
+			if star_index != -1 {
+				tc.msg.fail('Two starred expressions in assignment', rvalue.get_context(), false, false, none)
+			}
+			star_index = i
+		}
+	}
+
+	match proper_rvalue {
+		TupleType {
+			if star_index == -1 {
+				if items.len != proper_rvalue.items.len {
+					tc.msg.fail('Incompatible number of values to unpack (expected ${items.len}, got ${proper_rvalue.items.len})', rvalue.get_context(), false, false, none)
+				}
+				for i in 0 .. items.len {
+					mut item := items[i]
+					mut item_lval := item.as_lvalue() or { continue }
+					item_type := if i < proper_rvalue.items.len {
+						proper_rvalue.items[i]
+					} else {
+						MypyTypeNode(AnyType{ type_of_any: .from_untyped_call })
+					}
+					tc.check_assignment(mut item_lval, item, item_type)
+				}
+			} else {
+				if proper_rvalue.items.len < items.len - 1 {
+					tc.msg.fail('Not enough values to unpack (expected at least ${items.len - 1}, got ${proper_rvalue.items.len})', rvalue.get_context(), false, false, none)
+				}
+				// Before star
+				for i in 0 .. star_index {
+					mut item := items[i]
+					mut item_lval := item.as_lvalue() or { continue }
+					tc.check_assignment(mut item_lval, item, proper_rvalue.items[i])
+				}
+				// The star itself
+				star_len := proper_rvalue.items.len - (items.len - 1)
+				mut starred_items := []MypyTypeNode{}
+				for i in 0 .. star_len {
+					starred_items << proper_rvalue.items[star_index + i]
+				}
+
+				mut star_expr_node := items[star_index]
+				if star_expr_node is StarExpr {
+					mut star_expr := star_expr_node as StarExpr
+					mut star_lval := Expression(star_expr).as_lvalue() or { panic('unreachable') }
+					// For now, starred assignment gets a List or Tuple of the items
+					// Mypy typically uses a List for the starred part
+					tc.check_assignment(mut star_lval, Expression(star_expr), MypyTypeNode(Instance{
+						type_name: 'builtins.list'
+						args: [starred_items[0] or { MypyTypeNode(AnyType{type_of_any: .from_untyped_call}) }]
+					}))
+				}
+
+				// After star
+				for i in star_index + 1 .. items.len {
+					mut item := items[i]
+					mut item_lval := item.as_lvalue() or { continue }
+					tc.check_assignment(mut item_lval, item, proper_rvalue.items[proper_rvalue.items.len - (items.len - i)])
+				}
+			}
+		}
+		Instance {
+			if (proper_rvalue.type_name == 'builtins.list' || proper_rvalue.type_name == 'builtins.tuple' || proper_rvalue.type_name == 'builtins.dict') && proper_rvalue.args.len > 0 {
+				item_type := proper_rvalue.args[0]
+				for item_ in items {
+					mut item := item_
+					if item is StarExpr {
+						mut star_expr := item as StarExpr
+						mut star_lval := Expression(star_expr).as_lvalue() or { continue }
+						// For list/tuple/dict, starred version is a list of the same element type
+						mut list_type := MypyTypeNode(Instance{
+							type_name: 'builtins.list'
+							args: [item_type]
+						})
+						tc.check_assignment(mut star_lval, Expression(star_expr), list_type)
+					} else if mut item_lval := item.as_lvalue() {
+						tc.check_assignment(mut item_lval, item, item_type)
+					}
+				}
+			} else {
+				tc.msg.fail('"' + proper_rvalue.type_name + '" object is not iterable', rvalue.get_context(), false, false, none)
+			}
+		}
+		AnyType {
+			for item_ in items {
+				mut item := item_
+				if item is StarExpr {
+					mut star_expr := item as StarExpr
+					mut star_lval := Expression(star_expr).as_lvalue() or { continue }
+					tc.check_assignment(mut star_lval, Expression(star_expr), proper_rvalue)
+				} else if mut item_lval := item.as_lvalue() {
+					tc.check_assignment(mut item_lval, item, proper_rvalue)
+				}
+			}
+		}
+		else {
+			tc.msg.fail('object is not iterable', rvalue.get_context(), false, false, none)
+		}
+	}
+}
+
+fn lvalue_to_expression(lv Lvalue) Expression {
+    match lv {
+        NameExpr { return Expression(lv) }
+        MemberExpr { return Expression(lv) }
+        IndexExpr { return Expression(lv) }
+        TupleExpr { return Expression(lv) }
+        ListExpr { return Expression(lv) }
+        StarExpr { return Expression(lv) }
+    }
 }
 
 // check_simple_assignment checks simple assignment
@@ -314,7 +439,7 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 	// Handle different Lvalue variants
 	match mut lvalue {
 		NameExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
+			tc.store_type(lvalue_to_expression(lvalue), rvalue_type)
 			if mut node := lvalue.node {
 				if mut node is Var {
 					if target_type := node.type_ {
@@ -326,7 +451,7 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			}
 		}
 		MemberExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
+			tc.store_type(lvalue_to_expression(lvalue), rvalue_type)
 			tc.expr_checker.accept(lvalue.expr)
 			
 			// If assigning to self.name, register it in the class TypeInfo
@@ -349,76 +474,20 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 				}
 			}
 		}
-		TupleExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
-			proper_rvalue := get_proper_type(rvalue_type)
-			for i in 0 .. lvalue.items.len {
-				mut item := lvalue.items[i]
-				mut item_lval := item.as_lvalue() or { continue }
-				mut item_type := MypyTypeNode(AnyType{
-					type_of_any: .from_untyped_call
-				})
 
-				match proper_rvalue {
-					TupleType {
-						if i < proper_rvalue.items.len {
-							item_type = proper_rvalue.items[i]
-						}
-					}
-					Instance {
-						if (proper_rvalue.type_name == 'builtins.list'
-							|| proper_rvalue.type_name == 'builtins.tuple')
-							&& proper_rvalue.args.len > 0 {
-							item_type = proper_rvalue.args[0]
-						}
-					}
-					AnyType {
-						item_type = proper_rvalue
-					}
-					else {}
-				}
-				tc.check_assignment(mut item_lval, item, item_type)
-			}
-		}
-		ListExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
-			proper_rvalue := get_proper_type(rvalue_type)
-			for i in 0 .. lvalue.items.len {
-				mut item := lvalue.items[i]
-				mut item_lval := item.as_lvalue() or { continue }
-				mut item_type := MypyTypeNode(AnyType{
-					type_of_any: .from_untyped_call
-				})
-
-				match proper_rvalue {
-					TupleType {
-						if i < proper_rvalue.items.len {
-							item_type = proper_rvalue.items[i]
-						}
-					}
-					Instance {
-						if (proper_rvalue.type_name == 'builtins.list'
-							|| proper_rvalue.type_name == 'builtins.tuple')
-							&& proper_rvalue.args.len > 0 {
-							item_type = proper_rvalue.args[0]
-						}
-					}
-					AnyType {
-						item_type = proper_rvalue
-					}
-					else {}
-				}
-				tc.check_assignment(mut item_lval, item, item_type)
-			}
-		}
 		StarExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
-			// TODO: handle star assignment
+			tc.store_type(lvalue_to_expression(lvalue), rvalue_type)
+			if mut inner_lval := lvalue.expr.as_lvalue() {
+				// The rvalue_type here is already the list type
+				tc.check_assignment(mut inner_lval, lvalue.expr, rvalue_type)
+			}
 		}
 		IndexExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
+			tc.store_type(lvalue_to_expression(lvalue), rvalue_type)
 			// TODO: handle index assignment
 		}
+		TupleExpr {}
+		ListExpr {}
 	}
 }
 
@@ -1025,12 +1094,12 @@ pub fn (mut tc TypeChecker) visit_type_info(mut o TypeInfo) !AnyNode {
 
 pub fn (mut tc TypeChecker) visit_lvalue(mut o Lvalue) !AnyNode {
 	match mut o {
-		ListExpr { tc.visit_list_expr(mut o)! }
 		MemberExpr { tc.visit_member_expr(mut o)! }
 		NameExpr { tc.visit_name_expr(mut o)! }
 		StarExpr { tc.visit_star_expr(mut o)! }
-		TupleExpr { tc.visit_tuple_expr(mut o)! }
 		IndexExpr { tc.visit_index_expr(mut o)! }
+		TupleExpr {}
+		ListExpr {}
 	}
 	return ''
 }
