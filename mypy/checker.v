@@ -327,17 +327,16 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		}
 		MemberExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
-			tc.expr_checker.accept(lvalue.expr)
-			
+
 			// If assigning to self.name, register it in the class TypeInfo
 			if mut active := tc.active_type {
 				if lvalue.expr is NameExpr {
 					base_name := (lvalue.expr as NameExpr).name
-					if base_name.trim_space() == 'self' {
+					if base_name.trim_space() == "self" {
 						if lvalue.name !in active.names.symbols {
 							mut v := Var{
 								name:     lvalue.name
-								fullname: active.fullname + '.' + lvalue.name
+								fullname: active.fullname + "." + lvalue.name
 								type_:    rvalue_type
 							}
 							active.names.symbols[lvalue.name] = SymbolTableNode{
@@ -348,6 +347,9 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 					}
 				}
 			}
+
+			member_type := tc.expr_checker.visit_member_expr(lvalue, true)
+			tc.check_subtype(rvalue_type, member_type, rvalue.get_context(), "Incompatible types in assignment")
 		}
 		TupleExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
