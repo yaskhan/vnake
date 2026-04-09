@@ -77,7 +77,14 @@ pub fn split_and_match_files_list(paths []string) []string {
 	mut expanded := []string{}
 	for path in paths {
 		p := expand_path(path.trim_space())
-		// TODO: glob support
+		if p.contains_any('*?[') {
+			if matches := os.glob(p) {
+				if matches.len > 0 {
+					expanded << matches
+					continue
+				}
+			}
+		}
 		expanded << p
 	}
 	return expanded
