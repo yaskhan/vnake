@@ -529,7 +529,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			}
 			if v_type == 'unknown' { v_type = 'Any' }
-			t.emit_indented('__global ${v_id} ${v_type}')
+			t.emit_indented('${pub_prefix}__global ${v_id} ${v_type}')
 			t.emit_indented('${v_id} = ${rhs_text}')
 			t.declare_local(lhs)
 			return

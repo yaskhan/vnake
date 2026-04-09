@@ -278,19 +278,6 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	lines << '    return res'
 	lines << '}'
 	lines << ''
-
-	lines << 'pub fn py_bool(val Any) bool {
-    if val is bool { return val }
-    if val is int { return val != 0 }
-    if val is i64 { return val != 0 }
-    if val is f64 { return val != 0.0 }
-    if val is string { return val.len > 0 }
-    if val is []Any { return val.len > 0 }
-    if val is map[string]Any { return val.len > 0 }
-    if val is NoneType { return false }
-    return true
-}'
-	lines << ''
 	lines << ''
 
 	lines << 'pub fn (t1 Template) + (t2 Template) Template {'
