@@ -179,6 +179,7 @@ pub fn transpile_file(source_file string, config TranspilerConfig, mut global_he
 	// Translation
 	mut trans := translator.new_translator()
 	trans.state.type_inference = voidptr(&plugin_analyzer.store)
+	trans.analyzer.load_mypy_data(plugin_analyzer.store)
 	trans.state.include_all_symbols = config.include_all_symbols
 	trans.state.strict_exports = config.strict_exports
 	trans.state.current_module_name = current_module

@@ -242,12 +242,27 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 			return ctx.type_map[ret_key]
 		}
 	}
-	if node.func is ast.Attribute {
-		if node.func.attr == 'join' || node.func.attr == 'split' || node.func.attr == 'upper' || node.func.attr == 'lower' || node.func.attr == 'strip' {
+	f := node.func
+	if f is ast.Attribute {
+		if f.attr == 'join' || f.attr == 'split' || f.attr == 'upper' || f.attr == 'lower' || f.attr == 'strip' {
 			return 'string'
 		}
-		if node.func.attr in ['append', 'extend', 'add', 'update', 'remove', 'pop', 'clear'] {
+		if f.attr in ['append', 'extend', 'add', 'update', 'remove', 'pop', 'clear'] {
 			return 'none'
+		}
+		rec_type := guess_type(f.value, ctx, false)
+		if rec_type != 'Any' {
+			pure_rec := rec_type.trim_left('?&')
+			attr_name := pure_rec + '.' + f.attr
+			if attr_name in ctx.type_map { 
+				res := ctx.type_map[attr_name] 
+				if res.starts_with('fn (') {
+					return res.all_after_last(') ').trim_space()
+				}
+				return res
+			}
+			ret_key := attr_name + '@return'
+			if ret_key in ctx.type_map { return ctx.type_map[ret_key] }
 		}
 	}
 	return 'Any'
@@ -372,6 +387,7 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 	if actual_name in ctx.known_v_types { return ctx.known_v_types[actual_name] }
 	if node.id in ctx.known_v_types { return ctx.known_v_types[node.id] }
 
+
 	if node.id in ctx.type_map {
 		res := ctx.type_map[node.id]
 		if res != 'int' && res != 'Any' && res != 'unknown' { return res }
@@ -431,15 +447,8 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 
 	val_type := guess_type(node.value, ctx, false)
 	base_type := val_type.trim_left('?&')
-	if node.attr == 'taskList' {
-		full_name := analyzer.expr_name(node)
-		res := ctx.type_map["${base_type}.${node.attr}"] or { "MISSING" }
-		eprintln('DEBUG: guess_type_attribute attr=taskList full_name=${full_name} base_type=${base_type} result=${res}')
-	}
 	if base_type != 'Any' && base_type != 'int' {
 		attr_name := '${base_type}.${node.attr}'
-		res := ctx.type_map[attr_name] or { 'MISSING' }
-		eprintln('DEBUG: guess_type_attribute lookup=${attr_name} res=${res}')
 		if attr_name in ctx.type_map { return ctx.type_map[attr_name] }
 		if ctx.analyzer != unsafe { nil } {
 			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
@@ -481,6 +490,11 @@ fn guess_type_subscript(node ast.Subscript, ctx TypeGuessingContext, use_locatio
 fn guess_type_binop(node ast.BinaryOp, ctx TypeGuessingContext) string {
 	left := guess_type(node.left, ctx, true)
 	right := guess_type(node.right, ctx, true)
+	if node.op.value == '|' {
+		if (left == 'none' || left == 'NoneType') && right != 'Any' { return '?' + right }
+		if (right == 'none' || right == 'NoneType') && left != 'Any' { return '?' + left }
+		return left + ' | ' + right
+	}
 	if node.op.value == '/' {
 		if left == 'PyComplex' || right == 'PyComplex' {
 			return 'PyComplex'

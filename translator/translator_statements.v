@@ -553,7 +553,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				mut final_rhs := rhs_text
 				rhs_type := t.guess_type(node.value)
 				if t.state.narrowed_vars[lhs] && t.state.in_loop_count > 0 {
-					eprintln('DEBUG NARROWED ASSIGN: lhs=${lhs} rhs_type=${rhs_type} in_loop=${t.state.in_loop_count}')
 					if rhs_type.starts_with('?') {
 						final_rhs = '${rhs_text} or { break }'
 					}
