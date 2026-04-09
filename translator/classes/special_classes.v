@@ -94,7 +94,13 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 			res << doc_comment.trim_right('\n')
 		}
 		res << '${pub_prefix}interface ${struct_name}${generics_str} {'
-		/* V interfaces cannot have fields */
+		/* V interfaces cannot have fields, but can embed other interfaces */
+		for base_expr in node.bases {
+			b_name := env.visit_expr_fn(base_expr)
+			if b_name != 'object' && b_name != 'ABC' && b_name != 'Generic' && b_name != 'Protocol' {
+				res << '    ' + sanitize_name(b_name, true)
+			}
+		}
 
 		mut has_methods := false
 		for method in methods {
