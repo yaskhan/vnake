@@ -1,4 +1,3 @@
-// I, Cline, am working on this file. Started: 2026-03-22 15:20
 // subtypes.v — Subtype checking for mypy types
 // Translated from mypy/subtypes.py
 
@@ -38,95 +37,163 @@ pub fn new_subtype_context(ignore_type_params bool, ignore_pos_arg_names bool, i
 	}
 }
 
-// is_subtype checks if left is a subtype of right
-// Also considers Any to be a subtype of any type and vice versa
-pub fn is_subtype_ctx(left MypyTypeNode, right MypyTypeNode, subtype_context SubtypeContext) bool {
-	if left.str() == right.str() {
-		return true
-	}
-	// TODO: full implementation with SubtypeVisitor
-	return is_subtype_internal(left, right, subtype_context)
+// SubtypeVisitor — visitor for subtype checking
+struct SubtypeVisitor {
+	left MypyTypeNode
+	ctx  SubtypeContext
 }
 
-// is_subtype_internal — internal implementation of subtype checking
-fn is_subtype_internal(left MypyTypeNode, right MypyTypeNode, ctx SubtypeContext) bool {
-	left_proper := get_proper_type(left)
+// visit — main entry point for SubtypeVisitor
+fn (v SubtypeVisitor) visit(right MypyTypeNode) bool {
 	right_proper := get_proper_type(right)
 
 	// AnyType is a subtype of any type (for non-proper)
-	if !ctx.erase_instances && !ctx.keep_erased_types {
+	if !v.ctx.erase_instances && !v.ctx.keep_erased_types {
 		if right_proper is AnyType || right_proper is UnboundType || right_proper is ErasedType {
-			if left_proper !is UnpackType {
+			if v.left !is UnpackType {
 				return true
 			}
 		}
 	}
 
 	// UnionType check
-	if right_proper is UnionType && left_proper !is UnionType {
-		for item in right_proper.items {
-			if is_subtype_ctx(left, item, ctx) {
+	if right_proper is UnionType && v.left !is UnionType {
+		return v.visit_union_type(right_proper as UnionType)
+	}
+
+	return match right_proper {
+		Instance { v.visit_instance(right_proper as Instance) }
+		CallableType { v.visit_callable_type(right_proper as CallableType) }
+		TupleType { v.visit_tuple_type(right_proper as TupleType) }
+		TypedDictType { v.visit_typeddict_type(right_proper as TypedDictType) }
+		TypeVarType { v.visit_type_var(right_proper as TypeVarType) }
+		NoneType { v.visit_none_type(right_proper as NoneType) }
+		else {
+			// Fallback for types on the left
+			if v.left is AnyType {
+				return !v.ctx.erase_instances
+			}
+			if v.left is UninhabitedType {
 				return true
 			}
+			false
 		}
-		return false
 	}
+}
 
-	// Instance -> Instance
-	if left_proper is Instance && right_proper is Instance {
-		return is_instance_subtype(left_proper, right_proper, ctx)
-	}
-
-	// NoneType
-	if left_proper is NoneType {
-		if right_proper is NoneType || is_named_instance(right_proper, 'builtins.object') {
+fn (v SubtypeVisitor) visit_union_type(right UnionType) bool {
+	for item in right.items {
+		if is_subtype_ctx(v.left, item, v.ctx) {
 			return true
 		}
-		return false
 	}
+	return false
+}
 
-	// AnyType
-	if left_proper is AnyType {
-		return !ctx.erase_instances
+fn (v SubtypeVisitor) visit_instance(right Instance) bool {
+	if v.left is Instance {
+		return is_instance_subtype(v.left as Instance, right, v.ctx)
 	}
-
-	// UninhabitedType (Never) — subtype of everything
-	if left_proper is UninhabitedType {
+	if v.left is NoneType {
+		if is_named_instance(MypyTypeNode(right), 'builtins.object') {
+			return true
+		}
+	}
+	if v.left is AnyType {
+		return !v.ctx.erase_instances
+	}
+	if v.left is UninhabitedType {
 		return true
 	}
+	return false
+}
 
-	// TypeVarType
-	if left_proper is TypeVarType && right_proper is TypeVarType {
-		if left_proper.id == right_proper.id {
-			return true
-		}
-		return is_subtype_ctx(left_proper.upper_bound, right, ctx)
+fn (v SubtypeVisitor) visit_callable_type(right CallableType) bool {
+	if v.left is CallableType {
+		return is_callable_subtype(v.left as CallableType, right, v.ctx)
 	}
-
-	// CallableType
-	if left_proper is CallableType && right_proper is CallableType {
-		return is_callable_subtype(left_proper, right_proper, ctx)
+	if v.left is AnyType {
+		return !v.ctx.erase_instances
 	}
+	if v.left is UninhabitedType {
+		return true
+	}
+	return false
+}
 
-	// TupleType
-	if left_proper is TupleType && right_proper is TupleType {
-		if left_proper.items.len != right_proper.items.len {
+fn (v SubtypeVisitor) visit_tuple_type(right TupleType) bool {
+	if v.left is TupleType {
+		lt := v.left as TupleType
+		if lt.items.len != right.items.len {
 			return false
 		}
-		for i in 0 .. left_proper.items.len {
-			if !is_subtype_ctx(left_proper.items[i], right_proper.items[i], ctx) {
+		for i in 0 .. lt.items.len {
+			if !is_subtype_ctx(lt.items[i], right.items[i], v.ctx) {
 				return false
 			}
 		}
 		return true
 	}
-
-	// TypedDictType
-	if left_proper is TypedDictType && right_proper is TypedDictType {
-		return is_typeddict_subtype(left_proper, right_proper, ctx)
+	if v.left is AnyType {
+		return !v.ctx.erase_instances
 	}
-
+	if v.left is UninhabitedType {
+		return true
+	}
 	return false
+}
+
+fn (v SubtypeVisitor) visit_typeddict_type(right TypedDictType) bool {
+	if v.left is TypedDictType {
+		return is_typeddict_subtype(v.left as TypedDictType, right, v.ctx)
+	}
+	if v.left is AnyType {
+		return !v.ctx.erase_instances
+	}
+	if v.left is UninhabitedType {
+		return true
+	}
+	return false
+}
+
+fn (v SubtypeVisitor) visit_type_var(right TypeVarType) bool {
+	if v.left is TypeVarType {
+		lt := v.left as TypeVarType
+		if lt.id == right.id {
+			return true
+		}
+		return is_subtype_ctx(lt.upper_bound, MypyTypeNode(right), v.ctx)
+	}
+	if v.left is AnyType {
+		return !v.ctx.erase_instances
+	}
+	if v.left is UninhabitedType {
+		return true
+	}
+	return false
+}
+
+fn (v SubtypeVisitor) visit_none_type(_ NoneType) bool {
+	if v.left is NoneType || v.left is UninhabitedType {
+		return true
+	}
+	if v.left is AnyType {
+		return !v.ctx.erase_instances
+	}
+	return false
+}
+
+// is_subtype checks if left is a subtype of right
+// Also considers Any to be a subtype of any type and vice versa
+pub fn is_subtype_ctx(left MypyTypeNode, right MypyTypeNode, subtype_context SubtypeContext) bool {
+	if left.str() == right.str() {
+		return true
+	}
+	v := SubtypeVisitor{
+		left: get_proper_type(left)
+		ctx:  subtype_context
+	}
+	return v.visit(right)
 }
 
 // is_instance_subtype checks subtype for Instance
@@ -346,6 +413,3 @@ fn is_named_instance(typ MypyTypeNode, fullname string) bool {
 	}
 	return false
 }
-
-// get_proper_type returns the proper type
-
