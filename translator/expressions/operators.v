@@ -1,6 +1,7 @@
 module expressions
 
 import ast
+import strings
 import base
 
 // Local wrappers for base module functions
@@ -41,6 +42,104 @@ fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
 		return true
 	}
 	return false
+}
+
+
+
+
+fn (mut eg ExprGen) map_python_percent_to_v_interpolation(fmt_str string, right ast.Expression) ?string {
+	mut args := []ast.Expression{}
+	if right is ast.Tuple {
+		args = right.elements.clone()
+	} else {
+		args << right
+	}
+
+	mut res := strings.new_builder(fmt_str.len * 2)
+	res.write_byte(`"`)
+	mut i := 0
+	mut arg_idx := 0
+	for i < fmt_str.len {
+		if fmt_str[i] == `%` {
+			if i + 1 < fmt_str.len && fmt_str[i+1] == `%` {
+				res.write_u8(`%`)
+				i += 2
+				continue
+			}
+
+			// Parse format specifier
+			mut j := i + 1
+			// Skip flags (only 0 is commonly supported in V interpolation)
+			mut flag_zero := false
+			for j < fmt_str.len && (fmt_str[j] == `0` || fmt_str[j] == `-` || fmt_str[j] == `+` || fmt_str[j] == ` `) {
+				if fmt_str[j] == `0` { flag_zero = true }
+				j++
+			}
+
+			// Width
+			mut width_start := j
+			for j < fmt_str.len && fmt_str[j].is_digit() { j++ }
+			width_str := fmt_str[width_start..j]
+
+			// Precision
+			mut precision_str := ""
+			if j < fmt_str.len && fmt_str[j] == `.` {
+				j++
+				mut prec_start := j
+				for j < fmt_str.len && fmt_str[j].is_digit() { j++ }
+				precision_str = "." + fmt_str[prec_start..j]
+			}
+
+			if j < fmt_str.len {
+				spec := fmt_str[j]
+				if arg_idx < args.len {
+					arg_expr := args[arg_idx]
+					arg_idx++
+					arg_v := eg.visit(arg_expr)
+
+					res.write_byte(`$`)
+					res.write_byte(`{`)
+					if spec == `r` {
+						eg.state.used_builtins['py_repr'] = true
+						res.write_string("py_repr(${arg_v})")
+					} else {
+						res.write_string(arg_v)
+						if width_str.len > 0 || precision_str.len > 0 || spec in [`f`, `x`, `X`] {
+							res.write_byte(`:`)
+							if flag_zero && width_str.len > 0 {
+								res.write_byte(`0`)
+							}
+							res.write_string(width_str)
+							res.write_string(precision_str)
+							if spec in [`f`, `x`, `X`] {
+								res.write_byte(spec)
+							}
+						}
+					}
+					res.write_byte(`}`)
+					i = j + 1
+					continue
+				} else {
+					return none
+				}
+			}
+		}
+		if fmt_str[i] == `$` {
+			res.write_string("\\$")
+		} else if fmt_str[i] == `"` {
+			res.write_string("\\\"")
+		} else {
+			res.write_u8(fmt_str[i])
+		}
+		i++
+	}
+	res.write_byte(`"`)
+
+	if arg_idx != args.len {
+		return none
+	}
+
+	return res.str()
 }
 
 fn (mut eg ExprGen) format_percent_call(left string, right ast.Expression) string {
@@ -176,8 +275,9 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 				if node.left is ast.Constant {
 					fmt_str := node.left.value.trim('\'"')
 					if !fmt_str.contains('%%') && !fmt_str.contains('%(') && fmt_str.count('%') > 0 {
-						// Simple positional format
-						// TODO: full mapping
+						if mapped := eg.map_python_percent_to_v_interpolation(fmt_str, node.right) {
+							return mapped
+						}
 					}
 				}
 				return eg.format_percent_call(left, node.right)
