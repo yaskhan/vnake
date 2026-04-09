@@ -71,6 +71,7 @@ pub mut:
 	incomplete_namespaces                map[string]bool
 	deferral_debug_context               [][]string
 	transitive_submodule_imports         map[string]map[string]bool
+	patches                              []PatchEntry
 }
 
 // new_semantic_analyzer creates a new SemanticAnalyzer
@@ -118,6 +119,7 @@ pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin
 		incomplete_namespaces:                map[string]bool{}
 		deferral_debug_context:               [][]string{}
 		transitive_submodule_imports:         map[string]map[string]bool{}
+		patches:                              []PatchEntry{}
 	}
 }
 
@@ -273,7 +275,13 @@ fn (mut sa SemanticAnalyzer) analyze_func_def(mut defn FuncDef) !AnyNode {
 		defn.info = sa.cur_type
 	}
 
-	// TODO: function signature analysis
+	// Function signature analysis
+	if sig := defn.type_ {
+		if analyzed_sig := sa.anal_type(sig, none, false, false, false, true, true, none, none) {
+			defn.type_ = analyzed_sig
+		}
+	}
+
 	sa.analyze_function_body(mut defn)!
 	sa.pop_type_args(defn.type_params)
 	return ''
@@ -396,7 +404,10 @@ pub fn (mut sa SemanticAnalyzer) visit_assignment_stmt(mut s AssignmentStmt) !An
 		return ''
 	}
 
-	// TODO: check special forms (type alias, TypeVar, etc.)
+	if sa.check_for_special_forms(mut s) {
+		return ''
+	}
+
 	s.is_final_def = sa.unwrap_final(s)
 	for mut lv_expr in s.lvalues {
 		if mut lv := lv_expr.as_lvalue() {
@@ -591,10 +602,8 @@ pub fn (mut sa SemanticAnalyzer) visit_member_expr(mut expr MemberExpr) !AnyNode
 	return ''
 }
 
-// visit_call_expr handles call
 pub fn (mut sa SemanticAnalyzer) visit_call_expr(mut expr CallExpr) !AnyNode {
 	expr.callee.accept(mut sa)!
-	// TODO: handle special calls (cast, reveal_type, etc.)
 	for mut a in expr.args {
 		a.accept(mut sa)!
 	}
@@ -613,15 +622,19 @@ pub fn (mut sa SemanticAnalyzer) visit_str_expr(mut expr StrExpr) !AnyNode {
 	return ''
 }
 
-// visit_var handles variable
 pub fn (mut sa SemanticAnalyzer) visit_var(mut o Var) !AnyNode {
-	// TODO: visit_var
+	if mut t := o.type_ {
+		if analyzed_t := sa.anal_type(t, none, false, false, false, true, true, none, none) {
+			o.type_ = analyzed_t
+		}
+	}
 	return ''
 }
 
-// visit_type_alias handles type alias
 pub fn (mut sa SemanticAnalyzer) visit_type_alias(mut o TypeAlias) !AnyNode {
-	// TODO: visit_type_alias
+	if analyzed_target := sa.anal_type(o.target, none, false, false, false, true, true, none, none) {
+		o.target = analyzed_target
+	}
 	return ''
 }
 
@@ -1557,8 +1570,51 @@ pub fn (mut sa SemanticAnalyzer) anal_type(typ MypyTypeNode, tvar_scope ?&TypeVa
 }
 
 pub fn (mut sa SemanticAnalyzer) get_and_bind_all_tvars(type_exprs []Expression) []MypyTypeNode {
-	// TODO
-	return []
+	mut res := []MypyTypeNode{}
+	for expr in type_exprs {
+		match expr {
+			TypeVarExpr {
+				tv_node := TypeVarType{
+					name:        expr.name
+					fullname:    expr.fullname
+					id:          expr.id
+					values:      expr.values
+					upper_bound: expr.upper_bound
+					variance:    expr.variance
+					default:     expr.default_
+					line:        expr.base.line
+				}
+				sa.tvar_scope.bind_existing(TypeVarLikeType(tv_node))
+				res << MypyTypeNode(tv_node)
+			}
+			ParamSpecExpr {
+				ps_node := ParamSpecType{
+					name:        expr.name
+					fullname:    expr.fullname
+					id:          expr.id
+					upper_bound: expr.upper_bound
+					default:     expr.default_
+					line:        expr.base.line
+				}
+				sa.tvar_scope.bind_existing(TypeVarLikeType(ps_node))
+				res << MypyTypeNode(ps_node)
+			}
+			TypeVarTupleExpr {
+				tvt_node := TypeVarTupleType{
+					name:        expr.name
+					fullname:    expr.fullname
+					id:          expr.id
+					upper_bound: expr.upper_bound
+					default:     expr.default_
+					line:        expr.base.line
+				}
+				sa.tvar_scope.bind_existing(TypeVarLikeType(tvt_node))
+				res << MypyTypeNode(tvt_node)
+			}
+			else {}
+		}
+	}
+	return res
 }
 
 pub fn (mut sa SemanticAnalyzer) basic_new_typeinfo(name string, basetype_or_fallback &Instance, line int) &TypeInfo {
@@ -1574,7 +1630,10 @@ pub fn (mut sa SemanticAnalyzer) basic_new_typeinfo(name string, basetype_or_fal
 }
 
 pub fn (mut sa SemanticAnalyzer) schedule_patch(priority int, patch fn ()) {
-	// TODO
+	sa.patches << PatchEntry{
+		priority: priority
+		callback: patch
+	}
 }
 
 pub fn (mut sa SemanticAnalyzer) add_symbol_table_node(name string, symbol &SymbolTableNode) bool {
@@ -1634,7 +1693,20 @@ pub fn (mut sa SemanticAnalyzer) parse_bool(expr Expression) ?bool {
 }
 
 pub fn (mut sa SemanticAnalyzer) process_placeholder(name ?string, kind string, ctx Context, force_progress bool) {
-	// TODO
+	if n := name {
+		p := PlaceholderNode{
+			fullname: sa.qualified_name(n)
+			node:     SymbolNodeRef(Var{
+				name: n
+			})
+			becomes_typeinfo: kind == 'class'
+		}
+		sa.add_symbol(n, SymbolNodeRef(p), ctx, true, false, true)
+	}
+	sa.record_incomplete_ref()
+	if force_progress {
+		sa.progress = true
+	}
 }
 
 pub fn (mut sa SemanticAnalyzer) get_plugin() &Plugin {
@@ -1666,7 +1738,11 @@ pub fn (mut sa SemanticAnalyzer) incomplete_feature_enabled(feature string, ctx 
 }
 
 pub fn (mut sa SemanticAnalyzer) record_incomplete_ref() {
-	// TODO
+	if sa.missing_names.len > 0 {
+		// Mark current context as incomplete
+		sa.missing_names.last()['<incomplete_ref>'] = true
+	}
+	sa.incomplete = true
 }
 
 pub fn (sa &SemanticAnalyzer) is_incomplete_namespace(fullname string) bool {
@@ -1734,7 +1810,8 @@ pub fn (mut sa SemanticAnalyzer) fail(msg string, ctx Context, serious bool, blo
 }
 
 pub fn (mut sa SemanticAnalyzer) report_hang() {
-	// TODO: implement hang reporting
+	sa.errors.report(0, 0, 'Semantic analysis failed to converge after ${max_iterations} iterations',
+		none, 'error', true, false)
 }
 
 fn (mut sa SemanticAnalyzer) prepare_class_def(mut defn ClassDef) ! {
@@ -1796,4 +1873,135 @@ pub fn new_type_info(mut _ SymbolTable, defn &ClassDef, module_name string) &Typ
 	}
 	info.mro = [info]
 	return info
+}
+fn (mut sa SemanticAnalyzer) analyze_typevar_declaration(s &AssignmentStmt) bool {
+	if s.lvalues.len != 1 || s.lvalues[0] !is NameExpr {
+		return false
+	}
+	name := (s.lvalues[0] as NameExpr).name
+	rvalue := s.rvalue
+	if rvalue is CallExpr {
+		call := rvalue as CallExpr
+		callee := call.callee
+		if callee is NameExpr {
+			if (callee as NameExpr).fullname in ['typing.TypeVar', 'typing_extensions.TypeVar'] {
+				mut tv := &TypeVarExpr{
+					name:        name
+					fullname:    sa.qualified_name(name)
+					upper_bound: AnyType{
+						type_of_any: .from_another_any
+					}
+					default_: AnyType{
+						type_of_any: .from_another_any
+					}
+				}
+				sa.add_symbol(name, SymbolNodeRef(tv), s.get_context(), true, false, true)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+fn (mut sa SemanticAnalyzer) analyze_paramspec_declaration(s &AssignmentStmt) bool {
+	if s.lvalues.len != 1 || s.lvalues[0] !is NameExpr {
+		return false
+	}
+	name := (s.lvalues[0] as NameExpr).name
+	rvalue := s.rvalue
+	if rvalue is CallExpr {
+		call := rvalue as CallExpr
+		callee := call.callee
+		if callee is NameExpr {
+			if (callee as NameExpr).fullname in ['typing.ParamSpec', 'typing_extensions.ParamSpec'] {
+				mut ps := &ParamSpecExpr{
+					name:        name
+					fullname:    sa.qualified_name(name)
+					upper_bound: AnyType{
+						type_of_any: .from_another_any
+					}
+					default_: AnyType{
+						type_of_any: .from_another_any
+					}
+				}
+				sa.add_symbol(name, SymbolNodeRef(ps), s.get_context(), true, false, true)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+fn (mut sa SemanticAnalyzer) analyze_typevartuple_declaration(s &AssignmentStmt) bool {
+	if s.lvalues.len != 1 || s.lvalues[0] !is NameExpr {
+		return false
+	}
+	name := (s.lvalues[0] as NameExpr).name
+	rvalue := s.rvalue
+	if rvalue is CallExpr {
+		call := rvalue as CallExpr
+		callee := call.callee
+		if callee is NameExpr {
+			if (callee as NameExpr).fullname in ['typing.TypeVarTuple', 'typing_extensions.TypeVarTuple'] {
+				mut tvt := &TypeVarTupleExpr{
+					name:        name
+					fullname:    sa.qualified_name(name)
+					upper_bound: AnyType{
+						type_of_any: .from_another_any
+					}
+					default_: AnyType{
+						type_of_any: .from_another_any
+					}
+				}
+				sa.add_symbol(name, SymbolNodeRef(tvt), s.get_context(), true, false, true)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+fn (mut sa SemanticAnalyzer) analyze_typealias_declaration(s &AssignmentStmt) bool {
+	if s.is_alias_def {
+		if s.lvalues.len != 1 || s.lvalues[0] !is NameExpr {
+			return false
+		}
+		name := (s.lvalues[0] as NameExpr).name
+
+		mut alias := &TypeAlias{
+			name:     name
+			fullname: sa.qualified_name(name)
+			target:   AnyType{
+				type_of_any: .from_another_any
+			}
+		}
+		sa.add_symbol(name, SymbolNodeRef(alias), s.get_context(), true, false, true)
+		return true
+	}
+	return false
+}
+
+pub fn (mut sa SemanticAnalyzer) check_for_special_forms(mut s AssignmentStmt) bool {
+	if s.lvalues.len != 1 {
+		return false
+	}
+	lvalue := s.lvalues[0]
+	if lvalue !is NameExpr {
+		return false
+	}
+
+	if sa.analyze_typevar_declaration(s) {
+		return true
+	}
+	if sa.analyze_paramspec_declaration(s) {
+		return true
+	}
+	if sa.analyze_typevartuple_declaration(s) {
+		return true
+	}
+	if sa.analyze_typealias_declaration(s) {
+		return true
+	}
+
+	return false
 }

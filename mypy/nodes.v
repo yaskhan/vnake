@@ -544,6 +544,17 @@ pub fn (e Expression) str() string {
 
 pub type Lvalue = ListExpr | MemberExpr | NameExpr | StarExpr | TupleExpr | IndexExpr
 
+pub fn (l Lvalue) as_expression() Expression {
+	return match l {
+		ListExpr { Expression(l) }
+		MemberExpr { Expression(l) }
+		NameExpr { Expression(l) }
+		StarExpr { Expression(l) }
+		TupleExpr { Expression(l) }
+		IndexExpr { Expression(l) }
+	}
+}
+
 pub fn (e Expression) as_lvalue() ?Lvalue {
 	return match e {
 		ListExpr { Lvalue(e) }

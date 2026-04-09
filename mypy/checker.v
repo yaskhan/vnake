@@ -306,7 +306,7 @@ fn (mut tc TypeChecker) check_assignment(mut lvalue Lvalue, rvalue Expression, r
 
 // check_unpacking_assignment handles multiple assignment unpacking
 fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Expression, rvalue Expression, rvalue_type MypyTypeNode) {
-	tc.store_type(Expression(lvalue), rvalue_type)
+	tc.store_type(lvalue.as_expression(), rvalue_type)
 	proper_rvalue := get_proper_type(rvalue_type)
 
 	mut star_index := -1
@@ -507,7 +507,7 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 				], [
 					.arg_pos,
 					.arg_pos,
-				], lvalue.base_)
+				], lvalue.base)
 			}
 		}
 	}

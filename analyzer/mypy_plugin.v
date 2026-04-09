@@ -514,19 +514,22 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 	mut a := new_mypy_plugin_analyzer()
 
 	// Bulk import persistent types
-	for pkey, typ in tc.persistent_type_map {
+	for pkey, t in tc.persistent_type_map {
 		// pkey is "line:col:expr_str"
 		parts := pkey.split(':')
 		if parts.len >= 3 {
 			loc := '${parts[0]}:${parts[1]}'
 			expr_str := parts[2..].join(':')
-			typ_str := typ.type_str()
-			a.store.collect_type(expr_str, loc, typ_str)
-			a.store.collect_type('@', loc, typ_str)
+			t_str := t.type_str()
+			a.store.collect_type(expr_str, loc, t_str)
+			a.store.collect_type('@', loc, t_str)
 			
 			if expr_str.contains('.') {
-				p := expr_str.split('.')
-				a.store.collect_type(p[p.len-1], loc, typ_str)
+				p_parts := expr_str.split('.')
+				if p_parts.len > 0 {
+					last_p := p_parts[p_parts.len - 1]
+					a.store.collect_type(last_p, loc, t_str)
+				}
 			}
 		}
 	}
@@ -549,18 +552,19 @@ fn (mut a MypyPluginAnalyzer) remember(node_key string) bool {
 
 fn (mut a MypyPluginAnalyzer) record_checker_type(expr mypy.Expression) {
 	if mut checker := a.checker {
-		if typ := checker.lookup_persistent_type(expr) {
+		if t := checker.lookup_persistent_type(expr) {
 			ctx := expr.get_context()
 			key := '${ctx.line}:${ctx.column}'
-			typ_str := typ.type_str()
-			a.store.collect_type(expr.str(), key, typ_str)
-			a.store.collect_type('@', key, typ_str)
+			t_str := t.type_str()
+			a.store.collect_type(expr.str(), key, t_str)
+			a.store.collect_type('@', key, t_str)
 
 			expr_str := expr.str()
 			if expr_str.contains('.') {
-				parts := expr_str.split('.')
-				if parts.len > 0 {
-					a.store.collect_type(parts[parts.len-1], key, typ_str)
+				p_parts := expr_str.split('.')
+				if p_parts.len > 0 {
+					last_p := p_parts[p_parts.len - 1]
+					a.store.collect_type(last_p, key, t_str)
 				}
 			}
 		}
