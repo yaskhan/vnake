@@ -76,13 +76,13 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		bt := guess_type(node.body, ctx, use_location)
 		ot := guess_type(node.orelse, ctx, use_location)
 		return if bt == ot {
-			bt 
-		} else if bt.starts_with('?') && bt.trim_left('?') == ot { 
-			bt 
-		} else if ot.starts_with('?') && ot.trim_left('?') == bt { 
-			ot 
-		} else { 
-			'Any' 
+			bt
+		} else if bt.starts_with('?') && bt.trim_left('?') == ot {
+			bt
+		} else if ot.starts_with('?') && ot.trim_left('?') == bt {
+			ot
+		} else {
+			'Any'
 		}
 	}
 	return 'Any'
@@ -140,11 +140,15 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		}
 		if fid.len > 0 && fid[0].is_capital() {
 			current := ctx.type_map[fid] or { 'Any' }
-			if current == '[]Any' { return '[]Any' }
-			if current == 'map[string]Any' { return 'map[string]Any' }
+			if current == '[]Any' {
+				return '[]Any'
+			}
+			if current == 'map[string]Any' {
+				return 'map[string]Any'
+			}
 		}
 		if fid.starts_with('new_') {
-			return base.sanitize_name(fid[4..], true, map[string]bool{}, '', map[string]bool{})
+			return sanitize_name(fid[4..], true, map[string]bool{}, '', map[string]bool{})
 		}
 		if fid == 'str' {
 			if node.args.len > 0 && is_literal_string_expr(node.args[0], ctx) {
@@ -189,9 +193,13 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 			mut d_type := 'Any'
 			if node.args[0] is ast.Name {
 				id := (node.args[0] as ast.Name).id
-				if id == 'int' { d_type = 'int' }
-				else if id == 'list' { d_type = '[]int' }
-				else if id == 'dict' { d_type = 'map[string]Any' }
+				if id == 'int' {
+					d_type = 'int'
+				} else if id == 'list' {
+					d_type = '[]int'
+				} else if id == 'dict' {
+					d_type = 'map[string]Any'
+				}
 			}
 			return 'map[string]' + d_type
 		}
@@ -242,7 +250,8 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 	}
 	f := node.func
 	if f is ast.Attribute {
-		if f.attr == 'join' || f.attr == 'split' || f.attr == 'upper' || f.attr == 'lower' || f.attr == 'strip' {
+		if f.attr == 'join' || f.attr == 'split' || f.attr == 'upper' || f.attr == 'lower'
+			|| f.attr == 'strip' {
 			return 'string'
 		}
 		if f.attr in ['append', 'extend', 'add', 'update', 'remove', 'pop', 'clear'] {
@@ -252,15 +261,17 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		if rec_type != 'Any' {
 			pure_rec := rec_type.trim_left('?&')
 			attr_name := pure_rec + '.' + f.attr
-			if attr_name in ctx.type_map { 
-				res := ctx.type_map[attr_name] 
+			if attr_name in ctx.type_map {
+				res := ctx.type_map[attr_name]
 				if res.starts_with('fn (') {
 					return res.all_after_last(") ").trim_space()
 				}
 
 			}
 			ret_key := attr_name + '@return'
-			if ret_key in ctx.type_map { return ctx.type_map[ret_key] }
+			if ret_key in ctx.type_map {
+				return ctx.type_map[ret_key]
+			}
 		}
 	}
 	return 'Any'
@@ -291,7 +302,8 @@ fn guess_type_elements(elements []ast.Expression, ctx TypeGuessingContext) strin
 		mut current_type := ''
 		if elt is ast.Starred {
 			current_type = 'Any'
-		} else if (elt is ast.Constant && elt.value == 'None') || (elt is ast.Name && elt.id in ['None', 'none']) {
+		} else if (elt is ast.Constant && elt.value == 'None')
+			|| (elt is ast.Name && elt.id in ['None', 'none']) {
 			has_none = true
 			continue
 		} else {
@@ -327,7 +339,10 @@ fn guess_type_set(node ast.Set, ctx TypeGuessingContext) string {
 	}
 	if element_types.len == 1 {
 		mut t := ''
-		for k, _ in element_types { t = k; break }
+		for k, _ in element_types {
+			t = k
+			break
+		}
 		if t == 'Any' {
 			return 'datatypes.Set[string]'
 		}
@@ -391,7 +406,9 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 		loc_key := '${node.get_token().line}:${node.get_token().column}'
 		if loc_key in ctx.location_map {
 			res := ctx.location_map[loc_key]
-			if res != 'int' && res != 'Any' && res != 'unknown' {  }
+			if res != 'int' && res != 'Any' && res != 'unknown' {
+				return res
+			}
 		}
 	}
 	actual_name := ctx.name_remap[node.id] or { node.id }
@@ -403,16 +420,25 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 	}
 	if use_location {
 		loc_key_alt := '${node.id}@${node.token.line}:${node.token.column}'
-		if loc_key_alt in ctx.explicit_any_types { return 'Any' }
-		if loc_key_alt in ctx.type_map { return ctx.type_map[loc_key_alt] }
+		if loc_key_alt in ctx.explicit_any_types {
+			return 'Any'
+		}
+		if loc_key_alt in ctx.type_map {
+			return ctx.type_map[loc_key_alt]
+		}
 	}
-	if actual_name in ctx.known_v_types { return ctx.known_v_types[actual_name] }
-	if node.id in ctx.known_v_types { return ctx.known_v_types[node.id] }
-
+	if actual_name in ctx.known_v_types {
+		return ctx.known_v_types[actual_name]
+	}
+	if node.id in ctx.known_v_types {
+		return ctx.known_v_types[node.id]
+	}
 
 	if node.id in ctx.type_map {
 		res := ctx.type_map[node.id]
-		if res != 'int' && res != 'Any' && res != 'unknown' {  }
+		if res != 'int' && res != 'Any' && res != 'unknown' {
+			return res
+		}
 	}
 	if ctx.analyzer != unsafe { nil } {
 		analyzer_ptr := unsafe { &analyzer.Analyzer(ctx.analyzer) }
@@ -440,7 +466,9 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 					}
 				}
 			}
-			if closest_typ != '' { return analyzer.map_python_type_to_v(closest_typ) }
+			if closest_typ != '' {
+				return analyzer.map_python_type_to_v(closest_typ)
+			}
 		}
 		if analyzer_ptr.has_type(node.id) {
 			return analyzer_ptr.get_type(node.id) or { 'int' }
@@ -471,7 +499,9 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 	base_type := val_type.trim_left('?&')
 	if base_type != 'Any' && base_type != 'int' {
 		attr_name := '${base_type}.${node.attr}'
-		if attr_name in ctx.type_map { return ctx.type_map[attr_name] }
+		if attr_name in ctx.type_map {
+			return ctx.type_map[attr_name]
+		}
 		if ctx.analyzer != unsafe { nil } {
 			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
 			if a.has_type(attr_name) {
@@ -491,11 +521,11 @@ fn guess_type_subscript(node ast.Subscript, ctx TypeGuessingContext, use_locatio
 		}
 	}
 	val_type := guess_type(node.value, ctx, true)
-	if val_type.starts_with("[]") {
+	if val_type.starts_with('[]') {
 		return val_type[2..]
 	}
-	if val_type.starts_with("map[") && val_type.contains("]") {
-		return val_type.all_after("]")
+	if val_type.starts_with('map[') && val_type.contains(']') {
+		return val_type.all_after(']')
 	}
 	if node.value is ast.Attribute {
 		if node.value.value is ast.Name && node.value.value.id == 'sys' && node.value.attr == 'argv' {
@@ -513,8 +543,12 @@ fn guess_type_binop(node ast.BinaryOp, ctx TypeGuessingContext) string {
 	left := guess_type(node.left, ctx, true)
 	right := guess_type(node.right, ctx, true)
 	if node.op.value == '|' {
-		if (left == 'none' || left == 'NoneType') && right != 'Any' { return '?' + right }
-		if (right == 'none' || right == 'NoneType') && left != 'Any' { return '?' + left }
+		if (left == 'none' || left == 'NoneType') && right != 'Any' {
+			return '?' + right
+		}
+		if (right == 'none' || right == 'NoneType') && left != 'Any' {
+			return '?' + left
+		}
 		return left + ' | ' + right
 	}
 	if node.op.value == '/' {
@@ -585,25 +619,25 @@ fn guess_type_lambda(node ast.Lambda, ctx TypeGuessingContext) string {
 	mut local_ctx := ctx
 	local_ctx.type_map = ctx.type_map.clone()
 	for arg in node.args.posonlyargs {
-		typ := ctx.type_map[arg.arg] or { "int" }
+		typ := ctx.type_map[arg.arg] or { 'int' }
 		param_types << typ
 		local_ctx.type_map[arg.arg] = typ
 	}
 	for arg in node.args.args {
-		typ := ctx.type_map[arg.arg] or { "int" }
+		typ := ctx.type_map[arg.arg] or { 'int' }
 		param_types << typ
 		local_ctx.type_map[arg.arg] = typ
 	}
 	for arg in node.args.kwonlyargs {
-		typ := ctx.type_map[arg.arg] or { "int" }
+		typ := ctx.type_map[arg.arg] or { 'int' }
 		param_types << typ
 		local_ctx.type_map[arg.arg] = typ
 	}
 	mut ret_type := guess_type(node.body, local_ctx, true)
-	if ret_type in ["void", "Any", "unknown"] {
-		ret_type = "Any"
+	if ret_type in ['void', 'Any', 'unknown'] {
+		ret_type = 'Any'
 	}
-	return "fn(${param_types.join(', ')}) ${ret_type}"
+	return 'fn(${param_types.join(', ')}) ${ret_type}'
 }
 
 pub fn is_literal_string_expr(node ast.Expression, ctx TypeGuessingContext) bool {

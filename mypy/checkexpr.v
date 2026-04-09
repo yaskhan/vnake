@@ -66,43 +66,117 @@ pub fn (mut ec ExpressionChecker) reset() {
 
 pub fn (mut ec ExpressionChecker) accept(node Expression) MypyTypeNode {
 	typ := match node {
-		AssignmentExpr { ec.visit_assignment_expr(node) }
-		AwaitExpr { ec.visit_await_expr(node) }
-		BytesExpr { ec.visit_bytes_expr(node) }
-		CallExpr { ec.visit_call_expr(node, false) }
-		CastExpr { ec.visit_cast_expr(node) }
-		ComparisonExpr { ec.visit_comparison_expr(node) }
-		ComplexExpr { ec.visit_complex_expr(node) }
-		ConditionalExpr { ec.visit_conditional_expr(node) }
-		DictExpr { ec.visit_dict_expr(node) }
-		DictionaryComprehension { ec.visit_dictionary_comprehension(node) }
-		EllipsisExpr { ec.visit_ellipsis(node) }
-		EnumCallExpr { ec.visit_enum_call_expr(node) }
-		FloatExpr { ec.visit_float_expr(node) }
-		GeneratorExpr { ec.visit_generator_expr(node) }
-		IndexExpr { ec.visit_index_expr(node) }
-		IntExpr { ec.visit_int_expr(node) }
-		LambdaExpr { ec.visit_lambda_expr(node) }
-		ListComprehension { ec.visit_list_comprehension(node) }
-		ListExpr { ec.visit_list_expr(node) }
-		MemberExpr { ec.visit_member_expr(node, false) }
-		NameExpr { ec.visit_name_expr(node) }
-		NamedTupleExpr { ec.visit_namedtuple_expr(node) }
-		NewTypeExpr { ec.visit_newtype_expr(node) }
-		OpExpr { ec.visit_op_expr(node) }
-		ParamSpecExpr { ec.visit_paramspec_expr(node) }
-		PromoteExpr { ec.visit_promote_expr(node) }
-		RevealExpr { ec.visit_reveal_expr(node) }
-		SetComprehension { ec.visit_set_comprehension(node) }
-		SetExpr { ec.visit_set_expr(node) }
-		SliceExpr { ec.visit_slice_expr(node) }
-		StarExpr { ec.visit_star_expr(node) }
-		StrExpr { ec.visit_str_expr(node) }
-		SuperExpr { ec.visit_super_expr(node) }
-		TempNode { ec.visit_temp_node(node) }
-		TemplateStrExpr { ec.visit_template_str_expr(node) }
-		TupleExpr { ec.visit_tuple_expr(node) }
-		TypeAliasExpr { ec.visit_type_alias_expr(node) }
+		AssignmentExpr {
+			ec.visit_assignment_expr(node)
+		}
+		AwaitExpr {
+			ec.visit_await_expr(node)
+		}
+		BytesExpr {
+			ec.visit_bytes_expr(node)
+		}
+		CallExpr {
+			ec.visit_call_expr(node, false)
+		}
+		CastExpr {
+			ec.visit_cast_expr(node)
+		}
+		ComparisonExpr {
+			ec.visit_comparison_expr(node)
+		}
+		ComplexExpr {
+			ec.visit_complex_expr(node)
+		}
+		ConditionalExpr {
+			ec.visit_conditional_expr(node)
+		}
+		DictExpr {
+			ec.visit_dict_expr(node)
+		}
+		DictionaryComprehension {
+			ec.visit_dictionary_comprehension(node)
+		}
+		EllipsisExpr {
+			ec.visit_ellipsis(node)
+		}
+		EnumCallExpr {
+			ec.visit_enum_call_expr(node)
+		}
+		FloatExpr {
+			ec.visit_float_expr(node)
+		}
+		GeneratorExpr {
+			ec.visit_generator_expr(node)
+		}
+		IndexExpr {
+			ec.visit_index_expr(node)
+		}
+		IntExpr {
+			ec.visit_int_expr(node)
+		}
+		LambdaExpr {
+			ec.visit_lambda_expr(node)
+		}
+		ListComprehension {
+			ec.visit_list_comprehension(node)
+		}
+		ListExpr {
+			ec.visit_list_expr(node)
+		}
+		MemberExpr {
+			ec.visit_member_expr(node, false)
+		}
+		NameExpr {
+			ec.visit_name_expr(node)
+		}
+		NamedTupleExpr {
+			ec.visit_namedtuple_expr(node)
+		}
+		NewTypeExpr {
+			ec.visit_newtype_expr(node)
+		}
+		OpExpr {
+			ec.visit_op_expr(node)
+		}
+		ParamSpecExpr {
+			ec.visit_paramspec_expr(node)
+		}
+		PromoteExpr {
+			ec.visit_promote_expr(node)
+		}
+		RevealExpr {
+			ec.visit_reveal_expr(node)
+		}
+		SetComprehension {
+			ec.visit_set_comprehension(node)
+		}
+		SetExpr {
+			ec.visit_set_expr(node)
+		}
+		SliceExpr {
+			ec.visit_slice_expr(node)
+		}
+		StarExpr {
+			ec.visit_star_expr(node)
+		}
+		StrExpr {
+			ec.visit_str_expr(node)
+		}
+		SuperExpr {
+			ec.visit_super_expr(node)
+		}
+		TempNode {
+			ec.visit_temp_node(node)
+		}
+		TemplateStrExpr {
+			ec.visit_template_str_expr(node)
+		}
+		TupleExpr {
+			ec.visit_tuple_expr(node)
+		}
+		TypeAliasExpr {
+			ec.visit_type_alias_expr(node)
+		}
 		TypeApplication {
 			AnyType{
 				type_of_any: .special_form
@@ -123,10 +197,18 @@ pub fn (mut ec ExpressionChecker) accept(node Expression) MypyTypeNode {
 				type_of_any: .special_form
 			}
 		}
-		UnaryExpr { ec.visit_unary_expr(node) }
-		AssertTypeExpr { ec.visit_assert_type_expr(node) }
-		YieldExpr { ec.visit_yield_expr(node) }
-		YieldFromExpr { ec.visit_yield_from_expr(node) }
+		UnaryExpr {
+			ec.visit_unary_expr(node)
+		}
+		AssertTypeExpr {
+			ec.visit_assert_type_expr(node)
+		}
+		YieldExpr {
+			ec.visit_yield_expr(node)
+		}
+		YieldFromExpr {
+			ec.visit_yield_from_expr(node)
+		}
 		FormatStringExpr {
 			AnyType{
 				type_of_any: .special_form
@@ -297,20 +379,77 @@ pub fn (mut ec ExpressionChecker) check_call(callee MypyTypeNode, args []Express
 }
 
 pub fn (mut ec ExpressionChecker) check_callable_call(callee CallableType, args []Expression, arg_kinds []ArgKind, context NodeBase) (MypyTypeNode, MypyTypeNode) {
+	mut formal_idx := 0
 	for i, arg in args {
 		actual_arg_type := ec.accept(arg)
 		kind := if i < arg_kinds.len { arg_kinds[i] } else { ArgKind.arg_pos }
 
-		if i < callee.arg_types.len {
-			target_type := callee.arg_types[i]
-			ec.chk or { panic('chk') }.check_subtype(actual_arg_type, target_type, arg.get_context(), 'Argument ${i+1} has incompatible type')
-		} else if kind == .arg_star {
-            // TODO: handle *args
-        } else {
-            ec.chk or { panic('chk') }.fail('Too many arguments for function call', arg.get_context())
-        }
+		mut tc := ec.chk or { panic('chk') }
+		if kind == .arg_star {
+			proper_actual := get_proper_type(actual_arg_type)
+			if proper_actual is TupleType {
+				for item_type in proper_actual.items {
+					if formal_idx < callee.arg_types.len {
+						target_type := callee.arg_types[formal_idx]
+						tc.check_subtype(item_type, target_type, arg.get_context(), 'Argument ${i +
+							1} has incompatible type')
+						if callee.arg_kinds[formal_idx] != .arg_star {
+							formal_idx++
+						}
+					} else {
+						tc.fail('Too many arguments for function call', arg.get_context())
+					}
+				}
+			} else {
+				item_type := ec.get_iterable_item_type(actual_arg_type)
+				for formal_idx < callee.arg_types.len {
+					formal_kind := callee.arg_kinds[formal_idx]
+					if formal_kind == .arg_star2 || formal_kind == .arg_named
+						|| formal_kind == .arg_named_opt {
+						break
+					}
+					target_type := callee.arg_types[formal_idx]
+					tc.check_subtype(item_type, target_type, arg.get_context(), 'Argument ${i + 1} has incompatible type')
+					if formal_kind == .arg_star {
+						break
+					}
+					formal_idx++
+				}
+			}
+		} else {
+			if formal_idx < callee.arg_types.len {
+				target_type := callee.arg_types[formal_idx]
+				tc.check_subtype(actual_arg_type, target_type, arg.get_context(), 'Argument ${i + 1} has incompatible type')
+				if callee.arg_kinds[formal_idx] != .arg_star {
+					formal_idx++
+				}
+			} else {
+				tc.fail('Too many arguments for function call', arg.get_context())
+			}
+		}
 	}
 	return callee.ret_type, callee
+}
+
+fn (mut ec ExpressionChecker) get_iterable_item_type(typ MypyTypeNode) MypyTypeNode {
+	proper := get_proper_type(typ)
+	if proper is AnyType {
+		return proper
+	}
+	if proper is Instance {
+		if (proper.type_name == 'builtins.list' || proper.type_name == 'builtins.set'
+			|| proper.type_name == 'typing.Iterable') && proper.args.len > 0 {
+			return proper.args[0]
+		}
+	}
+	if proper is TupleType {
+		if proper.items.len > 0 {
+			return expr_union(proper.items)
+		}
+	}
+	return MypyTypeNode(AnyType{
+		type_of_any: .from_another_any
+	})
 }
 
 pub fn (ec ExpressionChecker) check_any_type_call(args []Expression, arg_kinds []ArgKind, callee MypyTypeNode, context NodeBase) (MypyTypeNode, MypyTypeNode) {
@@ -327,7 +466,7 @@ pub fn (ec ExpressionChecker) check_any_type_call(args []Expression, arg_kinds [
 pub fn (mut ec ExpressionChecker) visit_member_expr(e MemberExpr, is_lvalue bool) MypyTypeNode {
 	result := ec.analyze_ordinary_member_access(e, is_lvalue)
 	narrowed := ec.narrow_type_from_binder(e, result)
-	
+
 	if narrowed is AnyType {
 		if narrowed.type_of_any == .from_error {
 			if mut chk := ec.chk {
@@ -769,8 +908,3 @@ fn expr_union(items []MypyTypeNode) MypyTypeNode {
 		items: items
 	}
 }
-
-
-
-
-
