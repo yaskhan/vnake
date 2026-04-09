@@ -333,9 +333,26 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			}
 			env.analyzer.type_map['${struct_name}.${orig_name}'] = f_type
 			if struct_name.ends_with('_Impl') {
-				env.analyzer.type_map['${struct_name.replace('_Impl', '')}.${orig_name}'] = f_type
+				base_struct_name := struct_name.replace('_Impl', '')
+				env.analyzer.type_map['${base_struct_name}.${orig_name}'] = f_type
 			} else {
 				env.analyzer.type_map['${struct_name}_Impl.${orig_name}'] = f_type
+			}
+			if f_type == 'Any' {
+				if val := value_expr {
+					if val is ast.Name && val.id in arg_type_map {
+						f_type = arg_type_map[val.id]
+					} else {
+						f_type = guess_type(val, &env)
+					}
+				}
+			}
+			if val := value_expr {
+				if val is ast.Constant && val.value == 'None' {
+					if f_type.len > 0 && !f_type.starts_with('?') && f_type != 'Any' {
+						f_type = '?${f_type}'
+					}
+				}
 			}
 			fields << h.get_field_def_info(field_name, map_python_type(f_type, struct_name,
 				false, mut env, orig_name), struct_name, '', orig_name, mut env)
@@ -415,7 +432,8 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 					// Register for lookups
 					env.analyzer.type_map['${struct_name}.${orig_name}'] = field_type
 					if struct_name.ends_with('_Impl') {
-						env.analyzer.type_map['${struct_name.replace('_Impl', '')}.${orig_name}'] = field_type
+						base_struct_name := struct_name.replace('_Impl', '')
+						env.analyzer.type_map['${base_struct_name}.${orig_name}'] = field_type
 					}
 					eprintln('DEBUG: process_class_attributes struct=${struct_name} attr=${orig_name} f_type=${field_type} REGISTERED')
 				}
