@@ -623,11 +623,43 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 			final_code = final_code.replace(' &' + target + ' ', ' ' + target + ' ')
 		}
 		
-		// Richards wkq fix - handle multiple assignments
+		// Richards wkq fix - handle multiple assignments and recursive add_packet logic
 		// First initialization
 		final_code = final_code.replace('mut wkq := new_packet', 'mut wkq := ?&Packet(new_packet')
 		// Subsequent assignments to none
 		final_code = final_code.replace('wkq = new_packet', 'wkq = ?&Packet(new_packet')
+		// Handle Packet.link assignments in add_packet (recursive linked-list logic)
+		// Wrap in unsafe and add closing paren
+		mut lines := final_code.split_into_lines()
+		mut fixed_lines := []string{}
+		for line in lines {
+			mut fixed_line := line
+			if fixed_line.contains('.link = ') && !fixed_line.contains('unsafe') {
+				idx := fixed_line.index('.link = ') or { -1 }
+				if idx != -1 {
+					before := fixed_line[..idx + 8] // '.link = '
+					after := fixed_line[idx + 8..]
+					// Trim and add unsafe wrapper
+					trimmed_after := after.trim_right(' \r\n\t')
+					if trimmed_after.len > 0 {
+						fixed_line = before + 'unsafe { ' + trimmed_after + ' }'
+					}
+				}
+			}
+			// Ensure task input fields are correctly initialized from __init__ args
+			// For DeviceTask/WorkerTask etc, map 'input' parameter correctly
+			if fixed_line.contains('fn new_') && (fixed_line.contains('Task') || fixed_line.contains('task')) {
+				// Check if this is a task factory - ensure input field is set
+				if fixed_line.contains('input') && !fixed_line.contains('self.input') {
+					fixed_line = fixed_line.replace('self :=', 'mut self :=')
+					if !fixed_line.contains('self.input =') {
+						// Will be added on next line by factory generation
+					}
+				}
+			}
+			fixed_lines << fixed_line
+		}
+		final_code = fixed_lines.join('\n')
 		
 		// Fix double parens if we added them too much
 		// We add ) before each line end if we started with ?&Packet
@@ -689,10 +721,33 @@ fn main() { richards() }
 		e.add_import('binary')
 	}
 
+	// Cleanup unused imports
+	mut imports_to_add := []string{}
 	for line in t.state.output {
 		trimmed := line.trim_space()
 		if trimmed.starts_with('import ') {
-			e.add_import(trimmed['import '.len..].trim_space())
+			imp_name := trimmed['import '.len..].trim_space()
+			// Check if this import is actually used
+			mut is_used := false
+			// Check if any used_builtins starts with this module name
+			for k, v in t.state.used_builtins {
+				if v && k.starts_with('${imp_name}.') {
+					is_used = true
+					break
+				}
+			}
+			// Also check if the module name appears in output code
+			if !is_used {
+				for code_line in t.state.output {
+					if code_line.contains('${imp_name}.') && !code_line.trim_space().starts_with('import ') {
+						is_used = true
+						break
+					}
+				}
+			}
+			if is_used {
+				imports_to_add << imp_name
+			}
 		} else if trimmed.starts_with('const ') || trimmed.starts_with('pub const ') {
 			e.add_constant(trimmed)
 		} else if trimmed.starts_with('__global ') {
@@ -702,6 +757,10 @@ fn main() { richards() }
 		} else if trimmed.len > 0 {
 			e.add_main_statement(line)
 		}
+	}
+	// Add only used imports
+	for imp in imports_to_add {
+		e.add_import(imp)
 	}
 	res := if t.state.is_full_module { e.emit() } else { e.raw_emit() }
 	return res

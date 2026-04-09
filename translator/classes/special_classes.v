@@ -99,7 +99,7 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 		mut has_methods := false
 		for method in methods {
 			if method.name == '__init__' { continue }
-			is_static := false
+			mut is_static := false
 			for dec in method.decorator_list {
 				name := env.visit_expr_fn(dec)
 				if name in ['staticmethod', 'abstractstaticmethod'] {
@@ -123,12 +123,18 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 					ann_str = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env, arg.arg)
 				}
 				arg_name := sanitize_name(arg.arg, false)
-				p_args << '${arg_name} ${ann_str}'
+				
+				// Check if parameter is mutated (needs 'mut' qualifier)
+				mut mut_prefix := ''
+				p_key := if struct_name.len > 0 { '${struct_name}.${method.name}.${arg.arg}' } else { '${method.name}.${arg.arg}' }
+				if m_info := env.analyzer.get_mutability(p_key) {
+					if m_info.is_reassigned || m_info.is_mutated {
+						mut_prefix = 'mut '
+					}
+				}
+
+				p_args << '${mut_prefix}${arg_name} ${ann_str}'
 			}
-			ret := if ann := method.returns {
-				r_type := map_python_type(env.visit_expr_fn(ann), struct_name, true, mut env, '${method.name}@return')
-				' ' + r_type
-			} else { '' }
 			mut m_name := sanitize_name(method.name, false)
 			if m_name == '__next__' {
 				m_name = 'next'
@@ -140,6 +146,28 @@ pub fn (h SpecialClassesHandler) generate_enum_definition(
 				m_name = 'iter'
 			} else if m_name == '__str__' {
 				m_name = 'str'
+			} else if m_name == '__repr__' {
+				// Check if class has __str__ method
+				mut has_str_method := false
+				for m in methods {
+					if m.name == '__str__' { has_str_method = true; break }
+				}
+				m_name = if has_str_method { 'repr' } else { 'str' }
+			}
+			
+			mut ret := if ann := method.returns {
+				r_type := map_python_type(env.visit_expr_fn(ann), struct_name, true, mut env, '${method.name}@return')
+				' ' + r_type
+			} else { '' }
+			// Ensure ? suffix consistency for interface methods
+			if ret.len > 1 && !ret.ends_with('?') {
+				// Check if method should return optional type (e.g., next() methods)
+				if m_name == 'next' && !ret.contains(' ?') {
+					// Make return type optional if not already
+					mut ret_trimmed := ret.trim_space()
+					if !ret_trimmed.starts_with('?') { ret_trimmed = '?' + ret_trimmed }
+					ret = ret_trimmed
+				}
 			}
 			res << '    ${m_name}(${p_args.join(', ')})${ret}'
 		}

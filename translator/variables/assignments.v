@@ -206,20 +206,34 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 		base_v_type = v_type[2..]
 	} else if v_type.starts_with('?[]') {
 		base_v_type = v_type[3..]
+	} else if v_type.starts_with('[]?') {
+		// Already has optional marker
+		base_v_type = v_type[3..]
 	}
 	if base_v_type.len > 0 && base_v_type in m.state.known_interfaces {
 		is_interface_array = true
 	}
 
-	if is_interface_array && node.value is ast.List && node.value.elements.len > 0 {
-		if !m.state.in_main && lhs in m.local_vars_in_scope {
-			m.emit('${lhs} = ${v_type}{}')
+	if is_interface_array && node.value is ast.List {
+		if node.value.elements.len > 0 {
+			// Use explicit initialization for interface arrays
+			if !m.state.in_main && lhs in m.local_vars_in_scope {
+				m.emit('${lhs} = ${v_type}{len: ${node.value.elements.len}, init: none}')
+			} else {
+				m.emit('mut ${lhs} := ${v_type}{len: ${node.value.elements.len}, init: none}')
+				if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
+			}
+			for i, elt in node.value.elements {
+				m.emit('${lhs}[${i}] = ${m.visit_expr(elt)}')
+			}
 		} else {
-			m.emit('mut ${lhs} := ${v_type}{}')
-			if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
-		}
-		for elt in node.value.elements {
-			m.emit('${lhs} << ${m.visit_expr(elt)}')
+			// Empty list - use explicit initialization
+			if !m.state.in_main && lhs in m.local_vars_in_scope {
+				m.emit('${lhs} = ${v_type}{len: 0, init: none}')
+			} else {
+				m.emit('mut ${lhs} := ${v_type}{len: 0, init: none}')
+				if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
+			}
 		}
 		return
 	}

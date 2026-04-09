@@ -108,6 +108,7 @@ pub mut:
 	current_node                 voidptr
 	readonly_fields              map[string]map[string]bool
 	cond_optional_var_type       map[string]string
+	narrowed_vars                map[string]bool
 	typed_dicts                  map[string]bool
 	class_hierarchy_initialized  bool
 	cached_indents               []string
@@ -223,6 +224,7 @@ pub fn new_translator_state() &TranslatorState {
 		current_node:                 unsafe { nil }
 		readonly_fields:              map[string]map[string]bool{}
 		cond_optional_var_type:       map[string]string{}
+		narrowed_vars:                map[string]bool{}
 		typed_dicts:                  map[string]bool{}
 		class_hierarchy_initialized:  false
 		cached_indents:               cached_indents.clone()

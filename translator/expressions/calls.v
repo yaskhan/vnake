@@ -1125,7 +1125,19 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 		v_original_base := eg.map_python_type(original_type_raw, false)
 
 		if v_narrowed != 'Any' && (v_narrowed != v_original_base || v_original_base.starts_with('SumType_')) {
-			obj = "(${obj} as ${v_narrowed})"
+			// For interface types, ensure proper narrowing
+			// Check if narrowed type is an interface implementation
+			mut needs_cast := true
+			if v_original_base in eg.state.known_interfaces {
+				// Original is interface - check if narrowed implements it
+				if v_narrowed in eg.state.defined_classes {
+					// Narrowed type should implement the interface
+					needs_cast = true
+				}
+			}
+			if needs_cast {
+				obj = "(${obj} as ${v_narrowed})"
+			}
 			obj_type_raw = actual_narrowed
 		}
 	} else if original_type_raw.starts_with('SumType_') || original_type_raw.contains('|') {
@@ -1136,11 +1148,34 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 		} else if attr in ['append', 'extend', 'pop', 'remove', 'sort', 'reverse'] {
 			inferred = '[]Any'
 		}
-		
+
 		if inferred.len > 0 {
 			v_inferred := eg.map_python_type(inferred, false)
 			obj = "(${obj} as ${v_inferred})"
 			obj_type_raw = inferred
+		} else {
+			// Try to infer from interface method signatures
+			// If original type is a union including interfaces, check if method belongs to one of them
+			if original_type_raw.contains('|') {
+				mut parts := original_type_raw.split('|').map(it.trim_space())
+				mut matched_types := []string{}
+				for part in parts {
+					clean_part := part.trim_left('?&')
+					if clean_part in eg.state.known_interfaces || clean_part in eg.state.defined_classes {
+						// Check if this type has the method
+						method_key := '${clean_part}.${attr}'
+						if eg.analyzer.type_map[method_key] != '' || eg.state.defined_classes[clean_part]['has_init'] {
+							matched_types << part
+						}
+					}
+				}
+				// If only one type matches, we can narrow
+				if matched_types.len == 1 {
+					v_match := eg.map_python_type(matched_types[0], false)
+					obj = "(${obj} as ${v_match})"
+					obj_type_raw = matched_types[0]
+				}
+			}
 		}
 	}
 	obj_type := eg.map_python_type(obj_type_raw, false)

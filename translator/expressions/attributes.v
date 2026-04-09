@@ -151,7 +151,15 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		if !eg.state.in_assignment_lhs && should_cast && (current != original_type || eg.state.current_file_name.contains('narrowing')) {
 			if original_type.starts_with('?') && !current.starts_with('?') {
 				// Avoid redundant 'or' block if it's a local variable (V 0.5 auto-narrows locals)
+				// or if the variable was explicitly narrowed via flow analysis
 				if node.value is ast.Name {
+					name_node := node.value
+					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
+					// Check if this variable was narrowed by flow analysis
+					if sanitized in eg.state.narrowed_vars {
+						// Variable is narrowed, no need for redundant 'or' block
+						return res
+					}
 					// No cast needed for auto-narrowed Options in V 0.5
 					return res
 				} else {
@@ -162,13 +170,33 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 			}
 		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
 			// Auto-unwrap Option if we are accessing a field and it's not a local variable auto-narrowed by V
+			// or if the variable was explicitly narrowed
 			if node.value !is ast.Name {
 				res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
+			} else {
+				// Check if narrowed - skip 'or' block for narrowed vars
+				name_node := node.value
+				if name_node is ast.Name {
+					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
+					if sanitized !in eg.state.narrowed_vars {
+						res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
+					}
+				}
 			}
 		}
 	} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
+		// For non-local accesses with optional types
 		if node.value !is ast.Name {
 			res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
+		} else {
+			// Check if narrowed - skip 'or' block for narrowed vars
+			name_node := node.value
+			if name_node is ast.Name {
+				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
+				if sanitized !in eg.state.narrowed_vars {
+					res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
+				}
+			}
 		}
 	}
 

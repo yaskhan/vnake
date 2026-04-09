@@ -88,15 +88,19 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		if narrowed_type == 'none' { continue }
 		sanitized := m.sanitize_name(var_name, false)
 		base_type := m.guess_type(ast.Name{id: var_name})
-		
+
 		mut is_auto := false
 		if base_type.starts_with('?') && (narrowed_type == base_type[1..] || '&' + narrowed_type == base_type[1..] || narrowed_type == '&' + base_type[1..]) {
 			is_auto = true
 		} else if (base_type.contains('|') || base_type.starts_with('SumType_')) && !narrowed_type.contains('|') {
 			is_auto = false // SumTypes need explicit 'as'
 		}
-		
-		if is_auto { continue }
+
+		if is_auto {
+			// Mark variable as narrowed so that later accesses don't add redundant 'or' blocks
+			m.env.state.narrowed_vars[sanitized] = true
+			continue
+		}
 
 		if narrowed_type !in ['Any', 'void', 'none'] {
 			mut narrowed_expr := ''
@@ -108,13 +112,15 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 			} else {
 				narrowed_expr = '(${sanitized} as ${narrowed_type})'
 			}
-			
+
 			if var_name in m.env.state.name_remap {
 				original_remaps[var_name] = m.env.state.name_remap[var_name]
 			} else {
 				original_remaps[var_name] = '__NONE__'
 			}
 			m.env.state.name_remap[var_name] = narrowed_expr
+			// Mark as narrowed to prevent redundant 'or' blocks later
+			m.env.state.narrowed_vars[sanitized] = true
 		}
 	}
 	return original_remaps
@@ -210,11 +216,19 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 	
 	m.env.state.indent_level++
 	remaps := m.apply_flow_narrowing(node.body, node.test, true, '')
+	// Collect narrowed vars to clean up after the branch
+	mut body_narrowed := []string{}
+	for var, _ in remaps {
+		sanitized := m.sanitize_name(var, false)
+		body_narrowed << sanitized
+	}
 	for stmt in node.body { m.visit_stmt(stmt) }
 	for var, orig in remaps {
 		if orig == '__NONE__' { m.env.state.name_remap.delete(var) }
 		else { m.env.state.name_remap[var] = orig }
 	}
+	// Clean up narrowed vars from this branch
+	for v in body_narrowed { m.env.state.narrowed_vars.delete(v) }
 	m.env.state.indent_level--
 
 	if node.orelse.len > 0 {
@@ -224,11 +238,19 @@ fn (mut m ControlFlowModule) visit_if_inner(node ast.If, is_elif bool) {
 			m.emit('} else {')
 			m.env.state.indent_level++
 			eremaps := m.apply_flow_narrowing(node.orelse, node.test, false, '_else')
+			// Collect narrowed vars to clean up after the else branch
+			mut else_narrowed := []string{}
+			for var, _ in eremaps {
+				sanitized := m.sanitize_name(var, false)
+				else_narrowed << sanitized
+			}
 			for stmt in node.orelse { m.visit_stmt(stmt) }
 			for var, orig in eremaps {
 				if orig == '__NONE__' { m.env.state.name_remap.delete(var) }
 				else { m.env.state.name_remap[var] = orig }
 			}
+			// Clean up narrowed vars from this branch
+			for v in else_narrowed { m.env.state.narrowed_vars.delete(v) }
 			m.env.state.indent_level--
 			m.emit('}')
 		}
