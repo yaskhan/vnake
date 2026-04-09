@@ -301,12 +301,8 @@ pub fn (mut tc TypeChecker) visit_assignment_stmt(mut s AssignmentStmt) !AnyNode
 
 // check_assignment checks assignment
 fn (mut tc TypeChecker) check_assignment(mut lvalue Lvalue, rvalue Expression, rvalue_type MypyTypeNode) {
-	if lvalue is TupleExpr || lvalue is ListExpr {
-		// TODO: multiple assignment implementation (unpacking)
-		tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
-	} else {
-		tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
-	}
+	// check_assignment logic moved to check_simple_assignment to avoid duplication
+	tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
 }
 
 // check_simple_assignment checks simple assignment
@@ -350,66 +346,10 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			}
 		}
 		TupleExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
-			proper_rvalue := get_proper_type(rvalue_type)
-			for i in 0 .. lvalue.items.len {
-				mut item := lvalue.items[i]
-				mut item_lval := item.as_lvalue() or { continue }
-				mut item_type := MypyTypeNode(AnyType{
-					type_of_any: .from_untyped_call
-				})
-
-				match proper_rvalue {
-					TupleType {
-						if i < proper_rvalue.items.len {
-							item_type = proper_rvalue.items[i]
-						}
-					}
-					Instance {
-						if (proper_rvalue.type_name == 'builtins.list'
-							|| proper_rvalue.type_name == 'builtins.tuple')
-							&& proper_rvalue.args.len > 0 {
-							item_type = proper_rvalue.args[0]
-						}
-					}
-					AnyType {
-						item_type = proper_rvalue
-					}
-					else {}
-				}
-				tc.check_assignment(mut item_lval, item, item_type)
-			}
+			tc.check_unpacking_assignment(mut lvalue, lvalue.items, rvalue, rvalue_type)
 		}
 		ListExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
-			proper_rvalue := get_proper_type(rvalue_type)
-			for i in 0 .. lvalue.items.len {
-				mut item := lvalue.items[i]
-				mut item_lval := item.as_lvalue() or { continue }
-				mut item_type := MypyTypeNode(AnyType{
-					type_of_any: .from_untyped_call
-				})
-
-				match proper_rvalue {
-					TupleType {
-						if i < proper_rvalue.items.len {
-							item_type = proper_rvalue.items[i]
-						}
-					}
-					Instance {
-						if (proper_rvalue.type_name == 'builtins.list'
-							|| proper_rvalue.type_name == 'builtins.tuple')
-							&& proper_rvalue.args.len > 0 {
-							item_type = proper_rvalue.args[0]
-						}
-					}
-					AnyType {
-						item_type = proper_rvalue
-					}
-					else {}
-				}
-				tc.check_assignment(mut item_lval, item, item_type)
-			}
+			tc.check_unpacking_assignment(mut lvalue, lvalue.items, rvalue, rvalue_type)
 		}
 		StarExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
@@ -421,6 +361,56 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		}
 	}
 }
+fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Expression, rvalue Expression, rvalue_type MypyTypeNode) {
+	match mut lvalue {
+		TupleExpr { tc.store_type(Expression(lvalue), rvalue_type) }
+		ListExpr { tc.store_type(Expression(lvalue), rvalue_type) }
+		else {}
+	}
+	proper_rvalue := get_proper_type(rvalue_type)
+
+	match proper_rvalue {
+		TupleType {
+			if items.len != proper_rvalue.items.len {
+				if items.len < proper_rvalue.items.len {
+					tc.msg.fail("Too many values to unpack (expected ${items.len})", rvalue.get_context(), false, false, none)
+				} else {
+					tc.msg.fail("Need more than ${proper_rvalue.items.len} values to unpack (expected ${items.len})", rvalue.get_context(), false, false, none)
+				}
+			}
+		}
+		else {}
+	}
+
+	for i in 0 .. items.len {
+		mut item := items[i]
+		mut item_lval := item.as_lvalue() or { continue }
+		mut item_type := MypyTypeNode(AnyType{
+			type_of_any: .from_untyped_call
+		})
+
+		match proper_rvalue {
+			TupleType {
+				if i < proper_rvalue.items.len {
+					item_type = proper_rvalue.items[i]
+				}
+			}
+			Instance {
+				if (proper_rvalue.type_name == "builtins.list"
+					|| proper_rvalue.type_name == "builtins.tuple")
+					&& proper_rvalue.args.len > 0 {
+					item_type = proper_rvalue.args[0]
+				}
+			}
+			AnyType {
+				item_type = proper_rvalue
+			}
+			else {}
+		}
+		tc.check_assignment(mut item_lval, item, item_type)
+	}
+}
+
 
 // visit_return_stmt checks return
 pub fn (mut tc TypeChecker) visit_return_stmt(mut s ReturnStmt) !AnyNode {
