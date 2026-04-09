@@ -105,15 +105,15 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	mut name := eg.state.name_remap[node.id] or { node.id }
-	
-	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
+
+	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"),
 	// don't use it for assignment LHS, as we must assign to the base variable.
 	if eg.state.in_assignment_lhs && (name.contains('(') || name.contains(' ') || name.contains(' as ')) {
 		name = node.id
 	}
 
 	sanitized := base.sanitize_name(name, false, map[string]bool{}, '', map[string]bool{})
-	
+
 	// Force unwrap if variable was narrowed and we are in LOAD context
 	if eg.state.narrowed_vars[sanitized] && !eg.state.in_assignment_lhs {
 		v_type := eg.guess_type(node)
@@ -182,7 +182,7 @@ pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
 		return tstring
 	}
 	is_literal_goal := eg.target_type == 'LiteralString' || eg.state.current_ann_raw == 'LiteralString' || eg.state.current_ann_raw == 'typing.LiteralString'
-	
+
 	// Use double quotes to allow single quotes in content - V requires double quotes for interpolation
 	mut res := strings.new_builder(node.values.len * 16)
 	res.write_byte(`"`)
@@ -284,7 +284,7 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 					} else if content.starts_with('__py2v_rt__') {
 						content = content['__py2v_rt__'.len..]
 					}
-					
+
 					if parts.len > interpolations.len {
 						last := parts.pop()
 						last_content := eg.extract_string_content(last)
@@ -420,12 +420,12 @@ pub fn (mut eg ExprGen) visit_list(node ast.List) string {
 			break
 		}
 	}
-	
+
 	mut values := []string{}
 	for elt in node.elements {
 		values << eg.visit(elt)
 	}
-	
+
 	if has_starred {
 		eg.state.used_list_concat = true
 		mut args := []string{}
@@ -444,7 +444,7 @@ pub fn (mut eg ExprGen) visit_list(node ast.List) string {
 		}
 		return 'py_list_concat(${args.join(', ')})'
 	}
-	
+
 	if values.len == 0 {
 		mut list_type := if eg.target_type.starts_with('[]') { eg.target_type } else { eg.guess_type(node) }
 		if eg.target_type == 'Any' { list_type = '[]Any' }
@@ -467,7 +467,7 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 			break
 		}
 	}
-	
+
 	mut values := []string{}
 	mut inner_v_type := ''
 	if eg.target_type.starts_with('[]') {
@@ -481,7 +481,7 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 		}
 		values << v
 	}
-	
+
 	if has_starred {
 		eg.state.used_list_concat = true
 		mut args := []string{}
@@ -499,7 +499,7 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 		}
 		return 'py_list_concat(${args.join(', ')})'
 	}
-	
+
 	return '[${values.join(', ')}]'
 }
 
@@ -640,7 +640,7 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 
 	mut ctx_param_types := []string{}
 	mut ctx_ret_type := 'int'
-	
+
 	if eg.state.current_assignment_type.starts_with('fn (') {
 		line := eg.state.current_assignment_type
 		bracket_idx := line.index('(') or { -1 }
@@ -670,7 +670,7 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 			typ = ctx_param_types[i]
 		}
 		if typ == 'Any' && !has_pos_vararg { typ = 'int' } // Fallback to int for test compatibility
-		
+
 		params << "${arg.arg} ${typ}"
 		param_types[arg.arg] = typ
 		current_scope[arg.arg] = true
@@ -708,11 +708,11 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	if ret_type == 'Any' && ctx_ret_type != 'Any' {
 		ret_type = ctx_ret_type
 	}
-	
+
 	if has_pos_vararg {
 		ret_type = 'Any'
-	} else if ret_type == 'Any' { 
-		ret_type = 'int' 
+	} else if ret_type == 'Any' {
+		ret_type = 'int'
 	}
 
 	eg.state.scope_stack << current_scope
@@ -781,7 +781,7 @@ pub fn (mut eg ExprGen) visit_yield_from(node ast.YieldFrom) string {
 pub fn (mut eg ExprGen) visit_named_expr(node ast.NamedExpr) string {
 	target := eg.visit(node.target)
 	value := eg.visit(node.value)
-	
+
 	// Collect assignment to be emitted as a statement before the condition
 	eg.state.walrus_assignments << '${target} := ${value}'
 	return target

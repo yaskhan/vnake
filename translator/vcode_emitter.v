@@ -118,7 +118,7 @@ pub fn (e &VCodeEmitter) emit() string {
 		lines << e.structs.join('\n\n')
 		lines << ''
 	}
-	
+
 	if e.helper_structs.len > 0 {
 		lines << e.helper_structs.join('\n\n')
 		lines << ''
@@ -155,7 +155,7 @@ pub fn (e &VCodeEmitter) emit() string {
 		lines << e.functions.join('\n\n')
 		lines << ''
 	}
-	
+
 	if e.helper_functions.len > 0 {
 		lines << e.helper_functions.join('\n\n')
 		lines << ''
@@ -240,7 +240,7 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	lines << "    return 'None'"
 	lines << '}'
 	lines << ''
-	
+
 	lines << 'pub fn py_bool(val Any) bool {
     if val is bool { return val }
     if val is int { return val != 0 }
@@ -278,7 +278,7 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	lines << '    return res'
 	lines << '}'
 	lines << ''
-	
+
 	lines << 'pub fn py_bool(val Any) bool {
     if val is bool { return val }
     if val is int { return val != 0 }

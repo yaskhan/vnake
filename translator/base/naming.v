@@ -210,7 +210,7 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 
 	return sanitized
 }
- 
+
 // is_simple_mut_target checks if the Expression is a simple identifier or attribute access that can be marked as mut in V.
 pub fn is_simple_mut_target(expr string) bool {
 	if expr.contains('(') || expr.contains(' ') || expr.contains('{') {

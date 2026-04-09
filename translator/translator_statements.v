@@ -56,7 +56,7 @@ fn (mut t Translator) visit_type_alias(node ast.TypeAlias) {
 	for param in node.type_params {
 		params << param.name
 	}
-	
+
 	mut params_str := ''
 	if params.len > 0 {
 		params_str = '[${params.join(", ")}]'
@@ -65,7 +65,7 @@ fn (mut t Translator) visit_type_alias(node ast.TypeAlias) {
 		t.state.type_params_map[sanitized_obj] = params.clone()
 		t.emit_constant_code('const ${sanitized_obj}_type_params = [${quoted_params.join(", ")}]')
 	}
-	
+
 	value_v := t.map_annotation(node.value)
 	t.emit_indented('type ${name}${params_str} = ${value_v}')
 	t.declare_local(name)
@@ -77,11 +77,11 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 		tmp_var := 'py_destruct_${t.state.unique_id_counter}'
 		t.state.unique_id_counter++
 		t.emit_indented('${tmp_var} := ${source_expr}')
-		
+
 		mut elements := []ast.Expression{}
 		if target is ast.Tuple { elements = target.elements.clone() }
 		else if target is ast.List { elements = target.elements.clone() }
-		
+
 		mut starred_idx := -1
 		for i, elt in elements {
 			if elt is ast.Starred {
@@ -89,9 +89,9 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 				break
 			}
 		}
-		
+
 		is_tuple := source_type.starts_with('TupleStruct_')
-		
+
 		if starred_idx == -1 {
 			for i, elt in elements {
 				t.visit_destructuring(elt, if is_tuple { '${tmp_var}.it_${i}' } else { '${tmp_var}[${i}]' }, 'unknown')
@@ -104,7 +104,7 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 			trailing := elements.len - 1 - starred_idx
 			slice_expr := if trailing == 0 { '${tmp_var}[${starred_idx}..]' } else { '${tmp_var}[${starred_idx}..(${tmp_var}.len - ${trailing})]' }
 			t.visit_destructuring(star_elt.value, slice_expr, 'unknown')
-			
+
 			for i := starred_idx + 1; i < elements.len; i++ {
 				offset := elements.len - i
 				t.visit_destructuring(elements[i], if is_tuple { '${tmp_var}.it_${i}' } else { '${tmp_var}[(${tmp_var}.len - ${offset})]' }, 'unknown')
@@ -131,7 +131,7 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 			mut content := val.value
 			// Handle f-strings with interpolation - emit as println
 			if val.token.typ == .fstring_tok {
-				// Convert to V print statement  
+				// Convert to V print statement
 				mut cleaned := content
 				if cleaned.starts_with('f"') || cleaned.starts_with('f\'') {
 					cleaned = cleaned[1..]
@@ -271,7 +271,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	}
 	mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
 	mut rhs := ''
-	
+
 	if node.targets.len > 1 {
 		mut all_names := true
 		for tgt in node.targets {
@@ -286,12 +286,12 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 					values << eg.visit(node.value.elements[i])
 				}
 			}
-			
+
 			mut is_decl := false
 			for name in names {
 				if !t.is_declared_local(name) { is_decl = true; break }
 			}
-			
+
 			if is_decl {
 				t.emit_indented('${names.join(", ")} := ${values.join(", ")}')
 				for name in names { t.declare_local(name) }
@@ -315,7 +315,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		mut elements := []ast.Expression{}
 		if target is ast.List { elements = target.elements.clone() }
 		else if target is ast.Tuple { elements = target.elements.clone() }
-		
+
 		mut all_simple := true
 		for elt in elements {
 			if elt is ast.Starred || elt is ast.List || elt is ast.Tuple {
@@ -323,13 +323,13 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				break
 			}
 		}
-		
+
 		mut val_elements := []ast.Expression{}
 		if node.value is ast.List { it_list := node.value
 			val_elements = it_list.elements.clone() }
 		else if node.value is ast.Tuple { it_tuple := node.value
 			val_elements = it_tuple.elements.clone() }
-		
+
 		if all_simple && val_elements.len == elements.len {
 			mut lhs_parts := []string{}
 			mut rhs_parts := []string{}
@@ -337,12 +337,12 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				lhs_parts << eg.visit(elements[i])
 				rhs_parts << eg.visit(val_elements[i])
 			}
-			
+
 			mut is_decl := false
 			for p in lhs_parts {
 				if !t.is_declared_local(p) { is_decl = true; break }
 			}
-			
+
 			if is_decl {
 				t.emit_indented('${lhs_parts.join(", ")} := ${rhs_parts.join(", ")}')
 				for p in lhs_parts { t.declare_local(p) }
@@ -403,20 +403,20 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			mut ann_text := if rhs_name != '' { t.map_annotation_str(rhs_name, '', true, true, false) } else { t.map_annotation(node.value) }
 			if rhs_name == 'list' { ann_text = '[]Any' }
 			if rhs_name == 'dict' { ann_text = 'map[string]Any' }
-			
+
 			// Hard fallback for capitalized aliases of list/dict
 			if ann_text == 'int' {
 				if rhs_name == 'list' { ann_text = '[]Any' }
 				if rhs_name == 'dict' { ann_text = 'map[string]Any' }
 			}
-			
+
 			// High-fidelity type alias resolution
 			mut inferred_found := ''
 			if inf1 := t.analyzer.get_type(id) {
 				 // eprintln('DEBUG ALIAS RESOLVE1: id=${id} inf1=${inf1}')
 				inferred_found = inf1
 			}
-			
+
 			if inferred_found == '' || inferred_found == 'int' || inferred_found == 'Any' {
 				qual := t.analyzer.get_qualified_name(id)
 				if inf2 := t.analyzer.get_type(qual) {
@@ -488,7 +488,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			lhs_t = t.analyzer.raw_type_map[id]
 		}
 		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
-		
+
 		if t.state.indent_level == 0 && (id.is_upper() || id in t.state.global_vars) && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
 			mut v_id := if id in t.state.global_vars { id.to_lower() } else { base.to_snake_case(id).to_lower() }
 			// Check if the resulting name conflicts with V reserved keywords
@@ -579,7 +579,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				// Avoid decomposition for dynamic lists (with starred Expressions)
 				mut has_starred := false
 				for elt in val.elements { if elt is ast.Starred { has_starred = true; break } }
-				
+
 				if val.elements.len > 1 && !has_starred { // Only for multi-element lists to match test expectations
 					mut inner_eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
 					mut elt_type := t.map_annotation_str(t.guess_type(val.elements[0]), '', true, true, false)
@@ -594,10 +594,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			}
 
 			is_opt_none := (v_inferred.starts_with('?') || v_inferred == 'Any') && (rhs_text.contains('none') || rhs_text.contains('NoneType'))
-			
+
 			// Force explicit type cast for initial optional assignment
 			v_type_final := if is_opt_none && !v_inferred.starts_with('?') && v_inferred != 'Any' { '?' + v_inferred } else { v_inferred }
-			
+
 			if id in t.mutable_locals || lhs in t.mutable_locals || is_opt_none {
 				if v_type_final.starts_with('?') || v_type_final.contains('|') {
 					t.emit_indented('mut ${lhs} := ${v_type_final}(${rhs_text})')
@@ -637,7 +637,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			list_obj := t.visit_expr(target.value)
 			lower := if val := sl.lower { t.visit_expr(val) } else { '0' }
 			upper := if val := sl.upper { t.visit_expr(val) } else { '${list_obj}.len' }
-			
+
 			t.state.used_delete_many = true
 			t.state.used_insert_many = true
 			t.emit_indented('${list_obj}.delete_many(${lower}, (${upper}) - (${lower}))')
@@ -647,7 +647,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		t.emit_indented('${t.visit_expr(target.value)}[${t.visit_expr(target.slice)}] = ${rhs}')
 		return
 	}
-	
+
 	if target is ast.Attribute {
 		obj_type := t.guess_type(target.value)
 		pure_type := obj_type.trim_left('&')
@@ -740,7 +740,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				if m_info := t.analyzer.get_mutability(id_inv) {
 					is_mutated = m_info.is_mutated
 				}
-				
+
 				// Detect if it's a struct/class type or mutated
 				c_type := t.state.current_assignment_type.trim_left('?&')
 				is_t_struct := c_type.len > 0 && c_type[0].is_capital() && c_type !in ['Any', 'LiteralString', 'Self', 'NoneType']
@@ -752,7 +752,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 					t.state.name_remap[id_inv] = v_id
 				}
 				pub_prefix := if t.state.is_exported(id_inv) { 'pub ' } else { '' }
-				
+
 				if is_mutated || is_struct {
 					t.emit_indented('__global ${v_id} ${t.state.current_assignment_type}')
 					t.emit_indented('${v_id} = ${rhs_text}')
@@ -797,7 +797,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 		lhs_expr := t.visit_expr(node.target)
 		t.state.in_assignment_lhs = false
 		rhs_text := eg.visit(value)
-		
+
 		t.emit_indented('${lhs_expr} = ${rhs_text}')
 		t.state.current_assignment_type = prev_t
 	} else {
