@@ -909,6 +909,12 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	}
 
 	if func_name_str == 'ord' && args.len == 1 {
+		arg0 := node.args[0]
+		if (arg0 is ast.Constant
+			&& (arg0.token.typ == .string_tok || arg0.token.typ == .fstring_tok
+			|| arg0.token.typ == .tstring_tok)) || eg.guess_type(arg0) == 'string' {
+			return '(${args[0]})[0].u32()'
+		}
 		return 'u32(${args[0]})'
 	}
 	
