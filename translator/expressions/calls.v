@@ -910,13 +910,14 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 
 	if func_name_str == 'ord' && args.len == 1 {
 		arg0 := node.args[0]
+		arg0_expr := args[0]
 		is_string_constant := arg0 is ast.Constant
 			&& (arg0.token.typ == .string_tok || arg0.token.typ == .fstring_tok
 			|| arg0.token.typ == .tstring_tok)
 		if is_string_constant || eg.guess_type(arg0) == 'string' {
-			return '(${args[0]})[0].u32()'
+			return '(${arg0_expr})[0].u32()'
 		}
-		return 'u32(${args[0]})'
+		return 'u32(${arg0_expr})'
 	}
 	
 	if func_name_str == 'chr' && args.len == 1 {
