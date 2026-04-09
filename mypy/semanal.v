@@ -528,9 +528,25 @@ pub fn (mut sa SemanticAnalyzer) visit_decorator(mut dec Decorator) !AnyNode {
 
 	for mut d in dec.decorators {
 		d.accept(mut sa)!
+
+		d_str := d.str()
+		if d_str == 'staticmethod' {
+			dec.func.is_static = true
+			dec.var_.is_staticmethod = true
+		} else if d_str == 'classmethod' {
+			dec.func.is_class = true
+		} else if d_str == 'property' {
+			dec.func.is_property = true
+			dec.var_.is_property = true
+		} else if d_str in ['abstractmethod', 'abc.abstractmethod'] {
+			dec.func.abstract_status = 1
+			dec.var_.is_abstract_var = true
+		} else if d_str in ['final', 'typing.final'] {
+			dec.func.is_final = true
+			dec.var_.is_final = true
+		}
 	}
 
-	// TODO: handle special decorators (abstractmethod, staticmethod, etc.)
 	return ''
 }
 
