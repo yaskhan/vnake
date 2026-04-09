@@ -1,5 +1,7 @@
 module ast
 
+import strings
+
 // ==================== PARSER ====================
 
 // Operator precedence levels
@@ -1505,24 +1507,24 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 
 	if !has_fstring {
 		if has_bytes {
-			mut val := ''
+			mut sb := strings.new_builder(parts.len * 10)
 			for part in parts {
 				if part is Constant {
 					v := part.value
 					if v.starts_with("b'") || v.starts_with('b"') {
-						val += v[2..v.len - 1]
+						sb.write_string(v[2..v.len - 1])
 					} else {
-						val += v
+						sb.write_string(v)
 					}
 				}
 			}
 			return Constant{
 				token: tok
-				value: "b'${val}'"
+				value: "b'${sb.str()}'"
 			}
 		}
 		// Concatenate all constant parts into one
-		mut val := ''
+		mut sb := strings.new_builder(parts.len * 10)
 		mut is_t := false
 		for part in parts {
 			if part is Constant {
@@ -1533,14 +1535,14 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 					start_idx = 2
 				}
 				if v.len >= 2 {
-					val += v[start_idx..v.len - 1]
+					sb.write_string(v[start_idx..v.len - 1])
 				}
 			}
 		}
 		prefix := if is_t { 't' } else { '' }
 		return Constant{
 			token: tok
-			value: "${prefix}${val}"
+			value: "${prefix}${sb.str()}"
 		}
 	}
 
