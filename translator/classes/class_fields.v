@@ -15,7 +15,7 @@ pub struct ClassFieldsHandler {}
 
 fn (h ClassFieldsHandler) normalize_field_type(field_type string) string {
 	if field_type == 'none' {
-		return '?Any'
+		return 'Any'
 	}
 	return field_type
 }
@@ -55,7 +55,7 @@ fn (h ClassFieldsHandler) merge_inferred_field_types(existing string, candidate 
 		}
 	}
 	if parts.len == 0 {
-		return '?Any'
+		return 'Any'
 	}
 	has_none := 'none' in parts
 	mut non_none := []string{}
@@ -65,7 +65,7 @@ fn (h ClassFieldsHandler) merge_inferred_field_types(existing string, candidate 
 		}
 	}
 	if non_none.len == 0 {
-		return '?Any'
+		return 'Any'
 	}
 	if non_none.len == 1 && has_none {
 		return '?${non_none[0]}'
