@@ -241,17 +241,7 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	lines << '}'
 	lines << ''
 
-	lines << 'pub fn py_bool(val Any) bool {
-    if val is bool { return val }
-    if val is int { return val != 0 }
-    if val is i64 { return val != 0 }
-    if val is f64 { return val != 0.0 }
-    if val is string { return val.len > 0 }
-    if val is []Any { return val.len > 0 }
-    if val is map[string]Any { return val.len > 0 }
-    if val is NoneType { return false }
-    return true
-}'
+	lines << 'pub fn py_bool(val Any) bool {\n    if val is bool { return val }\n    if val is int { return val != 0 }\n    if val is i64 { return val != 0 }\n    if val is f64 { return val != 0.0 }\n    if val is string { return val.len > 0 }\n    if val is []Any { return val.len > 0 }\n    if val is map[string]Any { return val.len > 0 }\n    if val is NoneType { return false }\n    return true\n}'
 	lines << ''
 
 	lines << 'pub struct Interpolation {'

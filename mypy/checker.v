@@ -457,11 +457,11 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			if mut active := tc.active_type {
 				if lvalue.expr is NameExpr {
 					base_name := (lvalue.expr as NameExpr).name
-					if base_name.trim_space() == "self" {
+					if base_name.trim_space() == 'self' {
 						if lvalue.name !in active.names.symbols {
 							mut v := Var{
 								name:     lvalue.name
-								fullname: active.fullname + "." + lvalue.name
+								fullname: active.fullname + '.' + lvalue.name
 								type_:    rvalue_type
 							}
 							active.names.symbols[lvalue.name] = SymbolTableNode{
