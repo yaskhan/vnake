@@ -454,7 +454,9 @@ pub fn (mut sa SemanticAnalyzer) visit_while_stmt(mut s WhileStmt) !AnyNode {
 // visit_for_stmt handles for
 pub fn (mut sa SemanticAnalyzer) visit_for_stmt(mut s ForStmt) !AnyNode {
 	if s.is_async {
-		// TODO: async check
+		if !sa.is_async_context() {
+			sa.msg.fail("'async for' outside async function", s.get_context(), false, false, none)
+		}
 	}
 	sa.statement = Statement(s)
 	s.expr.accept(mut sa)!
@@ -1161,6 +1163,21 @@ fn (sa SemanticAnalyzer) is_func_scope() bool {
 }
 
 // is_class_scope checks if we are in a class
+
+// is_async_context checks if we are inside an async function
+fn (sa SemanticAnalyzer) is_async_context() bool {
+	if sa.function_stack.len == 0 {
+		return false
+	}
+	last := sa.function_stack.last()
+	if last is FuncDef {
+		return (last as FuncDef).is_coroutine
+	}
+	if last is Decorator {
+		return (last as Decorator).func.is_coroutine
+	}
+	return false
+}
 fn (sa SemanticAnalyzer) is_class_scope() bool {
 	return sa.cur_type != none && !sa.is_func_scope()
 }
