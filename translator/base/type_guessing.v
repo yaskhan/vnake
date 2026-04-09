@@ -84,7 +84,6 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		} else { 
 			'Any' 
 		}
-		return res
 	}
 	return 'Any'
 }

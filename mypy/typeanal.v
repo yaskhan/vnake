@@ -361,7 +361,7 @@ pub fn (mut ta TypeAnalyser) anal_array(a []MypyTypeNode) ![]MypyTypeNode {
 }
 
 // lookup_qualified looks up a qualified name
-fn (ta TypeAnalyser) lookup_qualified(name string, ctx Context) ?&SymbolTableNode {
+fn (mut ta TypeAnalyser) lookup_qualified(name string, ctx Context) ?&SymbolTableNode {
 	return ta.api.lookup_qualified(name, ctx, false)
 }
 
