@@ -327,24 +327,8 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			}
 			eprintln('DEBUG: collect_init_fields struct=${struct_name} attr=${orig_name} f_type=${f_type}')
 			if f_type in ['Any', 'none', 'unknown'] {
-				if inferred := init_field_types[orig_name] {
-					if inferred.len > 0 {
-						f_type = inferred
-					}
-				}
-			}
-			if f_type in ['Any', 'none', 'unknown'] {
-				if val := value_expr {
-					if val is ast.Name && val.id in arg_type_map {
-						f_type = arg_type_map[val.id]
-					} else {
-						f_type = guess_type(val, &env)
-					}
-					if val is ast.Constant && val.value == 'None' {
-						if !f_type.starts_with('?') && f_type != 'Any' {
-							f_type = '?${f_type}'
-						}
-					}
+				f_type = init_field_types[orig_name] or {
+					h.infer_init_value_type(value_expr, arg_type_map, &env)
 				}
 			}
 			env.analyzer.type_map['${struct_name}.${orig_name}'] = f_type
