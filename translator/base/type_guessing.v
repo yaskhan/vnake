@@ -75,7 +75,7 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 	if node is ast.IfExp {
 		bt := guess_type(node.body, ctx, use_location)
 		ot := guess_type(node.orelse, ctx, use_location)
-		res := if bt == ot { 
+		return if bt == ot {
 			bt 
 		} else if bt.starts_with('?') && bt.trim_left('?') == ot { 
 			bt 
@@ -84,8 +84,6 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		} else { 
 			'Any' 
 		}
-		eprintln('DEBUG: guess_type IfExp bt=${bt} ot=${ot} res=${res}')
-		return res
 	}
 	return 'Any'
 }
@@ -431,15 +429,8 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 
 	val_type := guess_type(node.value, ctx, false)
 	base_type := val_type.trim_left('?&')
-	if node.attr == 'taskList' {
-		full_name := analyzer.expr_name(node)
-		res := ctx.type_map["${base_type}.${node.attr}"] or { "MISSING" }
-		eprintln('DEBUG: guess_type_attribute attr=taskList full_name=${full_name} base_type=${base_type} result=${res}')
-	}
 	if base_type != 'Any' && base_type != 'int' {
 		attr_name := '${base_type}.${node.attr}'
-		res := ctx.type_map[attr_name] or { 'MISSING' }
-		eprintln('DEBUG: guess_type_attribute lookup=${attr_name} res=${res}')
 		if attr_name in ctx.type_map { return ctx.type_map[attr_name] }
 		if ctx.analyzer != unsafe { nil } {
 			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
