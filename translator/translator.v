@@ -142,7 +142,8 @@ fn (mut t Translator) map_annotation(node ast.Expression) string {
 				'NoReturn' { 'noreturn' }
 				'Any', 'object' { 'Any' }
 				'bool' { 'bool' }
-				'int', 'i64' { 'int' }
+				'int' { 'int' }
+				'i64' { 'i64' }
 				'float', 'f64' { 'f64' }
 				'str', 'string', 'LiteralString' { 'string' }
 				'list', 'List' { '[]Any' }
@@ -613,59 +614,6 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 		mt.coroutine_handler = t.coroutine_handler
 		mut v_code := mt.visit_module(module_node)
 		mut final_code := v_code
-		
-		targets := ['TaskState', 'Task', 'TaskRec']
-		for target in targets {
-			final_code = final_code.replace(' &' + target + ',', ' ' + target + ',')
-			final_code = final_code.replace(' &' + target + ')', ' ' + target + ')')
-			final_code = final_code.replace(') &' + target + ' {', ') ' + target + ' {')
-			final_code = final_code.replace('?&' + target, '?' + target)
-			final_code = final_code.replace(' &' + target + ' ', ' ' + target + ' ')
-		}
-		
-		// Richards wkq fix - handle multiple assignments and recursive add_packet logic
-		// First initialization
-		final_code = final_code.replace('mut wkq := new_packet', 'mut wkq := ?&Packet(new_packet')
-		// Subsequent assignments to none
-		final_code = final_code.replace('wkq = new_packet', 'wkq = ?&Packet(new_packet')
-		// Handle Packet.link assignments in add_packet (recursive linked-list logic)
-		// Wrap in unsafe and add closing paren
-		mut lines := final_code.split_into_lines()
-		mut fixed_lines := []string{}
-		for line in lines {
-			mut fixed_line := line
-			if fixed_line.contains('.link = ') && !fixed_line.contains('unsafe') {
-				idx := fixed_line.index('.link = ') or { -1 }
-				if idx != -1 {
-					before := fixed_line[..idx + 8] // '.link = '
-					after := fixed_line[idx + 8..]
-					// Trim and add unsafe wrapper
-					trimmed_after := after.trim_right(' \r\n\t')
-					if trimmed_after.len > 0 {
-						fixed_line = before + 'unsafe { ' + trimmed_after + ' }'
-					}
-				}
-			}
-			// Ensure task input fields are correctly initialized from __init__ args
-			// For DeviceTask/WorkerTask etc, map 'input' parameter correctly
-			if fixed_line.contains('fn new_') && (fixed_line.contains('Task') || fixed_line.contains('task')) {
-				// Check if this is a task factory - ensure input field is set
-				if fixed_line.contains('input') && !fixed_line.contains('self.input') {
-					fixed_line = fixed_line.replace('self :=', 'mut self :=')
-					if !fixed_line.contains('self.input =') {
-						// Will be added on next line by factory generation
-					}
-				}
-			}
-			fixed_lines << fixed_line
-		}
-		final_code = fixed_lines.join('\n')
-		
-		// Fix double parens if we added them too much
-		// We add ) before each line end if we started with ?&Packet
-		// Actually, let's just use string replace for the whole patterns we saw
-		final_code = final_code.replace('k_work)', 'k_work))').replace('k_dev)', 'k_dev))')
-		final_code = final_code.replace(')))', '))') // Cleanup
 		
 		// Add main function
 		if final_code.contains('fn richards') && !final_code.contains('fn main()') {

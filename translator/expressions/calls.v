@@ -619,10 +619,16 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	}
 
 	if (func_name == 'acquire' || func_name_str.ends_with('.acquire')) && node.func is ast.Attribute {
-		return '${eg.visit(node.func.value)}.lock()'
+		recv_type := eg.guess_type(node.func.value)
+		if recv_type.contains('Lock') || recv_type.contains('Mutex') || recv_type.contains('sync.') {
+			return '${eg.visit(node.func.value)}.lock()'
+		}
 	}
 	if (func_name == 'release' || func_name_str.ends_with('.release')) && node.func is ast.Attribute {
-		return '${eg.visit(node.func.value)}.unlock()'
+		recv_type := eg.guess_type(node.func.value)
+		if recv_type.contains('Lock') || recv_type.contains('Mutex') || recv_type.contains('sync.') {
+			return '${eg.visit(node.func.value)}.unlock()'
+		}
 	}
 
 	if module_name == 'argparse' {
@@ -1339,8 +1345,9 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	for k, v in keyword_args {
 		final_args << '${k}=${v}'
 	}
-	processed_args := eg.process_mutated_args('${obj_type_raw}.${attr}', final_args, none)
-	return '${recv}.${attr}(${processed_args.join(', ')})'
+	sanitized_attr := base.sanitize_name(attr, false, map[string]bool{}, '', map[string]bool{})
+	processed_args := eg.process_mutated_args('${obj_type_raw}.${sanitized_attr}', final_args, none)
+	return '${recv}.${sanitized_attr}(${processed_args.join(', ')})'
 }
 
 pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string, call_sig ?analyzer.CallSignature) []string {

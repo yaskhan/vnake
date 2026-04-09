@@ -70,6 +70,7 @@ pub fn (mut m ControlFlowModule) visit_while(node ast.While) {
 		m.emit('mut ${flag_name} := true')
 	}
 	m.push_loop_ctx(flag_name)
+	m.env.state.in_loop_count++
 	m.env.state.walrus_assignments = []string{}
 
 	test_expr := m.wrap_bool(node.test, false)
@@ -89,12 +90,29 @@ pub fn (mut m ControlFlowModule) visit_while(node ast.While) {
 	} else {
 		m.emit('for ${test_expr} {')
 		m.env.state.indent_level++
+		
+		// Apply narrowing for while loop body
+		remaps := m.apply_flow_narrowing(node.body, node.test, true, '_while')
+		mut body_narrowed := []string{}
+		for var, _ in remaps {
+			body_narrowed << m.sanitize_name(var, false)
+		}
+		
 		for stmt in node.body {
 			m.visit_stmt(stmt)
 		}
+		
+		// Clean up narrowing
+		for var, orig in remaps {
+			if orig == '__NONE__' { m.env.state.name_remap.delete(var) }
+			else { m.env.state.name_remap[var] = orig }
+		}
+		for v in body_narrowed { m.env.state.narrowed_vars.delete(v) }
+		
 		m.env.state.indent_level--
 		m.emit('}')
 	}
+	m.env.state.in_loop_count--
 	m.pop_loop_ctx()
 
 	if node.orelse.len > 0 {
@@ -127,6 +145,7 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 		m.emit('mut ${flag_name} := true')
 	}
 	m.push_loop_ctx(flag_name)
+	m.env.state.in_loop_count++
 
 	m.env.state.walrus_assignments = []string{}
 	mut target := m.visit_expr(node.target)
@@ -336,6 +355,7 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 	}
 	m.env.state.indent_level--
 	m.emit('}')
+	m.env.state.in_loop_count--
 	m.pop_loop_ctx()
 
 	m.emit_for_else(node, flag_name)

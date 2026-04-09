@@ -115,6 +115,7 @@ pub mut:
 	is_full_module               bool
 	dataclass_init_vars          map[string]map[string]string
 	dataclass_defaults           map[string]map[string]string
+	in_loop_count                int
 }
 
 pub const cached_indents = [

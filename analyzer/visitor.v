@@ -61,6 +61,16 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 		ast.UnaryOp {
 			return t.guess_expr_type(node.operand)
 		}
+		ast.BinaryOp {
+			if node.op.value == '|' {
+				left := t.guess_expr_type(node.left)
+				right := t.guess_expr_type(node.right)
+				if (left == 'none' || left == 'NoneType') && right != 'Any' { return '?' + right }
+				if (right == 'none' || right == 'NoneType') && left != 'Any' { return '?' + left }
+				return left + ' | ' + right
+			}
+			return t.guess_expr_type(node.left)
+		}
 		ast.Name { 
 			res := t.get_type(node.id)
 			if res == 'Any' && node.id.len > 0 && node.id[0].is_capital() {
@@ -76,6 +86,18 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 				}
 				if fid.starts_with('new_') {
 					return fid[4..]
+				}
+				if sig := t.call_signatures[fid] {
+					return sig.return_type
+				}
+			} else if node.func is ast.Attribute {
+				mut attr := node.func
+				rec_type := t.guess_expr_type(attr.value)
+				if rec_type != 'Any' {
+					sig_key := rec_type.trim_left('?&') + '.' + attr.attr
+					if sig := t.call_signatures[sig_key] {
+						return sig.return_type
+					}
 				}
 			}
 			return 'Any'

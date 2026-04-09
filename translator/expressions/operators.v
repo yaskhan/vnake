@@ -159,7 +159,7 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 		}
 		'//' {
 			eg.state.used_builtins['math.floor'] = true
-			if left_type == 'int' && right_type == 'int' {
+			if left_type in ['int', 'i64'] || right_type in ['int', 'i64'] {
 				return "i64(math.floor(f64(${left}) / f64(${right})))"
 			}
 			return "math.floor(${left} / ${right})"
