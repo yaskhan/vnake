@@ -13,6 +13,157 @@ pub mut:
 
 pub struct ClassFieldsHandler {}
 
+fn (h ClassFieldsHandler) normalize_field_type(field_type string) string {
+	if field_type == 'none' {
+		return 'Any'
+	}
+	return field_type
+}
+
+fn (h ClassFieldsHandler) field_usage_parts(v_type string) []string {
+	mut parts := []string{}
+	if v_type.len == 0 || v_type in ['Any', 'unknown'] {
+		return parts
+	}
+	for raw_part in v_type.split(' | ') {
+		part := raw_part.trim_space()
+		if part.len == 0 || part in ['Any', 'unknown'] {
+			continue
+		}
+		if part.starts_with('?') {
+			inner := part[1..]
+			if inner.len > 0 && inner !in parts {
+				parts << inner
+			}
+			if 'none' !in parts {
+				parts << 'none'
+			}
+			continue
+		}
+		if part !in parts {
+			parts << part
+		}
+	}
+	return parts
+}
+
+fn (h ClassFieldsHandler) merge_inferred_field_types(existing string, candidate string) string {
+	mut parts := h.field_usage_parts(existing)
+	for part in h.field_usage_parts(candidate) {
+		if part !in parts {
+			parts << part
+		}
+	}
+	if parts.len == 0 {
+		return 'Any'
+	}
+	has_none := 'none' in parts
+	mut non_none := []string{}
+	for part in parts {
+		if part != 'none' {
+			non_none << part
+		}
+	}
+	if non_none.len == 0 {
+		return 'Any'
+	}
+	if non_none.len == 1 && has_none {
+		return '?${non_none[0]}'
+	}
+	if has_none {
+		return '${non_none.join(' | ')} | none'
+	}
+	return non_none.join(' | ')
+}
+
+fn (h ClassFieldsHandler) infer_init_value_type(value_expr ?ast.Expression, arg_type_map map[string]string, env &ClassVisitEnv) string {
+	val := value_expr or { return 'Any' }
+
+	if val is ast.Name && val.id in arg_type_map {
+		return arg_type_map[val.id]
+	}
+	return guess_type(val, env)
+}
+
+fn (h ClassFieldsHandler) collect_init_field_types(body []ast.Statement, self_name string, arg_type_map map[string]string, mut env ClassVisitEnv) map[string]string {
+	mut field_types := map[string]string{}
+	h.collect_init_field_types_from_body(body, self_name, arg_type_map, mut field_types, mut
+		env)
+	return field_types
+}
+
+fn (h ClassFieldsHandler) collect_init_field_types_from_body(body []ast.Statement, self_name string, arg_type_map map[string]string, mut field_types map[string]string, mut env ClassVisitEnv) {
+	for stmt in body {
+		match stmt {
+			ast.Assign {
+				for target in stmt.targets {
+					h.collect_init_field_type_from_target(target, self_name, stmt.value,
+						arg_type_map, mut field_types, mut env)
+				}
+			}
+			ast.AnnAssign {
+				h.collect_init_field_type_from_target(stmt.target, self_name, stmt.value,
+					arg_type_map, mut field_types, mut env)
+			}
+			ast.If {
+				h.collect_init_field_types_from_body(stmt.body, self_name, arg_type_map, mut
+					field_types, mut env)
+				h.collect_init_field_types_from_body(stmt.orelse, self_name, arg_type_map, mut
+					field_types, mut env)
+			}
+			ast.For {
+				h.collect_init_field_types_from_body(stmt.body, self_name, arg_type_map, mut
+					field_types, mut env)
+				h.collect_init_field_types_from_body(stmt.orelse, self_name, arg_type_map, mut
+					field_types, mut env)
+			}
+			ast.While {
+				h.collect_init_field_types_from_body(stmt.body, self_name, arg_type_map, mut
+					field_types, mut env)
+				h.collect_init_field_types_from_body(stmt.orelse, self_name, arg_type_map, mut
+					field_types, mut env)
+			}
+			ast.With {
+				h.collect_init_field_types_from_body(stmt.body, self_name, arg_type_map, mut
+					field_types, mut env)
+			}
+			ast.Try {
+				h.collect_init_field_types_from_body(stmt.body, self_name, arg_type_map, mut
+					field_types, mut env)
+				for handler in stmt.handlers {
+					h.collect_init_field_types_from_body(handler.body, self_name, arg_type_map, mut
+						field_types, mut env)
+				}
+				h.collect_init_field_types_from_body(stmt.orelse, self_name, arg_type_map, mut
+					field_types, mut env)
+				h.collect_init_field_types_from_body(stmt.finalbody, self_name, arg_type_map, mut
+					field_types, mut env)
+			}
+			else {}
+		}
+	}
+}
+
+fn (h ClassFieldsHandler) collect_init_field_type_from_target(target ast.Expression, self_name string, value_expr ?ast.Expression, arg_type_map map[string]string, mut field_types map[string]string, mut env ClassVisitEnv) {
+	if target is ast.Attribute {
+		if target.value is ast.Name && target.value.id == self_name {
+			inferred := h.infer_init_value_type(value_expr, arg_type_map, &env)
+			existing := field_types[target.attr] or { '' }
+			field_types[target.attr] = h.merge_inferred_field_types(existing, inferred)
+		}
+	} else if target is ast.Tuple {
+		for elt in target.elements {
+			h.collect_init_field_type_from_target(elt, self_name, none, arg_type_map, mut
+				field_types, mut env)
+		}
+	} else if target is ast.List {
+		for elt in target.elements {
+			h.collect_init_field_type_from_target(elt, self_name, none, arg_type_map, mut
+				field_types, mut env)
+		}
+	}
+}
+
 fn (h ClassFieldsHandler) should_strip_init(_ string, default_val string) bool {
 	if default_val.len == 0 {
 		return false
@@ -48,7 +199,8 @@ fn (h ClassFieldsHandler) is_field_mutated(struct_name string, field_name string
 
 fn (h ClassFieldsHandler) get_field_def_info(name string, field_type string, struct_name string, default_val string, orig_name string, mut env ClassVisitEnv) FieldDefInfo {
 	is_mutated := h.is_field_mutated(struct_name, name, orig_name, &env)
-	mut def := '    ${name} ${field_type}'
+	normalized_type := h.normalize_field_type(field_type)
+	mut def := '    ${name} ${normalized_type}'
 	if default_val.len > 0 && !h.should_strip_init(field_type, default_val) {
 		def += ' = ${default_val}'
 	}
@@ -98,66 +250,68 @@ fn (h ClassFieldsHandler) collect_init_fields(node ast.ClassDef, mut added_field
 					arg_type_map[arg.arg] = env.map_annotation_fn(ann)
 				}
 			}
+			init_field_types := h.collect_init_field_types(stmt.body, self_name, arg_type_map, mut
+				env)
 			h.walk_init_body(stmt.body, self_name, mut fields, mut added_fields, struct_name,
-				arg_type_map, mut env)
+				arg_type_map, init_field_types, mut env)
 		}
 	}
 	return fields
 }
 
-fn (h ClassFieldsHandler) walk_init_body(body []ast.Statement, self_name string, mut fields []FieldDefInfo, mut added_fields map[string]bool, struct_name string, arg_type_map map[string]string, mut env ClassVisitEnv) {
+fn (h ClassFieldsHandler) walk_init_body(body []ast.Statement, self_name string, mut fields []FieldDefInfo, mut added_fields map[string]bool, struct_name string, arg_type_map map[string]string, init_field_types map[string]string, mut env ClassVisitEnv) {
 	for stmt in body {
 		match stmt {
 			ast.Assign {
 				for target in stmt.targets {
 					h.walk_init_expr(target, self_name, stmt.value, mut fields, mut added_fields,
-						struct_name, arg_type_map, mut env)
+						struct_name, arg_type_map, init_field_types, mut env)
 				}
 			}
 			ast.AnnAssign {
 				h.walk_init_expr(stmt.target, self_name, stmt.value, mut fields, mut added_fields,
-					struct_name, arg_type_map, mut env)
+					struct_name, arg_type_map, init_field_types, mut env)
 			}
 			ast.If {
 				h.walk_init_body(stmt.body, self_name, mut fields, mut added_fields, struct_name,
-					arg_type_map, mut env)
+					arg_type_map, init_field_types, mut env)
 				h.walk_init_body(stmt.orelse, self_name, mut fields, mut added_fields,
-					struct_name, arg_type_map, mut env)
+					struct_name, arg_type_map, init_field_types, mut env)
 			}
 			ast.For {
 				h.walk_init_body(stmt.body, self_name, mut fields, mut added_fields, struct_name,
-					arg_type_map, mut env)
+					arg_type_map, init_field_types, mut env)
 				h.walk_init_body(stmt.orelse, self_name, mut fields, mut added_fields,
-					struct_name, arg_type_map, mut env)
+					struct_name, arg_type_map, init_field_types, mut env)
 			}
 			ast.While {
 				h.walk_init_body(stmt.body, self_name, mut fields, mut added_fields, struct_name,
-					arg_type_map, mut env)
+					arg_type_map, init_field_types, mut env)
 				h.walk_init_body(stmt.orelse, self_name, mut fields, mut added_fields,
-					struct_name, arg_type_map, mut env)
+					struct_name, arg_type_map, init_field_types, mut env)
 			}
 			ast.With {
 				h.walk_init_body(stmt.body, self_name, mut fields, mut added_fields, struct_name,
-					arg_type_map, mut env)
+					arg_type_map, init_field_types, mut env)
 			}
 			ast.Try {
 				h.walk_init_body(stmt.body, self_name, mut fields, mut added_fields, struct_name,
-					arg_type_map, mut env)
+					arg_type_map, init_field_types, mut env)
 				for handler in stmt.handlers {
 					h.walk_init_body(handler.body, self_name, mut fields, mut added_fields,
-						struct_name, arg_type_map, mut env)
+						struct_name, arg_type_map, init_field_types, mut env)
 				}
 				h.walk_init_body(stmt.orelse, self_name, mut fields, mut added_fields,
-					struct_name, arg_type_map, mut env)
+					struct_name, arg_type_map, init_field_types, mut env)
 				h.walk_init_body(stmt.finalbody, self_name, mut fields, mut added_fields,
-					struct_name, arg_type_map, mut env)
+					struct_name, arg_type_map, init_field_types, mut env)
 			}
 			else {}
 		}
 	}
 }
 
-fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string, value_expr ?ast.Expression, mut fields []FieldDefInfo, mut added_fields map[string]bool, struct_name string, arg_type_map map[string]string, mut env ClassVisitEnv) {
+fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string, value_expr ?ast.Expression, mut fields []FieldDefInfo, mut added_fields map[string]bool, struct_name string, arg_type_map map[string]string, init_field_types map[string]string, mut env ClassVisitEnv) {
 	if target is ast.Attribute {
 		if target.value is ast.Name && target.value.id == self_name {
 			orig_name := target.attr
@@ -172,6 +326,11 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 				f_type = t0
 			}
 			eprintln('DEBUG: collect_init_fields struct=${struct_name} attr=${orig_name} f_type=${f_type}')
+			if f_type in ['Any', 'none', 'unknown'] {
+				f_type = init_field_types[orig_name] or {
+					h.infer_init_value_type(value_expr, arg_type_map, &env)
+				}
+			}
 			env.analyzer.type_map['${struct_name}.${orig_name}'] = f_type
 			if struct_name.ends_with('_Impl') {
 				base_struct_name := struct_name.replace('_Impl', '')
@@ -201,12 +360,12 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 	} else if target is ast.Tuple {
 		for elt in target.elements {
 			h.walk_init_expr(elt, self_name, none, mut fields, mut added_fields, struct_name,
-				arg_type_map, mut env)
+				arg_type_map, init_field_types, mut env)
 		}
 	} else if target is ast.List {
 		for elt in target.elements {
 			h.walk_init_expr(elt, self_name, none, mut fields, mut added_fields, struct_name,
-				arg_type_map, mut env)
+				arg_type_map, init_field_types, mut env)
 		}
 	}
 }
