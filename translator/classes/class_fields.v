@@ -174,7 +174,8 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			eprintln('DEBUG: collect_init_fields struct=${struct_name} attr=${orig_name} f_type=${f_type}')
 			env.analyzer.type_map['${struct_name}.${orig_name}'] = f_type
 			if struct_name.ends_with('_Impl') {
-				env.analyzer.type_map['${struct_name.replace('_Impl', '')}.${orig_name}'] = f_type
+				base_struct_name := struct_name.replace('_Impl', '')
+				env.analyzer.type_map['${base_struct_name}.${orig_name}'] = f_type
 			} else {
 				env.analyzer.type_map['${struct_name}_Impl.${orig_name}'] = f_type
 			}
@@ -272,7 +273,8 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 					// Register for lookups
 					env.analyzer.type_map['${struct_name}.${orig_name}'] = field_type
 					if struct_name.ends_with('_Impl') {
-						env.analyzer.type_map['${struct_name.replace('_Impl', '')}.${orig_name}'] = field_type
+						base_struct_name := struct_name.replace('_Impl', '')
+						env.analyzer.type_map['${base_struct_name}.${orig_name}'] = field_type
 					}
 					eprintln('DEBUG: process_class_attributes struct=${struct_name} attr=${orig_name} f_type=${field_type} REGISTERED')
 				}
