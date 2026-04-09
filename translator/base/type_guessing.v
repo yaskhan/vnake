@@ -13,7 +13,7 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		if loc_key in ctx.location_map {
 			res := ctx.location_map[loc_key]
 			if res != 'none' && res != 'Any' && res != 'unknown' {
-				return res
+
 			}
 		}
 		if ctx.analyzer != unsafe { nil } {
@@ -122,7 +122,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		if loc_key in ctx.location_map {
 			res := ctx.location_map[loc_key]
 			if res != 'none' && res != 'Any' && res != 'unknown' {
-				return res
+
 			}
 		}
 	}
@@ -255,7 +255,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 			if attr_name in ctx.type_map { 
 				res := ctx.type_map[attr_name] 
 				if res.starts_with('fn (') {
-					return res.all_after_last(') ').trim_space()
+					return res.all_after_last(") ").trim_space()
 				}
 
 			}
@@ -391,7 +391,7 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 		loc_key := '${node.get_token().line}:${node.get_token().column}'
 		if loc_key in ctx.location_map {
 			res := ctx.location_map[loc_key]
-			if res != 'int' && res != 'Any' && res != 'unknown' { return res }
+			if res != 'int' && res != 'Any' && res != 'unknown' {  }
 		}
 	}
 	actual_name := ctx.name_remap[node.id] or { node.id }
@@ -412,7 +412,7 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 
 	if node.id in ctx.type_map {
 		res := ctx.type_map[node.id]
-		if res != 'int' && res != 'Any' && res != 'unknown' { return res }
+		if res != 'int' && res != 'Any' && res != 'unknown' {  }
 	}
 	if ctx.analyzer != unsafe { nil } {
 		analyzer_ptr := unsafe { &analyzer.Analyzer(ctx.analyzer) }
