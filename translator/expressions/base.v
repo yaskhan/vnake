@@ -104,16 +104,31 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 }
 
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
-	name := eg.state.name_remap[node.id] or { node.id }
+	mut name := eg.state.name_remap[node.id] or { node.id }
 	
+	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
+	// don't use it for assignment LHS, as we must assign to the base variable.
+	if eg.state.in_assignment_lhs && (name.contains('(') || name.contains(' ') || name.contains(' as ')) {
+		name = node.id
+	}
+
+	sanitized := base.sanitize_name(name, false, map[string]bool{}, '', map[string]bool{})
+	
+	// Force unwrap if variable was narrowed and we are in LOAD context
+	if eg.state.narrowed_vars[sanitized] && !eg.state.in_assignment_lhs {
+		v_type := eg.guess_type(node)
+		if v_type.starts_with('?') {
+			// For interface/sum type receivers we must unwrap
+			return '(${sanitized} or { panic("narrowed var is none") })'
+		}
+	}
+
 	if name == 'str' { return "string" }
 	if name == 'float' { return "f64" }
 	if name == 'int' { return "int" }
 	if name == 'bool' { return "bool" }
 
-	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
-	// don't sanitize it again, as it contains V syntax.
-	if name.contains('(') || name.contains(' ') || name.contains(' as ') {
+	if (name.contains('(') || name.contains(' ') || name.contains(' as ')) {
 		return name
 	}
 

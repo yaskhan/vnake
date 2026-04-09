@@ -481,14 +481,13 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		env.emit_fn(env.state.indent() + 'mut ${copy[1]} := ${copy[0]}')
 	}
 
-	is_empty := if node.body.len == 0 { true } else if node.body.len == 1 && node.body[0] is ast.Pass { true } else { false }
-
-	if is_empty && ret_type != 'void' && ret_type != '' && !is_init {
-		env.emit_fn(env.state.indent() + 'return // TODO: default value for ${ret_type}')
-	} else {
 		for stmt in node.body {
-			env.visit_stmt_fn(stmt)
-		}
+		env.visit_stmt_fn(stmt)
+	}
+
+	if ret_type != 'void' && ret_type != '' && !is_init && !ends_with_return(node.body) {
+		default_val := base.get_v_default_value(ret_type, v_gens_to_declare)
+		env.emit_fn(env.state.indent() + 'return ${default_val}')
 	}
 
 	if is_generator {

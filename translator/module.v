@@ -109,6 +109,7 @@ fn clean_string_constant(value string) string {
 	return value
 }
 
+@[heap]
 pub struct ModuleTranslator {
 pub mut:
 	state         &base.TranslatorState
@@ -123,15 +124,17 @@ pub mut:
 pub fn new_module_translator(
 	mut state &base.TranslatorState,
 	visit_stmt_fn fn (ast.Statement),
-) ModuleTranslator {
-	mut m := ModuleTranslator{
+) &ModuleTranslator {
+	mut m := &ModuleTranslator{
 		state:             state
 		emitter:           new_module_emitter()
 		coroutine_handler: analyzer.new_coroutine_handler()
 		visit_stmt_fn:     visit_stmt_fn
 		has_module_all:    false
 	}
-	m.state.coroutine_handler = &m.coroutine_handler
+	if m.state.coroutine_handler == unsafe { nil } {
+		m.state.coroutine_handler = &m.coroutine_handler
+	}
 	return m
 }
 
@@ -140,7 +143,7 @@ pub fn new_module_translator_with_flags(
 	visit_stmt_fn fn (ast.Statement),
 	source_mapping bool,
 	strict_exports bool,
-) ModuleTranslator {
+) &ModuleTranslator {
 	mut mt := new_module_translator(mut state, visit_stmt_fn)
 	mt.source_mapping = source_mapping
 	mt.strict_exports = strict_exports
@@ -1596,7 +1599,7 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 				m.emitter.add_helper_function(line)
 			} else if stmt is ast.ClassDef {
 				m.emitter.add_helper_struct(line) // For now, handle as block
-			} else if line.trim_space().starts_with('const ') || line.trim_space().starts_with('pub const ') || line.trim_space().starts_with('__global ') {
+			} else if line.trim_space().starts_with('const ') || line.trim_space().starts_with('pub const ') || line.trim_space().contains('__global ') {
 				m.emitter.add_constant(line.trim_space())
 			} else {
 				m.emitter.add_init_statement(line.trim_space())

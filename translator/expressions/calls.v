@@ -1204,10 +1204,10 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 		if receiver_expr !is ast.Name {
 			tmp := eg.state.create_temp_with_prefix('py_mut_tmp_')
 			eg.emit('mut ${tmp} := ${obj}')
-			recv = 'mut ${tmp}'
+			recv = tmp
 			obj = tmp // for subsequent uses if any
 		} else {
-			recv = 'mut ${obj}'
+			recv = obj
 		}
 	}
 
@@ -1357,7 +1357,7 @@ pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string
 		for idx in eg.analyzer.func_param_mutability[func_name_str] { mutated[idx] = true }
 	}
 	for i, arg in args {
-		if i in mutated && !arg.starts_with('mut ') && arg !in ['none', 'true', 'false'] {
+		if i in mutated && !arg.starts_with('mut ') && arg !in ['none', 'true', 'false'] && base.is_simple_mut_target(arg) {
 			final_args << 'mut ${arg}'
 		} else {
 			final_args << arg
