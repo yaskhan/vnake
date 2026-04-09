@@ -168,6 +168,9 @@ pub fn map_python_type_to_v(py_type string) string {
 		'int' {
 			return 'int'
 		}
+		'i64', 'mypy_extensions.i64' {
+			return 'i64'
+		}
 		'float' {
 			return 'f64'
 		}

@@ -376,16 +376,22 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			if target.id in t.analyzer.type_map {
 				target_type = t.analyzer.type_map[target.id]
 			}
+		} else {
+			target_type = t.guess_type(target)
 		}
-		eg.target_type = target_type
-		if target is ast.Name {
-			if inf := t.analyzer.raw_type_map[target.id] {
-				if inf != '' && inf != 'Any' {
-					eg.target_type = inf
+		if target_type == 'unknown' || target_type == 'Any' {
+			if target is ast.Name {
+				if inf := t.analyzer.raw_type_map[target.id] {
+					if inf != '' && inf != 'Any' {
+						target_type = inf
+					}
 				}
 			}
 		}
+		eg.target_type = target_type
+		t.state.current_assignment_type = target_type
 		rhs = eg.visit(node.value)
+		t.state.current_assignment_type = ''
 	}
 
 	if target is ast.Name {
@@ -544,7 +550,15 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 					t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
 				}
 			} else {
-				t.emit_indented('${lhs} = ${rhs_text}')
+				mut final_rhs := rhs_text
+				rhs_type := t.guess_type(node.value)
+				if t.state.narrowed_vars[lhs] && t.state.in_loop_count > 0 {
+					eprintln('DEBUG NARROWED ASSIGN: lhs=${lhs} rhs_type=${rhs_type} in_loop=${t.state.in_loop_count}')
+					if rhs_type.starts_with('?') {
+						final_rhs = '${rhs_text} or { break }'
+					}
+				}
+				t.emit_indented('${lhs} = ${final_rhs}')
 			}
 		} else {
 			inferred := t.guess_type(node.value)
@@ -753,10 +767,26 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			t.state.current_assignment_type = prev_assignment_type
 			return
 		}
+		prev_t := t.state.current_assignment_type
+		t.state.current_assignment_type = t.map_annotation(node.annotation)
+		t.state.current_ann_raw = t.annotation_raw_name(node.annotation)
+		mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
+		eg.target_type = t.state.current_assignment_type
 		t.state.in_assignment_lhs = true
 		lhs_expr := t.visit_expr(node.target)
 		t.state.in_assignment_lhs = false
-		t.emit_indented('${lhs_expr} = ${t.visit_expr(value)}')
+		rhs_text := eg.visit(value)
+		
+		if rhs_text == 'none' && !t.state.current_assignment_type.starts_with('?') {
+			t.state.current_assignment_type = '?' + t.state.current_assignment_type
+		}
+		mut final_rhs := rhs_text
+		if rhs_text == 'none' && t.state.current_assignment_type.starts_with('?') {
+			final_rhs = '${t.state.current_assignment_type}(none)'
+		}
+		
+		t.emit_indented('${lhs_expr} = ${final_rhs}')
+		t.state.current_assignment_type = prev_t
 	} else {
 		// Variable declaration without value: x: int | str
 		if node.target is ast.Name {
