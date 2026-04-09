@@ -54,7 +54,7 @@ pub mut:
 	pattern_checker          PatternChecker
 	tscope                   Scope
 	scope                    CheckerScope
-	active_type               ?&TypeInfo
+	active_type              ?&TypeInfo
 	return_types             []MypyTypeNode
 	dynamic_funcs            []bool
 	partial_types            []PartialTypeScope
@@ -195,7 +195,7 @@ pub fn (mut tc TypeChecker) check_top_level(node &MypyFile) {
 // accept accepts a node for checking
 pub fn (mut tc TypeChecker) accept(stmt Statement) {
 	mut stmt_mut := stmt
-	stmt_mut.accept(mut tc) or { eprintln("### TC ACCEPT ERR: ${err}") }
+	stmt_mut.accept(mut tc) or { eprintln('### TC ACCEPT ERR: ${err}') }
 }
 
 // visit_func_def checks function definition
@@ -238,12 +238,12 @@ pub fn (mut tc TypeChecker) check_func_item(defn FuncItem, name string) {
 fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 	_ = name
 	tc.type_maps << TypeMap{}
-	
+
 	// Manually add parameters to the current type map
 	for i, arg in defn.arguments {
 		arg_name := arg.variable.name
 		mut typ := ?MypyTypeNode(none)
-		
+
 		if t := arg.variable.type_ {
 			typ = t
 		} else if arg_name == 'self' || i == 0 {
@@ -254,10 +254,10 @@ fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 				})
 			}
 		}
-		
+
 		if t := typ {
 			tc.type_maps.last()[arg_name] = t
-			
+
 			// Store with correct location for persistent lookup
 			ctx := arg.variable.get_context()
 			pkey := '${ctx.line}:${ctx.column}:${arg_name}'
@@ -280,12 +280,10 @@ fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 	tc.all_type_maps << tc.type_maps.pop()
 }
 
-
-
 // visit_assignment_stmt checks assignment
 pub fn (mut tc TypeChecker) visit_assignment_stmt(mut s AssignmentStmt) !AnyNode {
 	mut rvalue_type := tc.expr_checker.accept(s.rvalue)
-	
+
 	if ann := s.type_annotation {
 		rvalue_type = ann
 	}
@@ -318,7 +316,8 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			if mut node := lvalue.node {
 				if mut node is Var {
 					if target_type := node.type_ {
-						tc.check_subtype(rvalue_type, target_type, rvalue.get_context(), 'Incompatible types in assignment')
+						tc.check_subtype(rvalue_type, target_type, rvalue.get_context(),
+							'Incompatible types in assignment')
 					} else {
 						node.type_ = rvalue_type
 					}
@@ -327,8 +326,7 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		}
 		MemberExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
-			tc.expr_checker.accept(lvalue.expr)
-			
+
 			// If assigning to self.name, register it in the class TypeInfo
 			if mut active := tc.active_type {
 				if lvalue.expr is NameExpr {
@@ -347,6 +345,15 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 						}
 					}
 				}
+			}
+
+			member_type := tc.expr_checker.visit_member_expr(lvalue, true)
+			if member_type is AnyType {
+				if member_type.type_of_any != .from_error {
+					tc.check_subtype(rvalue_type, member_type, rvalue.get_context(), 'Incompatible types in assignment')
+				}
+			} else {
+				tc.check_subtype(rvalue_type, member_type, rvalue.get_context(), 'Incompatible types in assignment')
 			}
 		}
 		TupleExpr {
@@ -465,21 +472,23 @@ pub fn (mut tc TypeChecker) visit_while_stmt(mut s WhileStmt) !AnyNode {
 // visit_for_stmt checks for
 pub fn (mut tc TypeChecker) visit_for_stmt(mut s ForStmt) !AnyNode {
 	iterable_type := tc.expr_checker.accept(s.expr)
-	
+
 	// Determine item type for loop variable
-	mut item_type := MypyTypeNode(AnyType{type_of_any: .from_untyped_call})
+	mut item_type := MypyTypeNode(AnyType{
+		type_of_any: .from_untyped_call
+	})
 	proper_iterable := get_proper_type(iterable_type)
 	if proper_iterable is Instance {
 		if proper_iterable.type_name == 'builtins.list' && proper_iterable.args.len > 0 {
 			item_type = proper_iterable.args[0]
 		}
 	}
-	
+
 	// Check loop variable (index)
 	if mut lval := s.index.as_lvalue() {
 		tc.check_assignment(mut lval, s.expr, item_type)
 	}
-	
+
 	s.body.accept(mut tc) or {}
 	if mut eb := s.else_body {
 		eb.accept(mut tc) or {}
@@ -512,7 +521,7 @@ pub fn (mut tc TypeChecker) visit_block(mut b Block) !AnyNode {
 		return ''
 	}
 	for mut s in b.body {
-		s.accept(mut tc) or { eprintln("### STMT ACCEPT ERR: ${err}") }
+		s.accept(mut tc) or { eprintln('### STMT ACCEPT ERR: ${err}') }
 	}
 	return ''
 }
@@ -641,14 +650,14 @@ pub fn (tc TypeChecker) lookup_type_or_none(node Expression) ?MypyTypeNode {
 			return typ
 		}
 	}
-	
+
 	// Fallback for built-in constants if not in local maps
 	if key == 'True' || key == 'False' {
 		return MypyTypeNode(tc.named_type('bool'))
 	} else if key == 'None' {
 		return MypyTypeNode(tc.named_type('NoneType'))
 	}
-	
+
 	return none
 }
 
@@ -1034,8 +1043,3 @@ pub fn (mut tc TypeChecker) visit_lvalue(mut o Lvalue) !AnyNode {
 	}
 	return ''
 }
-
-
-
-
-
