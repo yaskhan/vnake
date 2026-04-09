@@ -75,10 +75,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	if is_method && node.name != '__new__' && args.len > 0 && args[0].arg in ['self', 'cls'] {
 		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
 			mut is_mutated := h.is_mutating_method(node, struct_name, &env)
-			mut func_keys := [node.name]
+			mut func_keys := []string{}
 			if struct_name.len > 0 {
-				func_keys.prepend('${struct_name}.${node.name}')
+				func_keys << '${struct_name}.${node.name}'
 			}
+			func_keys << node.name
 			for key in func_keys {
 				if key in env.analyzer.func_param_mutability && 0 in env.analyzer.func_param_mutability[key] {
 					is_mutated = true
