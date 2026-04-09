@@ -13,6 +13,13 @@ pub mut:
 
 pub struct ClassFieldsHandler {}
 
+fn (h ClassFieldsHandler) normalize_field_type(field_type string) string {
+	if field_type == 'none' {
+		return '?string'
+	}
+	return field_type
+}
+
 fn (h ClassFieldsHandler) should_strip_init(_ string, default_val string) bool {
 	if default_val.len == 0 { return false }
 	if default_val == 'none' || default_val.contains('Any(NoneType{})') || default_val.contains('unsafe { nil }') {
@@ -41,7 +48,8 @@ fn (h ClassFieldsHandler) is_field_mutated(struct_name string, field_name string
 
 fn (h ClassFieldsHandler) get_field_def_info(name string, field_type string, struct_name string, default_val string, orig_name string, mut env ClassVisitEnv) FieldDefInfo {
 	is_mutated := h.is_field_mutated(struct_name, name, orig_name, &env)
-	mut def := '    ${name} ${field_type}'
+	normalized_type := h.normalize_field_type(field_type)
+	mut def := '    ${name} ${normalized_type}'
 	if default_val.len > 0 && !h.should_strip_init(field_type, default_val) {
 		def += ' = ${default_val}'
 	}
@@ -402,4 +410,3 @@ fn (h ClassFieldsHandler) build_visibility_blocks(fields []FieldDefInfo, mut out
 	if pub_mut_fields.len > 0 { output << 'pub mut:'; for f in pub_mut_fields { output << f } }
 	if priv_mut_fields.len > 0 { output << 'mut:'; for f in priv_mut_fields { output << f } }
 }
-
