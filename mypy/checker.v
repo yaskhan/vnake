@@ -364,7 +364,40 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		}
 		IndexExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
-			// TODO: handle index assignment
+			base_type := tc.expr_checker.accept(lvalue.base_)
+			proper_base := get_proper_type(base_type)
+			if proper_base is TypedDictType {
+				if lvalue.index is StrExpr {
+					key := (lvalue.index as StrExpr).value
+					if key in proper_base.items {
+						if key in proper_base.readonly_keys {
+							tc.msg.fail("Cannot assign to read-only TypedDict key '" + key + "'",
+								lvalue.get_context(), false, false, none)
+						}
+						item_type := proper_base.items[key] or {
+							MypyTypeNode(AnyType{
+								type_of_any: .from_error
+							})
+						}
+						tc.check_subtype(rvalue_type, item_type, rvalue.get_context(),
+							'Incompatible types in assignment')
+					} else {
+						tc.msg.fail("TypedDict has no key '" + key + "'", lvalue.get_context(),
+							false, false, none)
+					}
+				} else {
+					tc.msg.fail('TypedDict index must be a string literal', lvalue.get_context(),
+						false, false, none)
+				}
+			} else {
+				tc.expr_checker.check_method_call_by_name('__setitem__', base_type, [
+					lvalue.index,
+					rvalue,
+				], [
+					.arg_pos,
+					.arg_pos,
+				], lvalue.base)
+			}
 		}
 	}
 }
