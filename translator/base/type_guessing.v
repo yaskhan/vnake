@@ -75,7 +75,7 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 	if node is ast.IfExp {
 		bt := guess_type(node.body, ctx, use_location)
 		ot := guess_type(node.orelse, ctx, use_location)
-		res := if bt == ot { 
+		return if bt == ot {
 			bt 
 		} else if bt.starts_with('?') && bt.trim_left('?') == ot { 
 			bt 

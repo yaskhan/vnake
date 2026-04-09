@@ -528,6 +528,11 @@ fn (mut m ModuleTranslator) extract_docstring(body []ast.Statement) ([]ast.State
 }
 
 fn (mut m ModuleTranslator) append_runtime_helpers() {
+	mut imported := map[string]bool{}
+	for _, mod in m.state.imported_modules {
+		imported[mod] = true
+	}
+
 	if m.state.used_builtins["regex"] {
 		m.emitter.add_helper_import("regex")
 	}
@@ -556,7 +561,7 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 		}
 	}
 	
-	if m.state.imported_modules.values().contains('tempfile') {
+	if 'tempfile' in imported {
 		m.emitter.add_helper_import('os')
 		m.emitter.add_helper_struct('struct PyTempDir { path string }')
 		m.emitter.add_helper_function('fn (d PyTempDir) close() { os.rmdir_all(d.path) or {} }')
@@ -570,7 +575,7 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 }")
 	}
 
-	if m.state.imported_modules.values().contains('logging') {
+	if 'logging' in imported {
 		m.emitter.add_helper_import('log')
 		m.emitter.add_helper_function('fn py_get_logger(name string) log.Log {
     mut l := log.Log{}
@@ -936,7 +941,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 	}
 
 	// collections
-	if m.state.imported_modules.values().contains('collections') || m.state.used_builtins['py_counter'] {
+	if 'collections' in imported || m.state.used_builtins['py_counter'] {
 		m.emitter.add_helper_function('fn py_counter[T](a []T) map[T]int {
     mut m := map[T]int{}
     for x in a { m[x]++ }
@@ -945,7 +950,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 	}
 
 	// functools
-	if m.state.imported_modules.values().contains('functools') || m.state.used_builtins['py_reduce'] {
+	if 'functools' in imported || m.state.used_builtins['py_reduce'] {
 		m.emitter.add_helper_function('fn py_reduce[T](op fn (acc T, x T) T, iter []T) T {
     if iter.len == 0 { panic("reduce() of empty sequence") }
     mut acc := iter[0]
@@ -1202,30 +1207,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
-	if m.state.imported_modules.values().contains('tempfile') {
-		m.emitter.add_helper_import('os')
-		m.emitter.add_helper_struct('struct PyTempDir { path string }')
-		m.emitter.add_helper_function('fn (d PyTempDir) close() { os.rmdir_all(d.path) or {} }')
-		m.emitter.add_helper_function('fn py_temp_dir() PyTempDir {
-    p := os.mkdir_temp("") or { panic(err) }
-    return PyTempDir{path: p}
-}')
-		m.emitter.add_helper_function('fn py_named_temp_file() os.File {
-    f, _ := os.create_temp("") or { panic(err) }
-    return f
-}')
-	}
-
-	if m.state.imported_modules.values().contains('logging') {
-		m.emitter.add_helper_import('log')
-		m.emitter.add_helper_function('fn py_get_logger(name string) log.Log {
-    mut l := log.Log{}
-    l.set_level(.info)
-    return l
-}')
-	}
-
-	if m.state.imported_modules.values().contains('argparse') {
+	if 'argparse' in imported {
 		m.emitter.add_helper_import('os')
 		m.emitter.add_helper_struct('struct PyArgDef { name string }')
 		m.emitter.add_helper_struct('struct PyArgumentParser { mut: definitions []PyArgDef }')
@@ -1247,7 +1229,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
-	if m.state.imported_modules.values().contains('itertools') {
+	if 'itertools' in imported {
 		m.emitter.add_helper_function('fn py_chain[T](args ...[]T) []T {
     mut res := []T{}
     for arg in args { for x in arg { res << x } }
@@ -1277,7 +1259,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_cycle[T](items []T) PyCycleIterator[T] { return PyCycleIterator[T]{items: items, idx: 0} }')
 	}
 
-	if m.state.imported_modules.values().contains('pathlib') || m.state.used_builtins['py_path_new'] {
+	if 'pathlib' in imported || m.state.used_builtins['py_path_new'] {
 		m.emitter.add_helper_import('os')
 		m.emitter.add_helper_struct('struct PyPath { path string }')
 		m.emitter.add_helper_function('fn py_path_new(p string) PyPath { return PyPath{path: p} }')
@@ -1290,7 +1272,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn (p PyPath) str() string { return p.path }')
 	}
 
-	if m.state.imported_modules.values().contains('urllib.request') {
+	if 'urllib.request' in imported {
 		m.emitter.add_helper_import('net.http')
 		m.emitter.add_helper_struct('struct PyHttpResponse { body string }')
 		m.emitter.add_helper_function('fn (r PyHttpResponse) read() string { return r.body }')
@@ -1300,7 +1282,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
-	if m.state.imported_modules.values().contains('csv') {
+	if 'csv' in imported {
 		m.emitter.add_helper_import('encoding.csv')
 		m.emitter.add_helper_struct('struct PyCsvReader { mut: reader csv.Reader }')
 		m.emitter.add_helper_function('fn py_csv_reader(f os.File) PyCsvReader { return PyCsvReader{reader: csv.new_reader(f)} }')
@@ -1313,7 +1295,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn (mut w PyCsvWriter) writerow(row []string) { w.writer.write(row) or { panic(err) } }')
 	}
 
-	if m.state.imported_modules.values().contains('sqlite3') {
+	if 'sqlite3' in imported {
 		m.emitter.add_helper_import('db.sqlite')
 		m.emitter.add_helper_struct('struct PySqliteConnection { db sqlite.DB }')
 		m.emitter.add_helper_function('fn py_sqlite_connect(path string) PySqliteConnection {
@@ -1331,11 +1313,11 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn (c PySqliteConnection) close() { c.db.close() or {} }')
 	}
 
-	if m.state.imported_modules.values().contains("os") || m.state.used_builtins["py_os_system"] {
+	if 'os' in imported || m.state.used_builtins["py_os_system"] {
 		m.emitter.add_helper_import("os")
 		m.emitter.add_helper_function("//##LLM@@ SECURITY WARNING: os.system is insecure as it executes commands via a shell. Consider using subprocess.run with a list of arguments instead.\nfn py_os_system(cmd string) int {\n    return os.system(cmd)\n}")
 	}
-	if m.state.imported_modules.values().contains('subprocess') {
+	if 'subprocess' in imported {
 		m.emitter.add_helper_import('os')
 		m.emitter.add_helper_struct('struct PyCompletedProcess { returncode int stdout string stderr string }')
 		m.emitter.add_helper_function('fn py_subprocess_run(args []string) PyCompletedProcess {
@@ -1361,11 +1343,11 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
-	if m.state.imported_modules.values().contains('platform') {
+	if 'platform' in imported {
 		m.emitter.add_helper_function('fn py_platform_machine() string { return os.uname().machine }')
 	}
 
-	if m.state.imported_modules.values().contains('hashlib') {
+	if 'hashlib' in imported {
 		m.emitter.add_helper_import('crypto.sha256')
 		m.emitter.add_helper_import('crypto.md5')
 		m.emitter.add_helper_struct('struct PyHashSha256 { mut: data []u8 }')
@@ -1380,7 +1362,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn (h PyHashMd5) hexdigest() string { return md5.hexhash(h.data) }')
 	}
 
-	if m.state.imported_modules.values().contains('urllib.parse') || m.state.used_builtins['py_urllib_unquote'] {
+	if 'urllib.parse' in imported || m.state.used_builtins['py_urllib_unquote'] {
 		m.emitter.add_helper_import('net.urllib')
 		m.emitter.add_helper_function('fn py_urllib_unquote(s string) string { return urllib.query_unescape(s) or { s } }')
 		m.emitter.add_helper_function('fn py_urlencode(params map[string]string) string {
@@ -1391,19 +1373,19 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_urlparse(url string) urllib.URL { return urllib.parse(url) or { urllib.URL{} } }')
 	}
 
-	if m.state.imported_modules.values().contains('zlib') {
+	if 'zlib' in imported {
 		m.emitter.add_helper_import('compress.zlib')
 		m.emitter.add_helper_function('fn py_zlib_compress(data []u8) []u8 { return zlib.compress(data) or { panic(err) } }')
 		m.emitter.add_helper_function('fn py_zlib_decompress(data []u8) []u8 { return zlib.decompress(data) or { panic(err) } }')
 	}
 
-	if m.state.imported_modules.values().contains('gzip') {
+	if 'gzip' in imported {
 		m.emitter.add_helper_import('compress.gzip')
 		m.emitter.add_helper_function('fn py_gzip_compress(data []u8) []u8 { return gzip.compress(data) or { panic(err) } }')
 		m.emitter.add_helper_function('fn py_gzip_decompress(data []u8) []u8 { return gzip.decompress(data) or { panic(err) } }')
 	}
 
-	if m.state.imported_modules.values().contains('copy') || m.state.used_builtins['py_copy'] || m.state.used_builtins['py_deepcopy'] {
+	if 'copy' in imported || m.state.used_builtins['py_copy'] || m.state.used_builtins['py_deepcopy'] {
 		m.emitter.add_helper_function("fn py_copy[T](x T) T {
     \x24if T is array { return x.clone() }
     \x24else \x24if T is map { return x.clone() }
@@ -1421,7 +1403,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_os_path_split(path string) []string { return [os.dir(path), os.base(path)] }')
 	}
 
-	if m.state.imported_modules.values().contains('struct') {
+	if 'struct' in imported {
 		m.emitter.add_helper_import('encoding.binary')
 		m.emitter.add_helper_function('// struct.pack with dynamic formats is not implemented. Use specific helpers.')
 		m.emitter.add_helper_function('fn py_struct_pack_I_be(val u32) []u8 { mut buf := []u8{len: 4} binary.big_endian_put_u32(mut buf, val) return buf }')
@@ -1430,11 +1412,11 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_struct_unpack_i_be(buf []u8) int { return int(binary.big_endian_u32(buf)) }')
 	}
 
-	if m.state.imported_modules.values().contains('array') {
+	if 'array' in imported {
 		m.emitter.add_helper_function('fn py_array[T](code string, init []T) []T { return init }')
 	}
 
-		if m.state.imported_modules.values().contains('fractions') {
+		if 'fractions' in imported {
 		m.emitter.add_helper_import('math.fractions')
 		m.emitter.add_helper_function('fn py_fraction(val Any) fractions.Fraction {
     \x24if val is int { return fractions.fraction(i64(val), 1) }
@@ -1445,7 +1427,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
-	if m.state.imported_modules.values().contains('statistics') {
+	if 'statistics' in imported {
 		m.emitter.add_helper_import('math')
 		m.emitter.add_helper_function('fn py_statistics_mean[T](data []T) f64 {
     if data.len == 0 { return 0.0 }
@@ -1463,7 +1445,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
-	if m.state.imported_modules.values().contains('decimal') {
+	if 'decimal' in imported {
 		m.emitter.add_helper_struct('type Decimal = f64')
 		m.emitter.add_helper_function('fn py_decimal(val Any) Decimal {
     \x24if val is f64 { return val }
@@ -1548,7 +1530,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
-	if m.state.imported_modules.values().contains('pickle') {
+	if 'pickle' in imported {
 		m.emitter.add_helper_import('json')
 		m.emitter.add_helper_function('fn py_pickle_dumps[T](obj T) string { return json.encode(obj) }')
 		m.emitter.add_helper_function('fn py_pickle_loads[T](s string) T { return json.decode(T, s) or { panic(err) } }')
