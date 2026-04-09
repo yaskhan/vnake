@@ -417,7 +417,8 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		}
 		IndexExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
-			// TODO: handle index assignment
+			base_type := tc.expr_checker.accept(lvalue.base_)
+			tc.expr_checker.check_method_call_by_name("__setitem__", base_type, [lvalue.index, rvalue], [.arg_pos, .arg_pos], lvalue.base)
 		}
 	}
 }
