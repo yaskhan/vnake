@@ -385,14 +385,7 @@ pub fn (mut sa SemanticAnalyzer) visit_assignment_stmt(mut s AssignmentStmt) !An
 		return ''
 	}
 
-	tag := sa.track_incomplete_refs()
-	// TODO: analyze rvalue
-	s.rvalue.accept(mut sa)!
-
-	if sa.found_incomplete_ref(tag) {
-		for expr in sa.names_modified_by_assignment(s) {
-			sa.mark_incomplete(expr.name, expr.base)
-		}
+	if sa.analyze_rvalue(mut s)! {
 		return ''
 	}
 
@@ -1159,6 +1152,36 @@ fn (sa SemanticAnalyzer) analyze_identity_global_assignment(s AssignmentStmt) bo
 		return true
 	}
 
+	return false
+}
+
+// analyze_rvalue analyzes the right-hand side of an assignment.
+// This is a key part of semantic analysis where we traverse the rvalue AST
+// to check for semantic validity and track any incomplete references (forward refs).
+// Returns true if the analysis should be deferred due to incomplete references.
+fn (mut sa SemanticAnalyzer) analyze_rvalue(mut s AssignmentStmt) !bool {
+	// We track the state before analyzing the rvalue to detect if any new
+	// incomplete references (forward references) are encountered.
+	tag := sa.track_incomplete_refs()
+
+	// The visitor pattern call handles the recursive traversal of the rvalue.
+	// This is where the core semantic analysis of the expressions happens.
+	s.rvalue.accept(mut sa)!
+
+	if sa.found_incomplete_ref(tag) {
+		// If the rvalue contains references to symbols that are not yet available,
+		// we must mark the targets of this assignment as also incomplete.
+		// This ensures that subsequent analysis steps that depend on these targets
+		// will be correctly deferred until the references are resolved.
+		for expr in sa.names_modified_by_assignment(s) {
+			sa.mark_incomplete(expr.name, expr.base)
+		}
+		return true
+	}
+
+	// Additional analysis of types and semantic validity can be added here.
+	// For global assignments, this may involve checking for special forms
+	// like TypeVar, NewType, or TypeAlias definitions.
 	return false
 }
 
