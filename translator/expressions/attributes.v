@@ -4,12 +4,18 @@ import ast
 import base
 import stdlib_map
 
+fn narrowed_option_attr_expr(var_name string, attr_name string) string {
+	return "((${var_name} or { panic('unwrap failed for ${attr_name}') }).${attr_name})"
+}
+
 pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	// Handle module attributes
 	if node.value is ast.Name && node.value.id in eg.state.imported_modules {
 		module_name := eg.state.imported_modules[node.value.id]
-		if node.attr == '__name__' { return "'${module_name}'" }
-		
+		if node.attr == '__name__' {
+			return "'${module_name}'"
+		}
+
 		if eg.state.mapper != unsafe { nil } {
 			mapper := unsafe { &stdlib_map.StdLibMapper(eg.state.mapper) }
 			if res := mapper.get_mapping(module_name, node.attr, []) {
@@ -19,51 +25,62 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 
 		is_class := node.attr.len > 0 && node.attr[0].is_capital()
-		return '${module_name}.${base.sanitize_name(node.attr, is_class, map[string]bool{}, "", map[string]bool{})}'
+		return '${module_name}.${base.sanitize_name(node.attr, is_class, map[string]bool{},
+			'', map[string]bool{})}'
 	}
 
 	if node.attr == '__class__' {
-		return "typeof(${eg.visit(node.value)})"
+		return 'typeof(${eg.visit(node.value)})'
 	}
 	if node.attr == '__annotations__' || node.attr == '__annotate__' {
 		obj := eg.visit(node.value)
 		obj_type := eg.guess_type(node.value)
 		if obj_type in eg.state.defined_classes || obj in eg.state.defined_classes {
 			class_name := if obj in eg.state.defined_classes { obj } else { obj_type }
-			return "py_get_type_hints[${class_name}]()"
+			return 'py_get_type_hints[${class_name}]()'
 		}
-		if obj in eg.state.function_names { return "${obj}__annotations__" }
-		return "py_get_type_hints_generic(${obj})"
+		if obj in eg.state.function_names {
+			return '${obj}__annotations__'
+		}
+		return 'py_get_type_hints_generic(${obj})'
 	}
 	if node.attr == '__type_params__' || node.attr == 'type_params___' {
 		obj := eg.visit(node.value)
 		sanitized_obj := base.to_snake_case(obj).trim_left('_')
 		if obj in eg.state.function_names || sanitized_obj in eg.state.type_params_map {
-			return "${sanitized_obj}_type_params"
+			return '${sanitized_obj}_type_params'
 		}
 		if obj in eg.state.defined_classes || eg.guess_type(node.value) in eg.state.defined_classes {
-			class_name := if obj in eg.state.defined_classes { obj } else { eg.guess_type(node.value) }
-			return "${base.to_snake_case(class_name).trim_left('_')}_type_params"
+			class_name := if obj in eg.state.defined_classes {
+				obj
+			} else {
+				eg.guess_type(node.value)
+			}
+			return '${base.to_snake_case(class_name).trim_left('_')}_type_params'
 		}
-		return "[]string{}"
+		return '[]string{}'
 	}
 
 	if node.attr == 'real' && eg.guess_type(node.value) == 'PyComplex' {
-		return "${eg.visit(node.value)}.re"
+		return '${eg.visit(node.value)}.re'
 	}
 	if node.attr == 'imag' && eg.guess_type(node.value) == 'PyComplex' {
-		return "${eg.visit(node.value)}.im"
+		return '${eg.visit(node.value)}.im'
 	}
 
 	mut attr_name := node.attr
-	if attr_name == '__next__' { attr_name = 'next' }
-	else if attr_name == '__await__' { attr_name = 'await_' }
-	else if attr_name == '__iter__' { attr_name = 'iter' }
+	if attr_name == '__next__' {
+		attr_name = 'next'
+	} else if attr_name == '__await__' {
+		attr_name = 'await_'
+	} else if attr_name == '__iter__' {
+		attr_name = 'iter'
+	}
 
 	if eg.state.current_class.len > 0 {
 		attr_name = base.mangle_name(attr_name, eg.state.current_class)
 	}
-	attr_name = base.sanitize_name(attr_name, false, map[string]bool{}, "", map[string]bool{})
+	attr_name = base.sanitize_name(attr_name, false, map[string]bool{}, '', map[string]bool{})
 
 	mut obj := eg.visit(node.value)
 	mut obj_type := eg.guess_type(node.value)
@@ -86,7 +103,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	obj_base := if obj.contains('[') { obj.all_before('[') } else { obj }
 
 	if obj in eg.state.function_names || obj_base in eg.state.function_names {
-		return "${obj}__${attr_name}"
+		return '${obj}__${attr_name}'
 	}
 
 	// Static/Class methods and Class variables
@@ -95,14 +112,16 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 		// Handle Enum members
 		if eg.state.defined_classes[target_class]['is_enum'] {
-			return "${target_class}.${base.to_snake_case(node.attr).to_lower()}"
+			return '${target_class}.${base.to_snake_case(node.attr).to_lower()}'
 		}
-		
+
 		// Check for class variables first (meta singleton)
-		if defining := base.find_defining_class_for_class_var(target_class, node.attr, eg.state.class_vars, eg.analyzer.class_hierarchy) {
+		if defining := base.find_defining_class_for_class_var(target_class, node.attr,
+			eg.state.class_vars, eg.analyzer.class_hierarchy)
+		{
 			// Only remap to meta if it's a direct class access (e.g. Pt.x)
 			// or if it's an explicit ClassVar (not implemented yet).
-			
+
 			mut is_class_access := false
 			if node.value is ast.Name {
 				v := node.value
@@ -110,26 +129,27 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 					is_class_access = true
 				}
 			}
-			
+
 			if is_class_access {
-				meta_const := "${base.to_snake_case(defining)}_meta"
-				return "${meta_const}.${attr_name}"
+				meta_const := '${base.to_snake_case(defining)}_meta'
+				return '${meta_const}.${attr_name}'
 			}
 		}
 
 		// Handle Nested Classes
-		nested_class_name := target_class + "_" + node.attr
+		nested_class_name := target_class + '_' + node.attr
 		if nested_class_name in eg.state.defined_classes {
-			return "new_" + base.to_snake_case(nested_class_name).trim_left('_')
+			return 'new_' + base.to_snake_case(nested_class_name).trim_left('_')
 		}
 
-		if defining := base.find_defining_class_for_static_method(target_class, node.attr, eg.analyzer.static_methods, eg.analyzer.class_methods, eg.analyzer.class_hierarchy) {
-			return "${defining}_${attr_name}"
+		if defining := base.find_defining_class_for_static_method(target_class, node.attr,
+			eg.analyzer.static_methods, eg.analyzer.class_methods, eg.analyzer.class_hierarchy)
+		{
+			return '${defining}_${attr_name}'
 		}
-
 	}
 
-	mut res := "${obj}.${attr_name}"
+	mut res := '${obj}.${attr_name}'
 
 	obj_name := eg.analyzer.render_expr(node.value)
 	full_name := '${obj_name}.${node.attr}'
@@ -140,7 +160,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	// Narrowing/Casting
 	loc_key := '${node.token.line}:${node.token.column}'
 	v_attr_base := eg.map_python_type(eg.guess_type_no_loc(node), true)
-	
+
 	mut original_type := v_attr_base
 	obj_type_clean := if obj_type.contains('[') { obj_type.all_before('[') } else { obj_type }
 	struct_field_key := '${obj_type_clean}.${node.attr}'
@@ -161,20 +181,21 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 	if current != 'Any' {
 		mut should_cast := original_type.contains('|') || original_type == 'Any'
-		if !should_cast && (eg.state.current_file_name.contains('narrowing') || eg.state.current_file_name.contains('Narrowing')) {
+		if !should_cast && (eg.state.current_file_name.contains('narrowing')
+			|| eg.state.current_file_name.contains('Narrowing')) {
 			should_cast = true
 		}
-		if !eg.state.in_assignment_lhs && should_cast && (current != original_type || eg.state.current_file_name.contains('narrowing')) {
+		if !eg.state.in_assignment_lhs && should_cast
+			&& (current != original_type || eg.state.current_file_name.contains('narrowing')) {
 			if original_type.starts_with('?') && !current.starts_with('?') {
-				// Avoid redundant 'or' block if it's a local variable (V 0.5 auto-narrows locals)
-				// or if the variable was explicitly narrowed via flow analysis
+				// Preserve explicit flow narrowing for locals that still need an unwrap expression
 				if node.value is ast.Name {
 					name_node := node.value
-					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
+					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
+						'', map[string]bool{})
 					// Check if this variable was narrowed by flow analysis
 					if sanitized in eg.state.narrowed_vars {
-						// Variable is narrowed, no need for redundant 'or' block
-						return res
+						res = narrowed_option_attr_expr(sanitized, attr_name)
 					}
 					// No cast needed for auto-narrowed Options in V 0.5
 					return res
@@ -182,7 +203,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 					res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
 				}
 			} else {
-				res = "(${res} as ${current})"
+				res = '(${res} as ${current})'
 			}
 		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
 			// Auto-unwrap Option if we are accessing a field and it's not a local variable auto-narrowed by V
@@ -190,11 +211,14 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 			if node.value !is ast.Name {
 				res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 			} else {
-				// Check if narrowed - skip 'or' block for narrowed vars
+				// Check if narrowed and unwrap the receiver explicitly
 				name_node := node.value
 				if name_node is ast.Name {
-					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
-					if sanitized !in eg.state.narrowed_vars {
+					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
+						'', map[string]bool{})
+					if sanitized in eg.state.narrowed_vars {
+						res = narrowed_option_attr_expr(sanitized, attr_name)
+					} else {
 						res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 					}
 				}
@@ -205,11 +229,14 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		if node.value !is ast.Name {
 			res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 		} else {
-			// Check if narrowed - skip 'or' block for narrowed vars
+			// Check if narrowed and unwrap the receiver explicitly
 			name_node := node.value
 			if name_node is ast.Name {
-				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
-				if sanitized !in eg.state.narrowed_vars {
+				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
+					'', map[string]bool{})
+				if sanitized in eg.state.narrowed_vars {
+					res = narrowed_option_attr_expr(sanitized, attr_name)
+				} else {
 					res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 				}
 			}
