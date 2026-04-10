@@ -1266,10 +1266,21 @@ pub fn (mut tc TypeChecker) visit_operator_assignment_stmt(mut o OperatorAssignm
 }
 
 pub fn (mut tc TypeChecker) visit_assert_stmt(mut o AssertStmt) !AnyNode {
-	type_map, _ := tc.find_isinstance_check(o.expr)
-	if type_map.len == 0 {
+	mut skip_expr_check := false
+	match o.expr {
+		CallExpr {
+			skip_expr_check = tc.is_isinstance_call(o.expr)
+		}
+		UnaryExpr {
+			skip_expr_check = o.expr.op == 'not' && o.expr.expr is CallExpr
+				&& tc.is_isinstance_call(o.expr.expr as CallExpr)
+		}
+		else {}
+	}
+	if !skip_expr_check {
 		tc.expr_checker.accept(o.expr)
 	}
+	type_map, _ := tc.find_isinstance_check(o.expr)
 	tc.push_type_map(type_map)
 	if msg := o.msg {
 		tc.expr_checker.accept(msg)
