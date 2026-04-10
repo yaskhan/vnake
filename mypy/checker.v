@@ -650,7 +650,7 @@ pub fn (tc TypeChecker) find_isinstance_check(node Expression) (TypeMap, TypeMap
 			}
 
 			expr := node.args[0]
-			if literal(expr) < literal_type {
+			if literal(expr) == literal_no {
 				return TypeMap{}, TypeMap{}
 			}
 
