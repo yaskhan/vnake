@@ -66,11 +66,11 @@ fn test_find_isinstance_check_narrows_union_types() {
 
 	if_map, else_map := tc.find_isinstance_check(isinstance_expr)
 
-	narrowed := if_map['x'] or { panic('expected positive narrowing for x') }
+	narrowed := if_map['x'] or { panic('expected narrowed type when isinstance check passes') }
 	assert narrowed is Instance
 	assert (narrowed as Instance).type_name == 'builtins.int'
 
-	remaining := else_map['x'] or { panic('expected negative narrowing for x') }
+	remaining := else_map['x'] or { panic('expected remaining type when isinstance check fails') }
 	assert remaining is Instance
 	assert (remaining as Instance).type_name == 'builtins.str'
 }
