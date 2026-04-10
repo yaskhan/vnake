@@ -150,15 +150,13 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 		if !eg.state.in_assignment_lhs && should_cast && (current != original_type || eg.state.current_file_name.contains('narrowing')) {
 			if original_type.starts_with('?') && !current.starts_with('?') {
-				// Avoid redundant 'or' block if it's a local variable (V 0.5 auto-narrows locals)
-				// or if the variable was explicitly narrowed via flow analysis
+				// Preserve explicit flow narrowing for locals that still need an unwrap expression
 				if node.value is ast.Name {
 					name_node := node.value
 					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
 					// Check if this variable was narrowed by flow analysis
 					if sanitized in eg.state.narrowed_vars {
-						// Variable is narrowed, no need for redundant 'or' block
-						return res
+						return "((${sanitized} or { panic('narrowed var is none') }).${attr_name})"
 					}
 					// No cast needed for auto-narrowed Options in V 0.5
 					return res
@@ -174,11 +172,13 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 			if node.value !is ast.Name {
 				res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 			} else {
-				// Check if narrowed - skip 'or' block for narrowed vars
+				// Check if narrowed and unwrap the receiver explicitly
 				name_node := node.value
 				if name_node is ast.Name {
 					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
-					if sanitized !in eg.state.narrowed_vars {
+					if sanitized in eg.state.narrowed_vars {
+						res = "((${sanitized} or { panic('narrowed var is none') }).${attr_name})"
+					} else {
 						res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 					}
 				}
@@ -189,11 +189,13 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		if node.value !is ast.Name {
 			res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 		} else {
-			// Check if narrowed - skip 'or' block for narrowed vars
+			// Check if narrowed and unwrap the receiver explicitly
 			name_node := node.value
 			if name_node is ast.Name {
 				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
-				if sanitized !in eg.state.narrowed_vars {
+				if sanitized in eg.state.narrowed_vars {
+					res = "((${sanitized} or { panic('narrowed var is none') }).${attr_name})"
+				} else {
 					res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 				}
 			}
