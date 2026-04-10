@@ -43,7 +43,7 @@ fn test_find_isinstance_check_narrows_union_types() {
 		fullname: '__main__.x'
 		node:     SymbolNodeRef(x_var)
 	}
-	tc.type_maps.last()['x'] = declared
+	tc.type_maps[0]['x'] = declared
 
 	int_info := TypeInfo{
 		name:     'int'
@@ -89,7 +89,7 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 		fullname: '__main__.x'
 		node:     SymbolNodeRef(x_var)
 	}
-	tc.type_maps.last()['x'] = declared
+	tc.type_maps[0]['x'] = declared
 
 	int_info := TypeInfo{
 		name:     'int'
