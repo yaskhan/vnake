@@ -175,7 +175,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 						'', map[string]bool{})
 					// Check if this variable was narrowed by flow analysis
 					if sanitized in eg.state.narrowed_vars {
-						return "((${sanitized} or { panic('Failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
+						return "((${sanitized} or { panic('failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
 					}
 					// No cast needed for auto-narrowed Options in V 0.5
 					return res
@@ -197,7 +197,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
 						'', map[string]bool{})
 					if sanitized in eg.state.narrowed_vars {
-						res = "((${sanitized} or { panic('Failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
+						res = "((${sanitized} or { panic('failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
 					} else {
 						res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 					}
@@ -215,7 +215,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
 					'', map[string]bool{})
 				if sanitized in eg.state.narrowed_vars {
-					res = "((${sanitized} or { panic('Failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
+					res = "((${sanitized} or { panic('failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
 				} else {
 					res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 				}
