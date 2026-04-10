@@ -857,7 +857,7 @@ fn remove_type_from_declared_type(declared MypyTypeNode, removed MypyTypeNode) M
 			}
 		}
 		if remaining.len == 0 {
-			return UninhabitedType{}
+			return MypyTypeNode(UninhabitedType{})
 		}
 		if remaining.len == 1 {
 			return remaining[0]
@@ -866,7 +866,7 @@ fn remove_type_from_declared_type(declared MypyTypeNode, removed MypyTypeNode) M
 	}
 
 	if is_subtype_simple(declared_proper, removed_proper) {
-		return UninhabitedType{}
+		return MypyTypeNode(UninhabitedType{})
 	}
 	return declared
 }
@@ -1266,8 +1266,10 @@ pub fn (mut tc TypeChecker) visit_operator_assignment_stmt(mut o OperatorAssignm
 }
 
 pub fn (mut tc TypeChecker) visit_assert_stmt(mut o AssertStmt) !AnyNode {
-	tc.expr_checker.accept(o.expr)
 	type_map, _ := tc.find_isinstance_check(o.expr)
+	if type_map.len == 0 {
+		tc.expr_checker.accept(o.expr)
+	}
 	tc.push_type_map(type_map)
 	if msg := o.msg {
 		tc.expr_checker.accept(msg)
