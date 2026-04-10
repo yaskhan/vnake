@@ -643,8 +643,215 @@ pub fn (mut tc TypeChecker) visit_pass_stmt(mut s PassStmt) !AnyNode {
 
 // find_isinstance_check finds isinstance checks
 pub fn (tc TypeChecker) find_isinstance_check(node Expression) (TypeMap, TypeMap) {
-	// TODO: full implementation
+	match node {
+		CallExpr {
+			if !tc.is_isinstance_call(node) || node.args.len != 2 {
+				return TypeMap{}, TypeMap{}
+			}
+
+			expr := node.args[0]
+			if literal(expr) < literal_type {
+				return TypeMap{}, TypeMap{}
+			}
+
+			declared := tc.lookup_narrowable_type(expr) or {
+				return TypeMap{}, TypeMap{}
+			}
+			narrowed := tc.resolve_isinstance_target_type(node.args[1]) or {
+				return TypeMap{}, TypeMap{}
+			}
+
+			key := expr.str()
+			return TypeMap{
+				key: narrow_declared_type(declared, narrowed)
+			}, TypeMap{
+				key: remove_type_from_declared_type(declared, narrowed)
+			}
+		}
+		UnaryExpr {
+			if node.op == 'not' {
+				if_map, else_map := tc.find_isinstance_check(node.expr)
+				return else_map, if_map
+			}
+		}
+		else {}
+	}
 	return TypeMap{}, TypeMap{}
+}
+
+fn (tc TypeChecker) is_isinstance_call(node CallExpr) bool {
+	return match node.callee {
+		NameExpr {
+			node.callee.name == 'isinstance' || node.callee.fullname == 'builtins.isinstance'
+		}
+		MemberExpr {
+			node.callee.name == 'isinstance' || node.callee.fullname == 'builtins.isinstance'
+		}
+		else {
+			false
+		}
+	}
+}
+
+fn (tc TypeChecker) lookup_narrowable_type(expr Expression) ?MypyTypeNode {
+	if typ := tc.lookup_type_or_none(expr) {
+		return typ
+	}
+
+	return match expr {
+		NameExpr {
+			if sym := expr.node {
+				match sym {
+					Var { sym.type_ or { none } }
+					else { none }
+				}
+			} else {
+				none
+			}
+		}
+		MemberExpr {
+			if sym := expr.node {
+				match sym {
+					Var { sym.type_ or { none } }
+					else { none }
+				}
+			} else {
+				none
+			}
+		}
+		else {
+			none
+		}
+	}
+}
+
+fn (tc TypeChecker) resolve_isinstance_target_type(expr Expression) ?MypyTypeNode {
+	match expr {
+		NameExpr {
+			return tc.resolve_isinstance_target_symbol(expr.node, Expression(expr))
+		}
+		MemberExpr {
+			return tc.resolve_isinstance_target_symbol(expr.node, Expression(expr))
+		}
+		TupleExpr {
+			mut items := []MypyTypeNode{}
+			for item in expr.items {
+				resolved := tc.resolve_isinstance_target_type(item) or {
+					return none
+				}
+				items << resolved
+			}
+			if items.len == 0 {
+				return none
+			}
+			if items.len == 1 {
+				return items[0]
+			}
+			return make_simplified_union(items, false)
+		}
+		else {}
+	}
+
+	if typ := tc.lookup_type_or_none(expr) {
+		proper := get_proper_type(typ)
+		if proper is TypeType {
+			return proper.item
+		}
+	}
+	return none
+}
+
+fn (tc TypeChecker) resolve_isinstance_target_symbol(sym ?SymbolNodeRef, expr Expression) ?MypyTypeNode {
+	if node := sym {
+		return match node {
+			TypeInfo { MypyTypeNode(instance_from_type_info(node)) }
+			TypeAlias { node.target }
+			Var {
+				if typ := node.type_ {
+					proper := get_proper_type(typ)
+					if proper is TypeType {
+						proper.item
+					} else {
+						typ
+					}
+				} else {
+					none
+				}
+			}
+			else { none }
+		}
+	}
+
+	if typ := tc.lookup_type_or_none(expr) {
+		proper := get_proper_type(typ)
+		if proper is TypeType {
+			return proper.item
+		}
+	}
+	return none
+}
+
+fn instance_from_type_info(info TypeInfo) Instance {
+	info_ptr := &TypeInfo{
+		base:          info.base
+		name:          info.name
+		fullname:      info.fullname
+		module_name:   info.module_name
+		is_abstract:   info.is_abstract
+		is_protocol:   info.is_protocol
+		is_named_tuple: info.is_named_tuple
+		is_enum:       info.is_enum
+		is_newtype:    info.is_newtype
+		is_dataclass:  info.is_dataclass
+		names:         info.names
+		mro:           info.mro.clone()
+		type_vars:     info.type_vars.clone()
+		bases:         info.bases.clone()
+		promote_types: info.promote_types.clone()
+	}
+	return Instance{
+		typ:           info_ptr
+		type_:         info_ptr
+		type_name:     info.fullname
+		type_fullname: info.fullname
+	}
+}
+
+fn remove_type_from_declared_type(declared MypyTypeNode, removed MypyTypeNode) MypyTypeNode {
+	declared_proper := get_proper_type(declared)
+	removed_proper := get_proper_type(removed)
+
+	if removed_proper is UnionType {
+		mut current := declared
+		for item in removed_proper.items {
+			current = remove_type_from_declared_type(current, item)
+			if get_proper_type(current) is UninhabitedType {
+				return current
+			}
+		}
+		return current
+	}
+
+	if declared_proper is UnionType {
+		mut remaining := []MypyTypeNode{}
+		for item in declared_proper.items {
+			if !is_subtype_simple(get_proper_type(item), removed_proper) {
+				remaining << item
+			}
+		}
+		if remaining.len == 0 {
+			return UninhabitedType{}
+		}
+		if remaining.len == 1 {
+			return remaining[0]
+		}
+		return make_simplified_union(remaining, false)
+	}
+
+	if is_subtype_simple(declared_proper, removed_proper) {
+		return UninhabitedType{}
+	}
+	return declared
 }
 
 // push_type_map adds type map
@@ -1042,6 +1249,12 @@ pub fn (mut tc TypeChecker) visit_operator_assignment_stmt(mut o OperatorAssignm
 }
 
 pub fn (mut tc TypeChecker) visit_assert_stmt(mut o AssertStmt) !AnyNode {
+	tc.expr_checker.accept(o.expr)
+	type_map, _ := tc.find_isinstance_check(o.expr)
+	tc.push_type_map(type_map)
+	if msg := o.msg {
+		tc.expr_checker.accept(msg)
+	}
 	return ''
 }
 
