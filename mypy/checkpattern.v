@@ -36,6 +36,10 @@ pub fn (mut pc PatternChecker) accept(p PatternNode, type_context MypyTypeNode) 
 	return res
 }
 
+fn (pc PatternChecker) require_type_checker() &TypeChecker {
+	return pc.chk or { panic('PatternChecker requires an initialized TypeChecker; this usually means pattern checking started before pc.chk was set') }
+}
+
 pub fn (mut pc PatternChecker) visit_as_pattern(p AsPattern) PatternTypeResult {
 	// as-pattern can be variable binding or wildcard (if pattern=none, name=none)
 	mut res := PatternTypeResult{
@@ -66,7 +70,7 @@ pub fn (mut pc PatternChecker) visit_or_pattern(p OrPattern) PatternTypeResult {
 
 pub fn (mut pc PatternChecker) visit_value_pattern(p ValuePattern) PatternTypeResult {
 	// Value must match expected type. We just check the right side.
-	(pc.chk or { panic('chk') }).expr_checker.accept(p.expr)
+	pc.require_type_checker().expr_checker.accept(p.expr)
 	return PatternTypeResult{
 		type_: pc.type_context.last()
 	}
