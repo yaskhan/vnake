@@ -346,12 +346,12 @@ fn (mut sfc StringFormatterChecker) check_simple_str_interpolation(specifiers []
 				_ = (sfc.chk or { panic('chk') }).check_subtype(repl_type, sfc.named_type('builtins.int'), repl.get_context(),
 					'Argument must be int for format specifier')
 			} else if spec.conv_type in ['e', 'E', 'f', 'F', 'g', 'G'] {
-				_ = (sfc.chk or { panic('chk') }).check_subtype(repl_type, sfc.named_type('builtins.float'),
+				_ = (sfc.chk or { panic('checkstrformat: expr checker is nil') }).check_subtype(repl_type, sfc.named_type('builtins.float'),
 					repl.get_context(), 'Argument must be float for format specifier')
 			}
 		}
 	} else if specifiers.filter(it.conv_type != '%').len > 1 {
-		(sfc.msg or { panic('msg') }).fail('Wrong number of arguments for format string', expr_ctx, false, false,
+		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Wrong number of arguments for format string', expr_ctx, false, false,
 			none)
 	}
 }
@@ -373,16 +373,16 @@ fn (mut sfc StringFormatterChecker) check_mapping_str_interpolation(specifiers [
 					}
 				}
 				if !found {
-					(sfc.msg or { panic('msg') }).fail('Key "${key}" not found in format arguments', expr_ctx,
+					(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Key "${key}" not found in format arguments', expr_ctx,
 						false, false, none)
 				}
 			}
 		}
 		return
 	}
-	repl_type := (sfc.chk or { panic('chk') }).expr_checker.accept(replacements)
+	repl_type := (sfc.chk or { panic('checkstrformat: expr checker is nil') }).expr_checker.accept(replacements)
 	if !has_type_component(repl_type, 'builtins.dict') {
-		(sfc.msg or { panic('msg') }).fail('Expected mapping for format string with keys', replacements.get_context(),
+		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Expected mapping for format string with keys', replacements.get_context(),
 			false, false, none)
 	}
 }
