@@ -679,6 +679,7 @@ pub fn (tc TypeChecker) find_isinstance_check(node Expression) (TypeMap, TypeMap
 	return TypeMap{}, TypeMap{}
 }
 
+// is_isinstance_call checks whether a call targets builtins.isinstance.
 fn (tc TypeChecker) is_isinstance_call(node CallExpr) bool {
 	return match node.callee {
 		NameExpr {
@@ -693,6 +694,7 @@ fn (tc TypeChecker) is_isinstance_call(node CallExpr) bool {
 	}
 }
 
+// lookup_narrowable_type gets the current type of an expression that can be narrowed.
 fn (tc TypeChecker) lookup_narrowable_type(expr Expression) ?MypyTypeNode {
 	if typ := tc.lookup_type_or_none(expr) {
 		return typ
@@ -725,6 +727,7 @@ fn (tc TypeChecker) lookup_narrowable_type(expr Expression) ?MypyTypeNode {
 	}
 }
 
+// resolve_isinstance_target_type resolves the target type in isinstance(expr, target).
 fn (tc TypeChecker) resolve_isinstance_target_type(expr Expression) ?MypyTypeNode {
 	match expr {
 		NameExpr {
@@ -761,6 +764,7 @@ fn (tc TypeChecker) resolve_isinstance_target_type(expr Expression) ?MypyTypeNod
 	return none
 }
 
+// resolve_isinstance_target_symbol resolves a narrowable type from a symbol reference.
 fn (tc TypeChecker) resolve_isinstance_target_symbol(sym ?SymbolNodeRef, expr Expression) ?MypyTypeNode {
 	if node := sym {
 		return match node {
@@ -791,6 +795,7 @@ fn (tc TypeChecker) resolve_isinstance_target_symbol(sym ?SymbolNodeRef, expr Ex
 	return none
 }
 
+// instance_from_type_info wraps a TypeInfo in an Instance for narrowing checks.
 fn instance_from_type_info(info TypeInfo) Instance {
 	info_ptr := &TypeInfo{
 		base:          info.base
@@ -817,6 +822,7 @@ fn instance_from_type_info(info TypeInfo) Instance {
 	}
 }
 
+// remove_type_from_declared_type removes known subtypes from a declared type.
 fn remove_type_from_declared_type(declared MypyTypeNode, removed MypyTypeNode) MypyTypeNode {
 	declared_proper := get_proper_type(declared)
 	removed_proper := get_proper_type(removed)
