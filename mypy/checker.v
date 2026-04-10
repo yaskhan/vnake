@@ -1266,17 +1266,7 @@ pub fn (mut tc TypeChecker) visit_operator_assignment_stmt(mut o OperatorAssignm
 }
 
 pub fn (mut tc TypeChecker) visit_assert_stmt(mut o AssertStmt) !AnyNode {
-	mut skip_expr_check := false
-	match o.expr {
-		CallExpr {
-			skip_expr_check = tc.is_isinstance_call(o.expr)
-		}
-		UnaryExpr {
-			skip_expr_check = o.expr.op == 'not' && o.expr.expr is CallExpr
-				&& tc.is_isinstance_call(o.expr.expr as CallExpr)
-		}
-		else {}
-	}
+	skip_expr_check := tc.is_assert_isinstance_expr(o.expr)
 	if !skip_expr_check {
 		tc.expr_checker.accept(o.expr)
 	}
@@ -1286,6 +1276,21 @@ pub fn (mut tc TypeChecker) visit_assert_stmt(mut o AssertStmt) !AnyNode {
 		tc.expr_checker.accept(msg)
 	}
 	return ''
+}
+
+fn (tc TypeChecker) is_assert_isinstance_expr(expr Expression) bool {
+	return match expr {
+		CallExpr {
+			tc.is_isinstance_call(expr)
+		}
+		UnaryExpr {
+			expr.op == 'not' && expr.expr is CallExpr
+				&& tc.is_isinstance_call(expr.expr as CallExpr)
+		}
+		else {
+			false
+		}
+	}
 }
 
 pub fn (mut tc TypeChecker) visit_raise_stmt(mut o RaiseStmt) !AnyNode {
