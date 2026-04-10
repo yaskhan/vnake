@@ -683,10 +683,10 @@ pub fn (tc TypeChecker) find_isinstance_check(node Expression) (TypeMap, TypeMap
 fn (tc TypeChecker) is_isinstance_call(node CallExpr) bool {
 	return match node.callee {
 		NameExpr {
-			node.callee.name == 'isinstance' || node.callee.fullname == 'builtins.isinstance'
+			is_isinstance_name(node.callee.name, node.callee.fullname)
 		}
 		MemberExpr {
-			node.callee.name == 'isinstance' || node.callee.fullname == 'builtins.isinstance'
+			is_isinstance_name(node.callee.name, node.callee.fullname)
 		}
 		else {
 			false
@@ -702,24 +702,10 @@ fn (tc TypeChecker) lookup_narrowable_type(expr Expression) ?MypyTypeNode {
 
 	return match expr {
 		NameExpr {
-			if sym := expr.node {
-				match sym {
-					Var { sym.type_ or { none } }
-					else { none }
-				}
-			} else {
-				none
-			}
+			lookup_symbol_declared_type(expr.node)
 		}
 		MemberExpr {
-			if sym := expr.node {
-				match sym {
-					Var { sym.type_ or { none } }
-					else { none }
-				}
-			} else {
-				none
-			}
+			lookup_symbol_declared_type(expr.node)
 		}
 		else {
 			none
@@ -759,6 +745,22 @@ fn (tc TypeChecker) resolve_isinstance_target_type(expr Expression) ?MypyTypeNod
 		proper := get_proper_type(typ)
 		if proper is TypeType {
 			return proper.item
+		}
+	}
+	return none
+}
+
+// is_isinstance_name checks whether a resolved callee name is isinstance.
+fn is_isinstance_name(name string, fullname string) bool {
+	return name == 'isinstance' || fullname == 'builtins.isinstance'
+}
+
+// lookup_symbol_declared_type gets a declared type directly from a symbol node.
+fn lookup_symbol_declared_type(sym ?SymbolNodeRef) ?MypyTypeNode {
+	if node := sym {
+		return match node {
+			Var { node.type_ or { none } }
+			else { none }
 		}
 	}
 	return none
