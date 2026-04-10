@@ -645,7 +645,10 @@ pub fn (mut tc TypeChecker) visit_pass_stmt(mut s PassStmt) !AnyNode {
 pub fn (tc TypeChecker) find_isinstance_check(node Expression) (TypeMap, TypeMap) {
 	match node {
 		CallExpr {
-			if !tc.is_isinstance_call(node) || node.args.len != 2 {
+			if !tc.is_isinstance_call(node) {
+				return TypeMap{}, TypeMap{}
+			}
+			if node.args.len != 2 {
 				return TypeMap{}, TypeMap{}
 			}
 
