@@ -5,7 +5,7 @@ import base
 import stdlib_map
 
 fn narrowed_option_attr_expr(var_name string, attr_name string) string {
-	return "((${var_name} or { panic('failed to unwrap ${var_name}.${attr_name}') }).${attr_name})"
+	return "((${var_name} or { panic('failed to unwrap ${var_name}') }).${attr_name})"
 }
 
 pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
@@ -179,7 +179,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 						'', map[string]bool{})
 					// Check if this variable was narrowed by flow analysis
 					if sanitized in eg.state.narrowed_vars {
-						return narrowed_option_attr_expr(sanitized, attr_name)
+						res = narrowed_option_attr_expr(sanitized, attr_name)
 					}
 					// No cast needed for auto-narrowed Options in V 0.5
 					return res
