@@ -4,6 +4,10 @@ import ast
 import base
 import stdlib_map
 
+fn narrowed_option_attr_expr(var_name string, attr_name string) string {
+	return "((${var_name} or { panic('failed to unwrap ${var_name}.${attr_name}') }).${attr_name})"
+}
+
 pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	// Handle module attributes
 	if node.value is ast.Name && node.value.id in eg.state.imported_modules {
@@ -175,7 +179,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 						'', map[string]bool{})
 					// Check if this variable was narrowed by flow analysis
 					if sanitized in eg.state.narrowed_vars {
-						return "((${sanitized} or { panic('failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
+						return narrowed_option_attr_expr(sanitized, attr_name)
 					}
 					// No cast needed for auto-narrowed Options in V 0.5
 					return res
@@ -197,7 +201,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
 						'', map[string]bool{})
 					if sanitized in eg.state.narrowed_vars {
-						res = "((${sanitized} or { panic('failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
+						res = narrowed_option_attr_expr(sanitized, attr_name)
 					} else {
 						res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 					}
@@ -215,7 +219,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
 					'', map[string]bool{})
 				if sanitized in eg.state.narrowed_vars {
-					res = "((${sanitized} or { panic('failed to unwrap ${sanitized}.${attr_name}') }).${attr_name})"
+					res = narrowed_option_attr_expr(sanitized, attr_name)
 				} else {
 					res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 				}
