@@ -67,20 +67,20 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 	mut obj := eg.visit(node.value)
 	mut obj_type := eg.guess_type(node.value)
-	original_obj_type := eg.guess_type_no_loc(node.value)
+	base_receiver_type := eg.guess_type_no_loc(node.value)
 	receiver_location_key := '${node.value.get_token().line}:${node.value.get_token().column}'
-	mut receiver_narrowed := eg.analyzer.location_map[receiver_location_key] or { '' }
-	if receiver_narrowed == '' && obj_type != 'Any' && obj_type != original_obj_type {
-		receiver_narrowed = obj_type
+	mut narrowed_receiver_type := eg.analyzer.location_map[receiver_location_key] or { '' }
+	if narrowed_receiver_type == '' && obj_type != 'Any' && obj_type != base_receiver_type {
+		narrowed_receiver_type = obj_type
 	}
-	if receiver_narrowed.len > 0 {
-		v_receiver_narrowed := eg.map_python_type(receiver_narrowed, false)
-		v_receiver_original := eg.map_python_type(original_obj_type, false)
-		if v_receiver_narrowed != 'Any'
-			&& (v_receiver_original == 'Any' || v_receiver_original.contains('|')
-			|| v_receiver_original.starts_with('SumType_')) {
-			obj = "(${obj} as ${v_receiver_narrowed})"
-			obj_type = receiver_narrowed
+	if narrowed_receiver_type.len > 0 {
+		mapped_narrowed_type := eg.map_python_type(narrowed_receiver_type, false)
+		mapped_base_type := eg.map_python_type(base_receiver_type, false)
+		if mapped_narrowed_type != 'Any'
+			&& (mapped_base_type == 'Any' || mapped_base_type.contains('|')
+			|| mapped_base_type.starts_with('SumType_')) {
+			obj = "(${obj} as ${mapped_narrowed_type})"
+			obj_type = narrowed_receiver_type
 		}
 	}
 	obj_base := if obj.contains('[') { obj.all_before('[') } else { obj }
