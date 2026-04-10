@@ -25,6 +25,10 @@ fn new_test_instance(fullname string) Instance {
 	}
 }
 
+fn set_root_type(mut tc TypeChecker, name string, typ MypyTypeNode) {
+	tc.type_maps[0][name] = typ
+}
+
 fn test_find_isinstance_check_narrows_union_types() {
 	mut tc := new_test_type_checker()
 	int_type := MypyTypeNode(new_test_instance('builtins.int'))
@@ -43,7 +47,7 @@ fn test_find_isinstance_check_narrows_union_types() {
 		fullname: '__main__.x'
 		node:     SymbolNodeRef(x_var)
 	}
-	tc.type_maps[0]['x'] = declared
+	set_root_type(mut tc, 'x', declared)
 
 	int_info := TypeInfo{
 		name:     'int'
@@ -89,7 +93,7 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 		fullname: '__main__.x'
 		node:     SymbolNodeRef(x_var)
 	}
-	tc.type_maps[0]['x'] = declared
+	set_root_type(mut tc, 'x', declared)
 
 	int_info := TypeInfo{
 		name:     'int'
