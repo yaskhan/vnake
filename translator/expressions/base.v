@@ -114,12 +114,11 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 
 	sanitized := base.sanitize_name(name, false, map[string]bool{}, '', map[string]bool{})
 	
-	// Force unwrap if variable was narrowed and we are in LOAD context
-	if eg.state.narrowed_vars[sanitized] && !eg.state.in_assignment_lhs {
-		v_type := eg.guess_type(node)
-		if v_type.starts_with('?') {
-			// For interface/sum type receivers we must unwrap
-			return '(${sanitized} or { panic("narrowed var is none") })'
+	v_type := eg.guess_type(node)
+	if v_type.starts_with('?') && !eg.state.in_assignment_lhs {
+		// Unwrap if explicitly narrowed OR if the target context requires non-optional type
+		if eg.state.narrowed_vars[sanitized] || (!eg.target_type.starts_with('?') && eg.target_type != 'Any' && eg.target_type != '') {
+			return "(${sanitized} or { panic('narrowed var is none') })"
 		}
 	}
 

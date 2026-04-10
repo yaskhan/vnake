@@ -916,9 +916,9 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 			false
 		}
 		if is_string_constant || eg.guess_type(arg0) == 'string' {
-			return '(${args[0]})[0].u32()'
+			return 'i64(u32((${args[0]})[0]))'
 		}
-		return 'u32(${args[0]})'
+		return 'i64(u32(${args[0]}))'
 	}
 	
 	if func_name_str == 'chr' && args.len == 1 {

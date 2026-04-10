@@ -44,8 +44,10 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 			}
 			if env.analyzer.mypy_store.collected_types.len > 0 {
 				if loc_map := env.analyzer.mypy_store.collected_types[key] {
-					for loc, typ in loc_map {
-						real_type = analyzer.map_python_type_to_v(typ)
+					for _, typ in loc_map {
+						t_v := analyzer.map_python_type_to_v(typ)
+						eprintln('DEBUG: map_python_type MYPY lookup struct=${struct_name} field=${field_name} key=${key} typ=${typ} -> ${t_v}')
+						real_type = t_v
 						break
 					}
 					if real_type != 'Any' { break }
@@ -103,14 +105,14 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 	mut final_v := mapped
 	pure_v := final_v.trim_left('?&')
 	
-	if is_v_class_type(pure_v) && !pure_v.starts_with('&') && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') {
+	if env.state.is_v_class_type(pure_v) && !pure_v.starts_with('&') && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') {
 		if (pure_v in env.state.known_interfaces || pure_v == 'TaskState' || pure_v == 'Task' || pure_v == 'TaskRec') {
 			return if final_v.starts_with('?') { '?' + pure_v } else { pure_v }
 		}
 		if final_v.starts_with('?') {
 			final_v = '?&' + pure_v
 		} else {
-			final_v = '&' + final_v
+			final_v = '&' + pure_v
 		}
 	}
 	if struct_name == 'Task' && field_name == 'link' {
@@ -149,11 +151,3 @@ fn get_generics_with_variance_str(env &ClassVisitEnv) string {
 		env.state.current_class_generic_map, env.state.generic_variance, env.state.generic_defaults)
 }
 
-fn is_v_class_type(v_type string) bool {
-	clean := v_type.trim_left('?&')
-	if clean.len == 0 { return false }
-	if clean.starts_with('SumType_') || clean.starts_with('LiteralEnum_') || clean.starts_with('TupleStruct_') {
-		return false
-	}
-	return clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self', 'NoneType']
-}

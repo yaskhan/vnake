@@ -132,11 +132,6 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 					is_interface_impl = true
 				}
 			}
-			mut mut_pfx := if dec_info.is_setter || is_mutated || is_interface_impl {
-				'mut '
-			} else {
-				''
-			}
 			gen_s := if env.state.current_class_generics.len > 0 {
 				mut v_gens := []string{}
 				for g in env.state.current_class_generics {
@@ -146,7 +141,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			} else {
 				''
 			}
-			receiver_str = '(${mut_pfx}${args[0].arg} ${struct_name}${gen_s}) '
+			receiver_str = '(${args[0].arg} &${struct_name}${gen_s}) '
 			receiver_name = args[0].arg
 		}
 		args = args[1..].clone()
@@ -305,18 +300,6 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			arg_type = '?${arg_type}'
 		}
 
-		a_clean := arg_type.trim_left('?!')
-		if (a_clean.len > 0 && a_clean[0].is_capital()
-			&& a_clean !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'NoneType']
-			&& !a_clean.starts_with('LiteralEnum_') && !a_clean.starts_with('SumType_')
-			&& !a_clean.starts_with('TupleStruct_')
-			&& a_clean !in v_gens_to_declare) && !arg_type.starts_with('&') {
-			if arg_type.starts_with('?') {
-				arg_type = '?&' + arg_type[1..]
-			} else {
-				arg_type = '&' + arg_type
-			}
-		}
 
 		// If after all checks still have None default, ensure type is ?Any (not ?int)
 		if has_none_default && uses_default_type && arg_type == 'int' {
@@ -432,7 +415,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			&& r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'NoneType']
 			&& !r_clean_ptr.starts_with('LiteralEnum_') && !r_clean_ptr.starts_with('SumType_')
 			&& !r_clean_ptr.starts_with('TupleStruct_')
-			&& r_clean_ptr !in v_gens_to_declare && !ret_type.starts_with('&') {
+			&& r_clean_ptr !in v_gens_to_declare && r_clean_ptr !in env.state.known_interfaces && !r_clean_ptr.ends_with('Protocol') && r_clean_ptr != 'TaskState' && !ret_type.starts_with('&') {
 			if ret_type.starts_with('?') {
 				ret_type = '?&' + ret_type[1..]
 			} else {
@@ -598,13 +581,34 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	prev_in_init := env.state.in_init
 	if is_init {
 		env.state.in_init = true
-		env.emit_fn(env.state.indent() + 'mut self := ${ret_type}{}')
+		mut init_fields := []string{}
+		for stmt in node.body {
+			if stmt is ast.Assign {
+				for target in stmt.targets {
+					if target is ast.Attribute && target.value is ast.Name && (target.value as ast.Name).id == receiver_name {
+						attr := base.sanitize_name(target.attr, false, map[string]bool{}, "", map[string]bool{})
+						val := env.visit_expr_fn(stmt.value)
+						init_fields << '${attr}: ${val}'
+					}
+				}
+			} else if stmt is ast.AnnAssign {
+				if stmt.target is ast.Attribute && stmt.target.value is ast.Name && (stmt.target.value as ast.Name).id == receiver_name {
+					attr := base.sanitize_name(stmt.target.attr, false, map[string]bool{}, "", map[string]bool{})
+					if dv := stmt.value {
+						val := env.visit_expr_fn(dv)
+						init_fields << '${attr}: ${val}'
+					}
+				}
+			}
+		}
+		mut struct_init := if init_fields.len > 0 { '{${init_fields.join(", ")}}' } else { '{}' }
+		env.emit_fn(env.state.indent() + 'mut self := ${ret_type}${struct_init}')
 	}
 
 	prev_ret_type_state := env.state.current_function_return_type
 	env.state.current_function_return_type = ret_type
 
-	env.push_scope_fn()
+	env.push_scope_fn(node.name)
 	if is_method && receiver_name.len > 0 {
 		env.analyzer.type_map[receiver_name] = struct_name
 	}

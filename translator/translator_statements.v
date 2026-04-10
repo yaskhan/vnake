@@ -231,6 +231,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	if node.targets.len == 0 {
 		return
 	}
+	first_target := node.targets[0]
+	if first_target is ast.Name {
+		eprintln("DEBUG: visit_assign TOP id=${(first_target as ast.Name).id}")
+	}
 	if node.targets.len > 1 {
 		t.emit_indented('//##LLM@@ Multiple assignment not fully lowered.')
 		t.emit_indented(t.visit_expr(node.value))
@@ -373,8 +377,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	} else {
 		mut target_type := ''
 		if target is ast.Name {
-			if target.id in t.analyzer.type_map {
-				target_type = t.analyzer.type_map[target.id]
+			if res := t.analyzer.get_type(target.id) {
+				target_type = res
 			}
 		} else {
 			target_type = t.guess_type(target)
@@ -388,6 +392,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			}
 		}
+		eprintln("DEBUG: visit_assign set target_type=${target_type} for ${id}")
 		eg.target_type = target_type
 		t.state.current_assignment_type = target_type
 		rhs = eg.visit(node.value)
@@ -484,36 +489,27 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			rhs_text = '(${rhs} as ${t.state.current_class}Rec)'
 		}
 		mut lhs_t := t.guess_type(target)
-		if id in t.analyzer.raw_type_map {
+		eprintln('DEBUG: visit_assign id=${id} lhs_t=${lhs_t} loc=${target.get_token().line}:${target.get_token().column}')
+		if id.len > 0 && id in t.analyzer.raw_type_map {
 			lhs_t = t.analyzer.raw_type_map[id]
 		}
 		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
 		
-		if t.state.indent_level == 0 && (id.is_upper() || id in t.state.global_vars) && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
-			mut v_id := if id in t.state.global_vars { id.to_lower() } else { base.to_snake_case(id).to_lower() }
-			// Check if the resulting name conflicts with V reserved keywords
-			if base.is_v_reserved_keyword(v_id) {
-				v_id = 'g_${v_id}'
-			}
-			if v_id != id {
-				t.state.name_remap[id] = v_id
-			}
+		if t.state.indent_level == 0 && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
+			mut v_id := base.to_snake_case(id).to_lower()
+			if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
+			if v_id != id { t.state.name_remap[id] = v_id }
 			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
 			t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 			t.declare_local(lhs)
 			return
 		}
 
-		if t.state.indent_level == 0 && ((id.is_upper() && id.len > 1) || id in t.state.global_vars) {
-			mut v_id := if id in t.state.global_vars { id.to_lower() } else { base.to_snake_case(id).to_lower() }
-			// Check if the resulting name conflicts with V reserved keywords
-			if base.is_v_reserved_keyword(v_id) {
-				v_id = 'g_${v_id}'
-			}
-			if v_id != id {
-				t.state.name_remap[id] = v_id
-			}
-			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
+		eprintln('DEBUG: visit_assign id=${id} indent=${t.state.indent_level} in_globals=${id in t.state.global_vars}')
+		if id in t.state.global_vars || (t.state.indent_level == 0 && id.len > 1) {
+			mut v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
+			if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
+			if v_id != id { t.state.name_remap[id] = v_id }
 			mut v_type := v_lhs_t
 			if v_type == 'unknown' || v_type == 'Any' {
 				v_type_inferred := t.guess_type(node.value)
@@ -528,9 +524,19 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 					}
 				}
 			}
-			if v_type == 'unknown' { v_type = 'Any' }
-			t.emit_indented('__global ${v_id} ${v_type}')
-			t.emit_indented('${v_id} = ${rhs_text}')
+			if v_type == 'unknown' || v_type == 'Any' {
+				if v_id in t.state.global_var_types {
+					v_type = t.map_annotation_str(t.state.global_var_types[v_id], '', false, false, false)
+					if rhs_text == 'none' && !v_type.starts_with('?') {
+						v_type = '?' + v_type
+					}
+				} else {
+					v_type = 'Any'
+				}
+			}
+			mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
+			ve.add_global('__global ${v_id} ${v_type}')
+			t.emit_indented('unsafe { ${v_id} = ${rhs_text} }')
 			t.declare_local(lhs)
 			return
 		}
@@ -570,7 +576,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			rhs_text = 'none'
 		}
 			if v_inferred != 'Any' && v_inferred != 'int' {
-				t.analyzer.type_map[id] = v_inferred
+				t.analyzer.type_map[t.analyzer.get_qualified_name(id)] = v_inferred
 			}
 
 			// Decompose list literal for mutable locals if it has elements (for cap optimization)
@@ -598,6 +604,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			// Force explicit type cast for initial optional assignment
 			v_type_final := if is_opt_none && !v_inferred.starts_with('?') && v_inferred != 'Any' { '?' + v_inferred } else { v_inferred }
 			
+			eprintln("DEBUG: visit_assign check ${id}: id_in_mut=${id in t.mutable_locals} lhs_in_mut=${lhs in t.mutable_locals} id=${id} lhs=${lhs}")
 			if id in t.mutable_locals || lhs in t.mutable_locals || is_opt_none {
 				if v_type_final.starts_with('?') || v_type_final.contains('|') {
 					t.emit_indented('mut ${lhs} := ${v_type_final}(${rhs_text})')
@@ -734,8 +741,26 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				rhs_text = '${t.state.current_assignment_type}(none)'
 			}
 			ann_raw := t.annotation_raw_name(node.annotation)
+			
+			if id_inv in t.state.global_vars || t.state.indent_level == 0 {
+				mut v_id := base.sanitize_name(id_inv, false, map[string]bool{}, "", map[string]bool{})
+				if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
+				if v_id != id_inv { t.state.name_remap[id_inv] = v_id }
+				
+				mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
+				mut v_type := t.state.current_assignment_type
+				if (v_type == '' || v_type == 'Any') && v_id in t.state.global_var_types {
+					v_type = t.map_annotation_str(t.state.global_var_types[v_id], '', false, false, false)
+				}
+				ve.add_global('__global ${v_id} ${v_type}')
+				t.emit_indented('unsafe { ${v_id} = ${rhs_text} }')
+				t.declare_local(lhs)
+				t.state.current_assignment_type = prev_assignment_type
+				return
+			}
 			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
-				v_id := base.to_snake_case(id_inv).to_lower()
+				v_id := base.sanitize_name(id_inv, false, map[string]bool{}, "", map[string]bool{})
+				eprintln('DEBUG: visit_ann_assign Final id_inv=${id_inv} v_id=${v_id} found_in_map=${v_id in t.state.global_var_types}')
 				mut is_mutated := false
 				if m_info := t.analyzer.get_mutability(id_inv) {
 					is_mutated = m_info.is_mutated
@@ -754,7 +779,9 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				pub_prefix := if t.state.is_exported(id_inv) { 'pub ' } else { '' }
 				
 				if is_mutated || is_struct {
-					t.emit_indented('__global ${v_id} ${t.state.current_assignment_type}')
+					decl_type := t.state.global_var_types[v_id] or { t.state.current_assignment_type }
+					eprintln('DEBUG: visit_ann_assign Final EMITTING __global ${v_id} ${decl_type}')
+					t.emit_indented('__global ${v_id} ${decl_type}')
 					t.emit_indented('${v_id} = ${rhs_text}')
 				} else {
 					t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
@@ -805,16 +832,46 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 		t.state.current_assignment_type = t.map_annotation(node.annotation)
 		t.state.current_ann_raw = t.annotation_raw_name(node.annotation)
 		if node.target is ast.Name {
-			lhs := base.sanitize_name(node.target.id, false, map[string]bool{}, '', map[string]bool{})
+			id_inv := node.target.id
+			lhs := base.sanitize_name(id_inv, false, map[string]bool{}, '', map[string]bool{})
+			
+			if id_inv in t.state.global_vars || t.state.indent_level == 0 {
+				mut v_id := if id_inv in t.state.global_vars { id_inv.to_lower() } else { base.to_snake_case(id_inv).to_lower() }
+				if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
+				if v_id != id_inv { t.state.name_remap[id_inv] = v_id }
+				
+				mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
+				v_type := t.state.current_assignment_type
+				ve.add_global('__global ${v_id} ${v_type}')
+				
+				// In V, globals must be initialized.
+				default_val := base.get_v_default_value(v_type, [])
+				t.emit_indented('unsafe { ${v_id} = ${default_val} }')
+				t.declare_local(lhs)
+				t.state.current_assignment_type = prev_t
+				return
+			}
+
 			if !t.is_declared_local(lhs) {
 				v_type := t.state.current_assignment_type
 				mut zero_val := '0'
-				if v_type == 'string' { zero_val = "''" }
-				else if v_type == 'bool' { zero_val = 'false' }
-				else if v_type == 'f64' { zero_val = '0.0' }
-				else if v_type == 'Any' { zero_val = 'none' }
-				else { zero_val = '0' }
-				t.emit_indented('${lhs} := ${zero_val}')
+				if v_type == 'string' {
+					zero_val = "''"
+				} else if v_type == 'bool' {
+					zero_val = 'false'
+				} else if v_type == 'f64' {
+					zero_val = '0.0'
+				} else if v_type == 'Any' {
+					zero_val = 'none'
+				} else {
+					zero_val = '0'
+				}
+
+				mut mut_prefix := ''
+				if lhs in t.mutable_locals || id_inv in t.mutable_locals {
+					mut_prefix = 'mut '
+				}
+				t.emit_indented('${mut_prefix}${lhs} := ${zero_val}')
 				t.declare_local(lhs)
 			}
 		}

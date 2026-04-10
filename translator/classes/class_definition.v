@@ -30,6 +30,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 
 	h.class_stack << struct_name
 	env.state.scope_names << node.name
+	env.analyzer.push_scope(node.name)
 	prev_class := env.state.current_class
 	prev_generics := env.state.current_class_generics.clone()
 	prev_generic_map := env.state.current_class_generic_map.clone()
@@ -479,6 +480,29 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		for method in methods {
 			env.visit_stmt_fn(method)
 		}
+
+		if struct_name_for_body.ends_with('_Impl') {
+			for f in fields {
+				if !f.name.starts_with('_') && !f.name.ends_with('_Impl') {
+					// Avoid creating getters for fields that already have matching methods
+					mut already_has_method := false
+					eprintln("DEBUG: checking field ${f.name} against methods: ${methods.map(it.name)}")
+					for m in methods {
+						if base.to_snake_case(m.name).to_lower() == f.name {
+							already_has_method = true
+							break
+						}
+					}
+					if already_has_method {
+						eprintln("DEBUG: struct ${struct_name_for_body} already has method ${f.name} (from ${methods.map(it.name)}), skipping getter")
+					}
+					if !already_has_method {
+						mut f_type := f.def.split(' ').last()
+						env.emit_function_fn('fn (self &${struct_name_for_body}${generics_str}) ${f.name}() ${f_type} { return self.${f.name} }')
+					}
+				}
+			}
+		}
 	}
 	if py_generics.len > 0 {
 		mut gen_list := []string{}
@@ -493,6 +517,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		}
 		if env.state.scope_names.len > 0 {
 			env.state.scope_names = env.state.scope_names[..env.state.scope_names.len - 1]
+			env.analyzer.pop_scope()
 		}
 		env.state.current_class = prev_class
 		env.state.current_class_generics = prev_generics

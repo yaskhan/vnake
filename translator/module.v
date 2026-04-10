@@ -13,6 +13,7 @@ pub mut:
 	init_statements  []string
 	main_statements  []string
 	constants        []string
+	globals          []string
 }
 
 pub fn new_module_emitter() ModuleEmitter {
@@ -24,6 +25,7 @@ pub fn new_module_emitter() ModuleEmitter {
 		init_statements:  []string{}
 		main_statements:  []string{}
 		constants:        []string{}
+		globals:          []string{}
 	}
 }
 
@@ -54,6 +56,10 @@ pub fn (mut e ModuleEmitter) add_main_statement(code string) {
 pub fn (mut e ModuleEmitter) add_constant(code string) {
 	e.constants << code
 }
+
+pub fn (mut e ModuleEmitter) add_global(code string) {
+	e.globals << code
+}
 pub fn (mut e ModuleEmitter) add_helper_import(name string) {
 	e.imports[name] = true
 }
@@ -75,6 +81,10 @@ pub fn (e &ModuleEmitter) emit() string {
 
 	if e.constants.len > 0 {
 		parts << e.constants.join('\n')
+	}
+
+	if e.globals.len > 0 {
+		parts << '// To compile with globals, use: v -enable-globals .\n' + e.globals.join('\n')
 	}
 
 	if e.helper_structs.len > 0 {
@@ -115,7 +125,8 @@ pub mut:
 	state         &base.TranslatorState
 	emitter       ModuleEmitter
 	coroutine_handler analyzer.CoroutineHandler
-	visit_stmt_fn fn (ast.Statement) = noop_visit_stmt
+	analyzer          &analyzer.Analyzer
+	visit_stmt_fn     fn (ast.Statement) = noop_visit_stmt
 	source_mapping bool
 	strict_exports bool
 	has_module_all bool
@@ -123,12 +134,14 @@ pub mut:
 
 pub fn new_module_translator(
 	mut state &base.TranslatorState,
+	type_analyzer &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 ) &ModuleTranslator {
 	mut m := &ModuleTranslator{
 		state:             state
 		emitter:           new_module_emitter()
 		coroutine_handler: analyzer.new_coroutine_handler()
+		analyzer:          type_analyzer
 		visit_stmt_fn:     visit_stmt_fn
 		has_module_all:    false
 	}
@@ -140,11 +153,12 @@ pub fn new_module_translator(
 
 pub fn new_module_translator_with_flags(
 	mut state &base.TranslatorState,
+	type_analyzer &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 	source_mapping bool,
 	strict_exports bool,
 ) &ModuleTranslator {
-	mut mt := new_module_translator(mut state, visit_stmt_fn)
+	mut mt := new_module_translator(mut state, type_analyzer, visit_stmt_fn)
 	mt.source_mapping = source_mapping
 	mt.strict_exports = strict_exports
 	return mt
@@ -507,6 +521,41 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 	for name, _ in globals {
 		eprintln('DEBUG: scan_module_symbols FOUND GLOBAL: ${name}')
 		m.state.global_vars[name] = true
+	}
+
+	// Mark top-level assignments as globals IF they are mutated OR not evaluable
+	for stmt in node.body {
+		if stmt is ast.Assign {
+			for target in stmt.targets {
+				mut names := map[string]bool{}
+				m.collect_names_from_expr(target, mut names)
+				for name, _ in names {
+					if name == '__all__' { continue }
+					mut is_mutated := false
+					m_info := m.analyzer.get_mutability(name) or { analyzer.MutabilityInfo{} }
+					if m_info.is_mutated {
+						is_mutated = true
+					}
+					if is_mutated || !base.is_compile_time_evaluable(stmt.value) {
+						m.state.global_vars[name] = true
+					}
+				}
+			}
+		} else if stmt is ast.AnnAssign {
+			mut names := map[string]bool{}
+			m.collect_names_from_expr(stmt.target, mut names)
+			for name, _ in names {
+				mut is_mutated := false
+				m_info := m.analyzer.get_mutability(name) or { analyzer.MutabilityInfo{} }
+				if m_info.is_mutated {
+					is_mutated = true
+				}
+				// Annotated assignments are often intended to be globals
+				if is_mutated || (stmt.value != none && !base.is_compile_time_evaluable(stmt.value or { panic('unreachable') })) || stmt.value == none {
+					m.state.global_vars[name] = true
+				}
+			}
+		}
 	}
 }
 
@@ -1586,6 +1635,10 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 				m.emitter.add_helper_struct(s)
 			}
 			ve.structs.clear()
+			for g in ve.globals {
+				m.emitter.add_global(g)
+			}
+			ve.globals.clear()
 		} else {
 			m.visit_stmt_fn(stmt)
 		}
@@ -1599,8 +1652,10 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 				m.emitter.add_helper_function(line)
 			} else if stmt is ast.ClassDef {
 				m.emitter.add_helper_struct(line) // For now, handle as block
-			} else if line.trim_space().starts_with('const ') || line.trim_space().starts_with('pub const ') || line.trim_space().contains('__global ') {
+			} else if line.trim_space().starts_with('const ') || line.trim_space().starts_with('pub const ') {
 				m.emitter.add_constant(line.trim_space())
+			} else if line.trim_space().contains('__global ') {
+				m.emitter.add_global(line.trim_space())
 			} else {
 				m.emitter.add_init_statement(line.trim_space())
 			}

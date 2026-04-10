@@ -149,7 +149,11 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 	}
 
-	mut res := '${obj}.${attr_name}'
+	mut res := "${obj}.${attr_name}"
+	obj_type_name := obj_type.trim_left('?&').all_before('[')
+	if obj_type_name in eg.state.known_interfaces {
+		res = "${obj}.${attr_name}()"
+	}
 
 	obj_name := eg.analyzer.render_expr(node.value)
 	full_name := '${obj_name}.${node.attr}'
@@ -171,6 +175,23 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	}
 
 	mut current := v_attr_base
+	if eg.state.in_assignment_lhs {
+		if attr_name == 'data' {
+			eprintln("DEBUG: visit_attribute LHS attr=${attr_name} obj_type=${obj_type}")
+		}
+		if obj_type.starts_with('?') {
+			name_node := node.value
+			if name_node is ast.Name {
+				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
+				if sanitized in eg.state.narrowed_vars {
+					return res
+				}
+			}
+			return "(${obj} or { panic('unwrap failed for assignment to ${attr_name}') }).${attr_name}"
+		}
+		return res
+	}
+
 	if narrowed := eg.analyzer.location_map[loc_key] {
 		current = eg.map_python_type(narrowed, true)
 	} else if inferred := eg.analyzer.get_type(full_name) {
@@ -179,6 +200,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 	}
 
+	eprintln("DEBUG: visit_attribute attr=${attr_name} target_type=${eg.target_type} orig=${original_type}")
 	if current != 'Any' {
 		mut should_cast := original_type.contains('|') || original_type == 'Any'
 		if !should_cast && (eg.state.current_file_name.contains('narrowing')
@@ -202,13 +224,13 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 				} else {
 					res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
 				}
-			} else {
-				res = '(${res} as ${current})'
+			} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+				res = "(${res} as ${current})"
 			}
 		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
 			// Auto-unwrap Option if we are accessing a field and it's not a local variable auto-narrowed by V
 			// or if the variable was explicitly narrowed
-			if node.value !is ast.Name {
+			if node.value !is ast.Name && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
 				res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 			} else {
 				// Check if narrowed and unwrap the receiver explicitly
@@ -218,7 +240,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 						'', map[string]bool{})
 					if sanitized in eg.state.narrowed_vars {
 						res = narrowed_option_attr_expr(sanitized, attr_name)
-					} else {
+					} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
 						res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 					}
 				}
@@ -226,7 +248,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 	} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
 		// For non-local accesses with optional types
-		if node.value !is ast.Name {
+		if node.value !is ast.Name && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
 			res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 		} else {
 			// Check if narrowed and unwrap the receiver explicitly
@@ -236,7 +258,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 					'', map[string]bool{})
 				if sanitized in eg.state.narrowed_vars {
 					res = narrowed_option_attr_expr(sanitized, attr_name)
-				} else {
+				} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
 					res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 				}
 			}

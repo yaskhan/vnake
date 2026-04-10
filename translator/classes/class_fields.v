@@ -200,7 +200,10 @@ fn (h ClassFieldsHandler) is_field_mutated(struct_name string, field_name string
 fn (h ClassFieldsHandler) get_field_def_info(name string, field_type string, struct_name string, default_val string, orig_name string, mut env ClassVisitEnv) FieldDefInfo {
 	is_mutated := h.is_field_mutated(struct_name, name, orig_name, &env)
 	normalized_type := h.normalize_field_type(field_type)
-	mut def := '    ${name} ${normalized_type}'
+	// Add & to class types for fields, but not for interfaces
+	mut final_type := normalized_type
+	clean := final_type.trim_left('?!')
+	mut def := '    ${name} ${final_type}'
 	if default_val.len > 0 && !h.should_strip_init(field_type, default_val) {
 		def += ' = ${default_val}'
 	}
@@ -349,7 +352,7 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			}
 			if val := value_expr {
 				if val is ast.Constant && val.value == 'None' {
-					if f_type.len > 0 && !f_type.starts_with('?') && f_type != 'Any' {
+					if f_type.len > 0 && !f_type.starts_with('?') && f_type != 'Any' && f_type != 'none' && f_type != 'NoneType' {
 						f_type = '?${f_type}'
 					}
 				}

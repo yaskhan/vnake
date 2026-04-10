@@ -8,6 +8,7 @@ pub type TypeGuessingContext = models.TypeGuessingContext
 
 // guess_type infers a best-effort V type for an Expression node.
 pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location bool) string {
+	eprintln('DEBUG: guess_type node=${node.str().limit(20)} loc=${node.get_token().line}:${node.get_token().column}')
 	if use_location {
 		loc_key := '${node.get_token().line}:${node.get_token().column}'
 		if loc_key in ctx.location_map {
@@ -19,7 +20,10 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		if ctx.analyzer != unsafe { nil } {
 			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
 			if mypy_type := a.get_mypy_type(node.str(), loc_key) {
-				return analyzer.map_python_type_to_v(mypy_type)
+				res := analyzer.map_python_type_to_v(mypy_type)
+				if res != 'Any' && res != 'unknown' {
+					return res
+				}
 			}
 		}
 	}
@@ -128,8 +132,10 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 	}
 	if node.func is ast.Name {
 		fid := node.func.id
+		eprintln('DEBUG: guess_type_call fid=${fid}')
 		if fid in ctx.defined_classes {
-			return fid
+			eprintln('DEBUG: guess_type_call FOUND CLASS ${fid}')
+			return '&' + fid
 		}
 		if ctx.coroutine_handler != unsafe { nil } {
 			ch := unsafe { &analyzer.CoroutineHandler(ctx.coroutine_handler) }
@@ -139,6 +145,10 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 			}
 		}
 		if fid.len > 0 && fid[0].is_capital() {
+			eprintln('DEBUG: guess_type_call fid=${fid} in defined_classes=${fid in ctx.defined_classes}')
+			if fid in ctx.defined_classes {
+				return '&' + fid
+			}
 			current := ctx.type_map[fid] or { 'Any' }
 			if current == '[]Any' {
 				return '[]Any'
@@ -148,7 +158,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 			}
 		}
 		if fid.starts_with('new_') {
-			return sanitize_name(fid[4..], true, map[string]bool{}, '', map[string]bool{})
+			return '&' + sanitize_name(fid[4..], true, map[string]bool{}, '', map[string]bool{})
 		}
 		if fid == 'str' {
 			if node.args.len > 0 && is_literal_string_expr(node.args[0], ctx) {
@@ -209,7 +219,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		if fid in ['any', 'all', 'py_any', 'py_all'] {
 			return 'bool'
 		}
-		if fid == 'py_range' {
+		if fid in ['range', 'py_range'] {
 			return '[]int'
 		}
 		if fid in ['py_sorted', 'py_reversed'] {
@@ -260,9 +270,13 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		rec_type := guess_type(f.value, ctx, false)
 		if rec_type != 'Any' {
 			pure_rec := rec_type.trim_left('?&')
-			attr_name := pure_rec + '.' + f.attr
+			mut attr_name := pure_rec + '.' + (f.attr.to_lower()) // Simplistic
+			// Re-sanitize to be sure
+			attr_name = pure_rec + '.' + base.to_snake_case(f.attr).to_lower()
+			eprintln('DEBUG: guess_type_attribute LOOKING UP rec_type=${rec_type} pure_rec=${pure_rec} attr=${f.attr} attr_name=${attr_name}')
 			if attr_name in ctx.type_map {
 				res := ctx.type_map[attr_name]
+				eprintln('DEBUG: guess_type_attribute attr_name=${attr_name} res=${res}')
 				if res.starts_with('fn (') {
 					return res.all_after_last(") ").trim_space()
 				}
@@ -412,6 +426,9 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 		}
 	}
 	actual_name := ctx.name_remap[node.id] or { node.id }
+	if node.id == 't' {
+		eprintln('DEBUG: guess_type_name node.id=t actual_name=${actual_name} in_type_map=${node.id in ctx.type_map} type=${ctx.type_map[node.id]}')
+	}
 	if actual_name.starts_with('(') && actual_name.contains(' as ') {
 		return actual_name.all_after(' as ').all_before(')').trim_space()
 	}
@@ -432,6 +449,14 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 	}
 	if node.id in ctx.known_v_types {
 		return ctx.known_v_types[node.id]
+	}
+
+	if ctx.analyzer != unsafe { nil } {
+		a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
+		res := a.get_type(node.id) or { 'Any' }
+		if res != 'Any' {
+			return res
+		}
 	}
 
 	if node.id in ctx.type_map {
@@ -498,7 +523,12 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 	val_type := guess_type(node.value, ctx, false)
 	base_type := val_type.trim_left('?&')
 	if base_type != 'Any' && base_type != 'int' {
-		attr_name := '${base_type}.${node.attr}'
+		mut attr_name := '${base_type}.${node.attr}'
+		if attr_name in ctx.type_map {
+			return ctx.type_map[attr_name]
+		}
+		// Try sanitized name
+		attr_name = '${base_type}.${base.to_snake_case(node.attr).to_lower()}'
 		if attr_name in ctx.type_map {
 			return ctx.type_map[attr_name]
 		}

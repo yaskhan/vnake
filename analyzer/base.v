@@ -98,11 +98,19 @@ pub fn (mut t TypeInferenceBase) set_type(name string, typ string) {
 }
 
 pub fn (t &TypeInferenceBase) get_type(name string) string {
-	if name in t.type_map { return t.type_map[name] }
+	if name in t.type_map { 
+		res := t.type_map[name]
+		eprintln('DEBUG: analyzer.get_type ${name} = ${res}')
+		return res 
+	}
 	if !name.contains('.') && t.scope_names.len > 0 {
 		for i := t.scope_names.len - 1; i >= 0; i-- {
 			qual := t.scope_names[..i+1].join('.') + '.' + name
-			if qual in t.type_map { return t.type_map[qual] }
+			if qual in t.type_map { 
+				res := t.type_map[qual]
+				eprintln('DEBUG: analyzer.get_type scoped(${name}) ${qual} = ${res}')
+				return res 
+			}
 		}
 	}
 	return 'Any'
@@ -121,6 +129,7 @@ pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
 }
 
 pub fn (mut t TypeInferenceBase) add_class_to_hierarchy(class_name string, bases []string) {
+	eprintln('DEBUG: TypeInferenceBase.add_class_to_hierarchy name=${class_name}')
 	t.class_hierarchy[class_name] = bases
 	t.defined_classes_cache[class_name] = map[string]bool{}
 }

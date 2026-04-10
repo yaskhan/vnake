@@ -29,6 +29,7 @@ pub fn new_mypy_plugin_store() MypyPluginStore {
 }
 
 pub fn (mut s MypyPluginStore) collect_type(name string, loc string, typ string) {
+	eprintln('DEBUG: collect_type name=${name} loc=${loc} typ=${typ}')
 	if name !in s.collected_types {
 		s.collected_types[name] = map[string]string{}
 	}
@@ -514,8 +515,10 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 	mut a := new_mypy_plugin_analyzer()
 
 	// Bulk import persistent types
+	eprintln('DEBUG: persistent_type_map len=${tc.persistent_type_map.len}')
 	for pkey, t in tc.persistent_type_map {
 		// pkey is "line:col:expr_str"
+		// eprintln('DEBUG: pkey=${pkey} t=${t.type_str()}')
 		parts := pkey.split(':')
 		if parts.len >= 3 {
 			loc := '${parts[0]}:${parts[1]}'

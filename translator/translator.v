@@ -95,19 +95,24 @@ fn (mut t Translator) emit_tail(line string) {
 	t.state.tail << line
 }
 
-fn (mut t Translator) push_scope() {
+fn (mut t Translator) push_scope(name string) {
 	t.state.scope_stack << map[string]bool{}
+	t.analyzer.push_scope(name)
 }
 
 fn (mut t Translator) pop_scope() {
 	if t.state.scope_stack.len > 0 {
 		t.state.scope_stack.delete_last()
+		t.analyzer.pop_scope()
 	}
 }
 
 fn (mut t Translator) declare_local(name string) {
 	if t.state.scope_stack.len == 0 {
 		return
+	}
+	if name == 'dest' {
+		eprintln("DEBUG: declare_local ${name} at stack=${t.state.scope_stack.len}")
 	}
 	mut scope := t.state.scope_stack.pop()
 	scope[name] = true
@@ -136,7 +141,9 @@ fn (mut t Translator) guess_type(node ast.Expression) string {
 
 pub fn (mut t Translator) map_annotation(node ?ast.Expression) string {
 	res := if n := node {
-		t.map_annotation_str(t.analyzer.render_expr(n), t.state.current_class, false, true, true)
+		rendered := t.analyzer.render_expr(n)
+		eprintln('DEBUG: map_annotation rendered=${rendered}')
+		t.map_annotation_str(rendered, t.state.current_class, false, true, true)
 	} else {
 		'Any'
 	}
@@ -434,20 +441,20 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 	}
 	
 	mut final_res := res
-	pure_v_raw := final_res.trim_left('?&')
-	pure_v := pure_v_raw
+	pure_v := final_res.trim_left('?&')
 	is_type_var := pure_v in t.state.type_vars || pure_v in t.state.current_class_generics
-	if is_v_class_type(pure_v) && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') && !is_type_var {
-		if pure_v in t.state.known_interfaces || pure_v == 'TaskState' {
+	
+	if t.state.is_v_class_type(pure_v) && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') && !is_type_var {
+		is_interface := pure_v in t.state.known_interfaces || pure_v == 'TaskState' || pure_v.ends_with('Protocol')
+		if is_interface {
 			return if final_res.starts_with('?') { '?' + pure_v } else { pure_v }
 		}
 		if final_res.starts_with('?') {
-			if !final_res.starts_with('?&') { final_res = '?&' + pure_v }
+			final_res = '?&' + pure_v
 		} else {
-			if !final_res.starts_with('&') { final_res = '&' + pure_v }
+			final_res = '&' + pure_v
 		}
 	}
-	if final_res.contains('TaskState') { return final_res.replace('&', '') }
 	return final_res
 }
 
@@ -506,7 +513,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.coroutine_handler = analyzer.new_coroutine_handler()
 	t.state.coroutine_handler = &t.coroutine_handler
 	t.state.current_file_name = filename
+	old_mypy_store := t.analyzer.mypy_store
 	t.analyzer = analyzer.new_analyzer(map[string]string{})
+	t.analyzer.mypy_store = old_mypy_store
 	t.state.output = []string{}
 	t.state.tail = []string{}
 	t.model = .unknown
@@ -570,7 +579,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	mut assigned_locally := map[string]bool{}
 	// Reuse logic from ModuleTranslator if possible? No, Translator is in same module but ModuleTranslator is local to its file.
 	// Actually, ModuleTranslator is in same module as Translator!
-	mut mt_for_scan := new_module_translator(mut t.state, fn [mut t] (stmt ast.Statement) { t.visit_stmt(stmt) })
+	mut mt_for_scan := new_module_translator(mut t.state, t.analyzer, fn [mut t] (stmt ast.Statement) { t.visit_stmt(stmt) })
 	mt_for_scan.collect_global_refs(module_node, top_level_names, mut assigned_locally, mut globals)
 	for name, _ in globals {
 		t.state.global_vars[name] = true
@@ -578,11 +587,68 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	for k, v in t.analyzer.class_hierarchy {
 		t.state.class_hierarchy[k] = v.clone()
+		t.state.defined_classes[k] = map[string]bool{}
 		for base_name in v {
 			t.state.known_interfaces[base_name] = true
 		}
 	}
-	
+	t.state.update_class_hierarchy()
+
+	// Capture concrete types for globals if they are assigned later
+	for stmt in module_node.body {
+		if stmt is ast.Assign {
+			eprintln('DEBUG: pre-scan Assign')
+			for target in stmt.targets {
+				if target is ast.Name {
+					id := target.id
+					loc_key := '${target.get_token().line}:${target.get_token().column}'
+					mut v_type := ''
+					if mypy_t := t.analyzer.get_mypy_type(id, loc_key) {
+						v_type = analyzer.map_python_type_to_v(mypy_t)
+						eprintln('DEBUG: pre-scan GLOBAL INFERRED: ${id} [${loc_key}] -> ${mypy_t} -> ${v_type}')
+					} else {
+						eprintln('DEBUG: pre-scan GLOBAL FAILED: ${id} [${loc_key}]')
+					}
+					if v_type == '' || v_type == 'Any' {
+						v_type = t.guess_type(stmt.value)
+					}
+					eprintln('DEBUG: pre-scan id=${id} v_type=${v_type}')
+					v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
+					eprintln('DEBUG: pre-scan id=${id} v_id=${v_id} v_type=${v_type}')
+					if v_type != 'unknown' && v_type != 'Any' && v_type != 'none' {
+						t.state.global_var_types[v_id] = v_type
+					}
+				}
+			}
+		} else if stmt is ast.AnnAssign {
+			eprintln('DEBUG: pre-scan AnnAssign')
+			if stmt.target is ast.Name {
+				id := stmt.target.id
+				loc_key := '${stmt.target.get_token().line}:${stmt.target.get_token().column}'
+				mut v_type := ''
+				if mypy_t := t.analyzer.get_mypy_type(id, loc_key) {
+					v_type = analyzer.map_python_type_to_v(mypy_t)
+				}
+				if v_type == '' || v_type == 'Any' {
+					v_type = t.map_annotation(stmt.annotation)
+					eprintln('DEBUG: pre-scan AnnAssign FALLBACK map_annotation(taskWorkArea) -> ${v_type}')
+					if v_type == '' || v_type == 'Any' {
+						if val := stmt.value {
+							eprintln('DEBUG: pre-scan AnnAssign VALUE TYPE: ${val.type_name()}')
+							v_type = t.guess_type(val)
+						}
+					}
+				}
+				eprintln('DEBUG: pre-scan AnnAssign id=${id} v_type=${v_type}')
+				v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
+				eprintln('DEBUG: pre-scan AnnAssign id=${id} v_id=${v_id} v_type=${v_type}')
+				if v_type != 'unknown' && v_type != 'Any' && v_type != 'none' {
+					t.state.global_var_types[v_id] = v_type
+				}
+			}
+		}
+	}
+
 	for k, v in t.analyzer.main_to_mixins {
 		t.state.main_to_mixins[k] = v.clone()
 	}
@@ -607,13 +673,16 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	
 	for name, info in t.analyzer.mutability_map {
 		if info.is_reassigned || info.is_mutated {
+			if name == 'dest' {
+				eprintln("DEBUG: Mark ${name} as mutable in translator")
+			}
 			t.mutable_locals[name] = true
 		}
 	}
 
 	// Use structured output if requested
 	if t.state.is_full_module {
-		mut mt := new_module_translator(mut t.state, fn [mut t] (stmt ast.Statement) {
+		mut mt := new_module_translator(mut t.state, t.analyzer, fn [mut t] (stmt ast.Statement) {
 			t.visit_stmt(stmt)
 		})
 		mt.coroutine_handler = t.coroutine_handler
@@ -729,7 +798,3 @@ fn main() { richards() }
 	return res
 }
 
-fn is_v_class_type(v_type string) bool {
-	clean := v_type.trim_left('?&')
-	return clean.len > 0 && clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self', 'NoneType'] && !clean.starts_with('SumType_') && !clean.starts_with('LiteralEnum_')
-}

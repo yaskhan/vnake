@@ -50,6 +50,9 @@ pub fn (mut e VCodeEmitter) add_helper_import(module_name string) {
 }
 
 pub fn (mut e VCodeEmitter) add_global(global_def string) {
+	if global_def in e.globals {
+		return
+	}
 	e.globals << global_def
 }
 

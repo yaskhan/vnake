@@ -265,12 +265,12 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			mut sanitized_rhs := rhs
 			if sanitized_rhs.starts_with('ord(') && sanitized_rhs.ends_with(')') {
 				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
-				sanitized_rhs = '(${inner}).u32()'
+				sanitized_rhs = 'i64(u32(${inner}[0]))'
 			} else if sanitized_rhs.starts_with('chr(') && sanitized_rhs.ends_with(')') {
 				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
 				sanitized_rhs = 'rune(${inner}).str()'
 			} else if sanitized_rhs.contains('.u32(') && sanitized_rhs.contains(')') {
-				// Already converted ord call like u32('A') - needs .u32() syntax
+				// Already converted ord call like u32('A') - leave it as is
 				for i := 0; i < sanitized_rhs.len - 4; i++ {
 					if sanitized_rhs[i..i+5] == 'u32(' {
 						close_idx := -1
@@ -281,8 +281,7 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 							if depth == 0 { close_idx = j; break }
 						}
 						if close_idx > 0 {
-							inner_part := sanitized_rhs[i+5..close_idx]
-							sanitized_rhs = '${sanitized_rhs[..i]}(${inner_part}).u32()${sanitized_rhs[close_idx+1..]}'
+							// Already converted ord call like u32('A') - leave it as is
 							break
 						}
 					}

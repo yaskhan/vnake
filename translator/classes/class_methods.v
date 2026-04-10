@@ -137,9 +137,6 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 				} else if arg_name in env.analyzer.type_map {
 					a_type = map_python_type(env.analyzer.type_map[arg_name], struct_name, false, mut env, arg_name)
 				}
-			if is_v_class_type(a_type) {
-				a_type = '&${a_type}'
-			}
 			args << '${arg_name} ${a_type}'
 		}
 
@@ -149,9 +146,6 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 		} else if '${method.name}@return' in env.analyzer.type_map {
 			ret_type = map_python_type(env.analyzer.type_map['${method.name}@return'], struct_name,
 				true, mut env, '${method.name}@return')
-		}
-		if is_v_class_type(ret_type) {
-			ret_type = '&${ret_type}'
 		}
 		if m_name == 'next' && ret_type != 'void' && !ret_type.starts_with('?') {
 			ret_type = '?${ret_type}'

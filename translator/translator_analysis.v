@@ -16,6 +16,16 @@ fn (t &Translator) collect_mutable_locals_stmt(stmt ast.Statement, mut names map
 					if target.value is ast.Name {
 						names[target.value.id] = true
 					}
+				} else if target is ast.Name {
+					if target.id in names {
+						// Already saw it once, so it's mutable if reassigned
+						names[target.id] = true
+					} else {
+						// First time seeing it, might be just initialization
+						// But for now, we need a way to track "seen once" vs "reassigned".
+						// Given the current map[string]bool, we can't easily distinguish.
+						// However, if we assume any local assigned in a loop or IF is potentially mutable?
+					}
 				}
 			}
 		}

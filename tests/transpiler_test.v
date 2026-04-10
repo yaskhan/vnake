@@ -1,4 +1,4 @@
-module tests
+module main
 
 import os
 import translator
@@ -351,4 +351,7 @@ fn collect_py_files(dir string) []string {
 		}
 	}
 	return res
+}
+fn main() {
+	test_transpilation()
 }

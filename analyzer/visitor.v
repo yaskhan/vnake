@@ -13,6 +13,19 @@ pub mut:
 	guess_type_handler fn (ast.Expression, models.TypeGuessingContext) string = unsafe { nil }
 }
 
+fn sanitize_field_name(name string) string {
+	mut res := ''
+	for i := 0; i < name.len; i++ {
+		ch := name[i]
+		if ch.is_capital() && i > 0 {
+			res += '_' + ch.ascii_str().to_lower()
+		} else {
+			res += ch.ascii_str().to_lower()
+		}
+	}
+	return res
+}
+
 pub fn new_type_inference_visitor_mixin() TypeInferenceVisitorMixin {
 	return TypeInferenceVisitorMixin{
 		TypeInferenceUtilsMixin: new_type_inference_utils_mixin()
@@ -82,6 +95,9 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 			if node.func is ast.Name {
 				fid := node.func.id
 				if fid.len > 0 && fid[0].is_capital() {
+					if fid in t.class_hierarchy {
+						return '&' + fid
+					}
 					return fid
 				}
 				if fid.starts_with('new_') {
@@ -131,10 +147,10 @@ fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 	if name.len == 0 || typ.len == 0 {
 		return
 	}
-	if name == 'Task.link' {
-		eprintln('DEBUG: store_type name=${name} typ=${typ}')
+	eprintln('DEBUG: analyzer.store_type ${name} = ${typ} (in ${t.scope_names.join("/")})')
+	if t.scope_names.len == 0 {
+		t.type_map[name] = typ
 	}
-	t.type_map[name] = typ
 	if !name.contains('.') && !name.contains('@') {
 		qualified := t.get_qualified_name(name)
 		if qualified != name {
@@ -498,6 +514,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_expr(node ast.Expression) {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_module(node ast.Module) {
+	eprintln('DEBUG: visit_module body_len=${node.body.len}')
 	for stmt in node.body {
 		t.visit_stmt(stmt)
 	}
@@ -1187,8 +1204,12 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				current := t.get_type(target.id)
 				is_cap := target.id.len > 0 && target.id[0].is_capital()
 				if value_type != 'Any' {
+					mut target_type := value_type
+					if current.starts_with('?') && !target_type.starts_with('?') && current[1..] == target_type {
+						target_type = current
+					}
 					if (current in ['Any', 'none', 'int'] && value_type != 'none') || current == 'Any' || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
-						t.store_type(target.id, value_type)
+						t.store_type(target.id, target_type)
 					}
 				} else if node.value is ast.Name {
 					// Propagate type from RHS if it's a name even if value_type is Any
@@ -1211,11 +1232,16 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				if obj_key in ['Any', 'int', 'unknown'] {
 					obj_key = t.render_expr(target.value)
 				}
+				attr_name := target.attr
 				if obj_key.len > 0 {
-					full_attr := "${obj_key}.${target.attr}"
+					full_attr := "${obj_key}.${attr_name}"
 					curr_attr_type := t.get_type(full_attr)
-					if value_type != 'none' || curr_attr_type == 'Any' {
-						t.store_type(full_attr, value_type)
+					mut target_type := value_type
+					if curr_attr_type.starts_with('?') && !target_type.starts_with('?') && curr_attr_type[1..] == target_type {
+						target_type = curr_attr_type
+					}
+					if value_type != 'none' && value_type != 'Any' {
+						t.store_type(full_attr, target_type)
 					}
 				}
 				if target.value is ast.Name && target.value.id == 'self' {
@@ -1230,7 +1256,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 						}
 					}
 					
-					if value_type != 'none' {
+					if value_type != 'none' && value_type != 'Any' {
 						if cls_name.len > 0 {
 							t.type_map['${cls_name}.${target.attr}'] = value_type
 						}
@@ -1323,6 +1349,15 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 		v_type = 'string'
 	}
 	
+	mut value_type := 'Any'
+	if n_val := node.value {
+		value_type = t.guess_expr_type(n_val)
+	}
+
+	if (v_type == 'Any' || v_type == 'Final') && value_type != 'Any' {
+		v_type = value_type
+	}
+
 	if annotation_str.starts_with('Literal[') || annotation_str.starts_with('typing.Literal[') {
 		if node.target is ast.Name {
 			// Extract literal value
@@ -1351,7 +1386,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 			is_self_attr = true
 		}
 	}
-
+	
 	if target_name.len > 0 {
 		if is_self_attr {
 			t.type_map['self.${target_name}'] = v_type
@@ -1360,6 +1395,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 				s := t.scope_names[i]
 				if s.len > 0 && s[0].is_capital() {
 					t.type_map['${s}.${target_name}'] = v_type
+					eprintln('DEBUG: analyzer visit_ann_assign STORED ${s}.${target_name} = ${v_type}')
 					break
 				}
 			}

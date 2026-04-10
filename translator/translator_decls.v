@@ -11,6 +11,9 @@ fn (mut t Translator) visit_function_def(node &ast.FunctionDef) {
 	prev_func := t.current_function_name
 	t.current_function_name = node.name
 	
+	// Reset narrowed variables to avoid leakage from previous functions
+	t.state.narrowed_vars.clear()
+	
 	old_output := t.state.output
 	t.state.output = []string{}
 	
@@ -35,8 +38,8 @@ fn (mut t Translator) visit_function_def(node &ast.FunctionDef) {
 		fn [mut t] () string {
 			return t.indent()
 		},
-		fn [mut t] () {
-			t.push_scope()
+		fn [mut t] (name string) {
+			t.push_scope(name)
 		},
 		fn [mut t] () {
 			t.pop_scope()

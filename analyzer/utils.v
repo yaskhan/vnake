@@ -224,6 +224,13 @@ pub fn map_python_type_to_v(py_type string) string {
 				}
 				return 'map[string]Any'
 			}
+			if clean_type == 'Final' {
+				return 'Any'
+			}
+			if clean_type.starts_with('Final[') {
+				inner := clean_type[6..clean_type.len - 1]
+				return map_python_type_to_v(inner)
+			}
 			if clean_type.starts_with('Set[') || clean_type.starts_with('set[') {
 				inner := clean_type[4..clean_type.len - 1]
 				return 'datatypes.Set[' + map_python_type_to_v(inner) + ']'

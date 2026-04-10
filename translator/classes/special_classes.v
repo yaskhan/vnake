@@ -116,6 +116,7 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 		}
 	}
 
+	mut added_meth_names := []string{}
 	mut has_methods := false
 	for method in methods {
 		if method.name == '__init__' {
@@ -134,7 +135,6 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 		}
 
 		if !has_methods {
-			res << 'mut:'
 			has_methods = true
 		}
 
@@ -207,6 +207,26 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 			}
 		}
 		res << '    ${m_name}(${p_args.join(', ')})${ret}'
+		added_meth_names << m_name
+	}
+	
+	// Add field getters for non-private fields so they can be accessed via the interface
+	for field in fields {
+		trimmed := field.trim_space()
+		if trimmed.starts_with('pub mut:') || trimmed.starts_with('pub:') || trimmed.starts_with('mut:') || trimmed.starts_with('//') || trimmed.len == 0 {
+			continue
+		}
+		parts := trimmed.split(' ')
+		if parts.len >= 2 {
+			f_name := parts[0]
+			f_type := parts[parts.len - 1]
+			if !f_name.ends_with('_Impl') && f_name.len > 0 && f_name[0] >= 97 && f_name[0] <= 122 {
+				if f_name !in added_meth_names {
+					res << '    ${f_name}() ${f_type}'
+					added_meth_names << f_name
+				}
+			}
+		}
 	}
 	res << '}'
 	return res.join('\n')

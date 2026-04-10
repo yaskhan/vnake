@@ -443,7 +443,7 @@ pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
 		right_type := eg.guess_type(node.values[1])
 		
 		if left_type == 'bool' && right_type == 'bool' {
-			return if is_and { "(${left}) && (${right})" } else { "(${left}) || (${right})" }
+			return if is_and { "${left} && ${right}" } else { "${left} || ${right}" }
 		}
 		
 		// Use build_truthiness_for_or for proper none handling

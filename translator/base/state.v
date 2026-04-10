@@ -62,6 +62,7 @@ pub mut:
 	generated_tuple_structs      map[string]string
 	literal_enum_values          map[string]map[voidptr]string
 	global_vars                  map[string]bool
+	global_var_types             map[string]string
 	renamed_functions            map[string]string
 	name_remap                   map[string]string
 	walrus_assignments           []string
@@ -182,6 +183,7 @@ pub fn new_translator_state() &TranslatorState {
 		generated_tuple_structs:      map[string]string{}
 		literal_enum_values:          map[string]map[voidptr]string{}
 		global_vars:                  map[string]bool{}
+		global_var_types:             map[string]string{}
 		renamed_functions:            {
 			'main': 'py_main'
 		}
@@ -271,6 +273,7 @@ pub fn (mut s TranslatorState) update_class_hierarchy() {
 	}
 
 	for class_name, _ in s.defined_classes {
+		eprintln('DEBUG: state defined class: ${class_name}')
 		if class_name !in s.class_hierarchy {
 			s.class_hierarchy[class_name] = []string{}
 		}
@@ -346,6 +349,36 @@ pub fn (s &TranslatorState) collect_assigned_nodes(nodes []voidptr) map[string]b
 		}
 	}
 	return assigned
+}
+
+// is_v_class_type checks if v_type is a class type that should be passed by reference.
+// It correctly handles generic types by checking the current state.
+pub fn (s &TranslatorState) is_v_class_type(v_type string) bool {
+	clean := v_type.trim_left('?&')
+	if clean.len == 0 {
+		return false
+	}
+	if !clean[0].is_capital() {
+		return false
+	}
+	if clean in ['Any', 'LiteralString', 'Self', 'NoneType', 'TaskState'] {
+		return false
+	}
+	if clean.starts_with('SumType_') || clean.starts_with('LiteralEnum_') || clean.starts_with('TupleStruct_') {
+		return false
+	}
+	if clean.ends_with('Protocol') {
+		return false
+	}
+	if clean in s.type_vars {
+		return false
+	}
+	for g in s.current_class_generics {
+		if clean == g {
+			return false
+		}
+	}
+	return true
 }
 
 

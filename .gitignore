@@ -97,3 +97,4 @@ check_errors.txt
 v_err*.txt
 v_out*.txt
 build_err*.txt
+/tmp_compile

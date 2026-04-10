@@ -253,13 +253,13 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 		return 'false'
 	}
 	if v_type == 'string' {
-		return "'0'"
+		return "''"
 	}
 	if v_type.starts_with('[]') || v_type.starts_with('map[') {
 		return '${v_type}{}'
 	}
 	if v_type == 'Any' {
-		return 'Any(NoneExpr{})'
+		return 'Any(NoneType{})'
 	}
 	if v_type.len > 0 && v_type[0].is_capital() && !v_type.contains('|') {
 		if v_type in active_v_generics {
