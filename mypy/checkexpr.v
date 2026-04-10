@@ -241,10 +241,12 @@ pub fn (mut ec ExpressionChecker) analyze_ref_expr(e RefExpr) MypyTypeNode {
 				ec.analyze_var_ref(node.var_)
 			}
 			OverloadedFuncDef {
-				node.type_ or {
-					AnyType{
+				if typ := node.type_ {
+					typ
+				} else {
+					MypyTypeNode(AnyType{
 						type_of_any: .from_error
-					}
+					})
 				}
 			}
 			FuncDef, TypeInfo, TypeAlias {
@@ -274,24 +276,30 @@ pub fn (mut ec ExpressionChecker) analyze_ref_expr(e RefExpr) MypyTypeNode {
 pub fn (ec ExpressionChecker) analyze_static_reference(node SymbolNodeRef) MypyTypeNode {
 	return match node {
 		Var {
-			node.type_ or {
-				AnyType{
+			if typ := node.type_ {
+				typ
+			} else {
+				MypyTypeNode(AnyType{
 					type_of_any: .special_form
-				}
+				})
 			}
 		}
 		Decorator {
-			node.var_.type_ or {
-				AnyType{
+			if typ := node.var_.type_ {
+				typ
+			} else {
+				MypyTypeNode(AnyType{
 					type_of_any: .special_form
-				}
+				})
 			}
 		}
 		OverloadedFuncDef {
-			node.type_ or {
-				AnyType{
+			if typ := node.type_ {
+				typ
+			} else {
+				MypyTypeNode(AnyType{
 					type_of_any: .special_form
-				}
+				})
 			}
 		}
 		FuncDef {

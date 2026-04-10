@@ -287,7 +287,6 @@ pub fn (n MypyNode) str() string {
 	return 'Node'
 }
 
-
 pub fn (mut n MypyNode) is_statement() bool {
 	match n {
 		AssertStmt, AssignmentStmt, Block, BreakStmt, ClassDef, ContinueStmt, Decorator, DelStmt,
@@ -460,14 +459,7 @@ pub fn (s Statement) str() string {
 }
 
 pub fn (s Statement) get_context() Context {
-	return match s {
-		AssertStmt, AssignmentStmt, Block, BreakStmt, ClassDef, ContinueStmt, Decorator, DelStmt,
-		ExpressionStmt, ForStmt, FuncDef, GlobalDecl, IfStmt, Import, ImportAll, ImportFrom,
-		MatchStmt, NonlocalDecl, OperatorAssignmentStmt, OverloadedFuncDef, PassStmt, RaiseStmt,
-		ReturnStmt, TryStmt, TypeAliasStmt, WhileStmt, WithStmt {
-			s.get_context()
-		}
-	}
+	return Node(s).get_context()
 }
 
 pub fn (mut s Statement) accept(mut v NodeVisitor) !AnyNode {
@@ -568,18 +560,7 @@ pub fn (e Expression) as_lvalue() ?Lvalue {
 }
 
 pub fn (e Expression) get_context() Context {
-	return match e {
-		AssignmentExpr, AwaitExpr, BytesExpr, CallExpr, CastExpr, ComparisonExpr, ComplexExpr,
-		ConditionalExpr, DictExpr, DictionaryComprehension, EllipsisExpr, EnumCallExpr, FloatExpr,
-		FormatStringExpr, GeneratorExpr, IndexExpr, IntExpr, LambdaExpr, ListComprehension,
-		ListExpr, MemberExpr, NameExpr, NamedTupleExpr, NewTypeExpr, OpExpr, ParamSpecExpr,
-		PromoteExpr, RevealExpr, SetComprehension, SetExpr, SliceExpr, StarExpr, StrExpr,
-		SuperExpr, TempNode, TemplateStrExpr, TupleExpr, TypeAliasExpr, TypeApplication,
-		TypeVarExpr, TypeVarTupleExpr, TypedDictExpr, UnaryExpr, AssertTypeExpr, YieldExpr,
-		YieldFromExpr {
-			e.get_context()
-		}
-	}
+	return Node(e).get_context()
 }
 pub fn (e Expression) as_ref_expr() ?RefExpr {
 	return match e {
@@ -2222,9 +2203,7 @@ pub type VarNode = Var | FuncDef
 pub type RefExpr = MemberExpr | NameExpr
 
 pub fn (n RefExpr) get_context() Context {
-	return match n {
-		MemberExpr, NameExpr { n.get_context() }
-	}
+	return Node(n).get_context()
 }
 
 pub fn (mut n RefExpr) accept(mut v NodeVisitor) !AnyNode {
@@ -2232,10 +2211,6 @@ pub fn (mut n RefExpr) accept(mut v NodeVisitor) !AnyNode {
 		MemberExpr, NameExpr { n.accept(mut v)! }
 	}
 }
-
-
-
-
 
 
 

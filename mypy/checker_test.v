@@ -45,7 +45,7 @@ fn test_find_isinstance_check_narrows_union_types() {
 	x_expr := NameExpr{
 		name:     'x'
 		fullname: '__main__.x'
-		node:     SymbolNodeRef(x_var)
+		node:     MypyNode(x_var)
 	}
 	set_root_type(mut tc, 'x', declared)
 
@@ -56,7 +56,7 @@ fn test_find_isinstance_check_narrows_union_types() {
 	int_expr := NameExpr{
 		name:     'int'
 		fullname: 'builtins.int'
-		node:     SymbolNodeRef(int_info)
+		node:     MypyNode(int_info)
 	}
 	isinstance_expr := Expression(CallExpr{
 		callee:    Expression(NameExpr{name: 'isinstance', fullname: 'builtins.isinstance'})
@@ -67,12 +67,14 @@ fn test_find_isinstance_check_narrows_union_types() {
 	if_map, else_map := tc.find_isinstance_check(isinstance_expr)
 
 	narrowed := if_map['x'] or { panic('expected narrowed type when isinstance check passes') }
-	assert narrowed is Instance
-	assert (narrowed as Instance).type_name == 'builtins.int'
+	narrowed_proper := get_proper_type(narrowed)
+	narrowed_inst := narrowed_proper as Instance
+	assert narrowed_inst.type_name == 'builtins.int'
 
 	remaining := else_map['x'] or { panic('expected remaining type when isinstance check fails') }
-	assert remaining is Instance
-	assert (remaining as Instance).type_name == 'builtins.str'
+	remaining_proper := get_proper_type(remaining)
+	remaining_inst := remaining_proper as Instance
+	assert remaining_inst.type_name == 'builtins.str'
 }
 
 fn test_visit_assert_stmt_applies_isinstance_narrowing() {
@@ -91,7 +93,7 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 	x_expr := NameExpr{
 		name:     'x'
 		fullname: '__main__.x'
-		node:     SymbolNodeRef(x_var)
+		node:     MypyNode(x_var)
 	}
 	set_root_type(mut tc, 'x', declared)
 
@@ -102,7 +104,7 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 	int_expr := NameExpr{
 		name:     'int'
 		fullname: 'builtins.int'
-		node:     SymbolNodeRef(int_info)
+		node:     MypyNode(int_info)
 	}
 	mut stmt := AssertStmt{
 		expr: Expression(CallExpr{
@@ -115,6 +117,7 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 	tc.visit_assert_stmt(mut stmt) or { panic(err.msg) }
 
 	narrowed := tc.binder.get('x') or { panic('expected binder narrowing for x') }
-	assert narrowed is Instance
-	assert (narrowed as Instance).type_name == 'builtins.int'
+	narrowed_proper := get_proper_type(narrowed)
+	narrowed_inst := narrowed_proper as Instance
+	assert narrowed_inst.type_name == 'builtins.int'
 }

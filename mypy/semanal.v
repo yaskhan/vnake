@@ -421,7 +421,7 @@ pub fn (mut sa SemanticAnalyzer) visit_assignment_stmt(mut s AssignmentStmt) !An
 // visit_if_stmt handles if
 pub fn (mut sa SemanticAnalyzer) visit_if_stmt(mut s IfStmt) !AnyNode {
 	sa.statement = Statement(s)
-	// TODO: infer_reachability_of_if_statement
+	infer_reachability_of_if_statement(mut s, sa.options)
 	for i in 0 .. s.expr.len {
 		s.expr[i].accept(mut sa)!
 		sa.visit_block(mut s.body[i])!
