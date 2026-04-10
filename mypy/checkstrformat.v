@@ -355,7 +355,7 @@ fn (mut sfc StringFormatterChecker) check_simple_str_interpolation(specifiers []
 			}
 		}
 	} else if specifiers.filter(it.conv_type != '%').len > 1 {
-		(sfc.msg or { panic('msg') }).fail('Wrong number of arguments for format string', expr_ctx, false, false,
+		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Wrong number of arguments for format string', expr_ctx, false, false,
 			none)
 	}
 }
@@ -377,7 +377,7 @@ fn (mut sfc StringFormatterChecker) check_mapping_str_interpolation(specifiers [
 					}
 				}
 				if !found {
-					(sfc.msg or { panic('msg') }).fail('Key "${key}" not found in format arguments', expr_ctx,
+					(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Key "${key}" not found in format arguments', expr_ctx,
 						false, false, none)
 				}
 			}
@@ -386,7 +386,7 @@ fn (mut sfc StringFormatterChecker) check_mapping_str_interpolation(specifiers [
 	}
 	repl_type := sfc.require_type_checker().expr_checker.accept(replacements)
 	if !has_type_component(repl_type, 'builtins.dict') {
-		(sfc.msg or { panic('msg') }).fail('Expected mapping for format string with keys', replacements.get_context(),
+		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Expected mapping for format string with keys', replacements.get_context(),
 			false, false, none)
 	}
 }
