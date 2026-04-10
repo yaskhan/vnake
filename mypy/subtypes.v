@@ -311,7 +311,7 @@ fn is_callable_subtype(left CallableType, right CallableType, ctx SubtypeContext
 // is_typeddict_subtype checks subtype for TypedDictType
 fn is_typeddict_subtype(left TypedDictType, right TypedDictType, ctx SubtypeContext) bool {
 	// Check that left contains all keys of right
-	for key in right.items.keys() {
+	for key, _ in right.items {
 		if key !in left.items {
 			return false
 		}
