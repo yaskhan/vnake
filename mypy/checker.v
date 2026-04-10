@@ -665,11 +665,11 @@ pub fn (tc TypeChecker) find_isinstance_check(node Expression) (TypeMap, TypeMap
 			}
 
 			key := expr.str()
-			return TypeMap{
-				key: narrow_declared_type(declared, narrowed)
-			}, TypeMap{
-				key: remove_type_from_declared_type(declared, narrowed)
-			}
+			mut if_map := TypeMap{}
+			if_map[key] = narrow_declared_type(declared, narrowed)
+			mut else_map := TypeMap{}
+			else_map[key] = remove_type_from_declared_type(declared, narrowed)
+			return if_map, else_map
 		}
 		UnaryExpr {
 			if node.op == 'not' {
@@ -759,35 +759,41 @@ fn is_isinstance_name(name string, fullname string) bool {
 }
 
 // lookup_symbol_declared_type gets a declared type directly from a symbol node.
-fn lookup_symbol_declared_type(sym ?SymbolNodeRef) ?MypyTypeNode {
+fn lookup_symbol_declared_type(sym ?MypyNode) ?MypyTypeNode {
 	if node := sym {
-		return match node {
-			Var { node.type_ or { none } }
-			else { none }
+		match node {
+			Var {
+				if typ := node.type_ {
+					return typ
+				}
+			}
+			else {}
 		}
 	}
 	return none
 }
 
 // resolve_isinstance_target_symbol resolves a narrowable type from a symbol reference.
-fn (tc TypeChecker) resolve_isinstance_target_symbol(sym ?SymbolNodeRef, expr Expression) ?MypyTypeNode {
+fn (tc TypeChecker) resolve_isinstance_target_symbol(sym ?MypyNode, expr Expression) ?MypyTypeNode {
 	if node := sym {
-		return match node {
-			TypeInfo { MypyTypeNode(instance_from_type_info(node)) }
-			TypeAlias { node.target }
+		match node {
+			TypeInfo {
+				return MypyTypeNode(instance_from_type_info(node))
+			}
+			TypeAlias {
+				return node.target
+			}
 			Var {
 				if typ := node.type_ {
 					proper := get_proper_type(typ)
 					if proper is TypeType {
-						proper.item
+						return proper.item
 					} else {
-						typ
+						return typ
 					}
-				} else {
-					none
 				}
 			}
-			else { none }
+			else {}
 		}
 	}
 

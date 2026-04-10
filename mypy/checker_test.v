@@ -45,7 +45,7 @@ fn test_find_isinstance_check_narrows_union_types() {
 	x_expr := NameExpr{
 		name:     'x'
 		fullname: '__main__.x'
-		node:     SymbolNodeRef(x_var)
+		node:     MypyNode(x_var)
 	}
 	set_root_type(mut tc, 'x', declared)
 
@@ -56,7 +56,7 @@ fn test_find_isinstance_check_narrows_union_types() {
 	int_expr := NameExpr{
 		name:     'int'
 		fullname: 'builtins.int'
-		node:     SymbolNodeRef(int_info)
+		node:     MypyNode(int_info)
 	}
 	isinstance_expr := Expression(CallExpr{
 		callee:    Expression(NameExpr{name: 'isinstance', fullname: 'builtins.isinstance'})
@@ -91,7 +91,7 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 	x_expr := NameExpr{
 		name:     'x'
 		fullname: '__main__.x'
-		node:     SymbolNodeRef(x_var)
+		node:     MypyNode(x_var)
 	}
 	set_root_type(mut tc, 'x', declared)
 
@@ -102,7 +102,7 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 	int_expr := NameExpr{
 		name:     'int'
 		fullname: 'builtins.int'
-		node:     SymbolNodeRef(int_info)
+		node:     MypyNode(int_info)
 	}
 	mut stmt := AssertStmt{
 		expr: Expression(CallExpr{
