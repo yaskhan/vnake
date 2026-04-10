@@ -65,8 +65,24 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	}
 	attr_name = base.sanitize_name(attr_name, false, map[string]bool{}, "", map[string]bool{})
 
-	obj := eg.visit(node.value)
-	obj_type := eg.guess_type(node.value)
+	mut obj := eg.visit(node.value)
+	mut obj_type := eg.guess_type(node.value)
+	base_receiver_type := eg.guess_type_no_loc(node.value)
+	receiver_location_key := '${node.value.get_token().line}:${node.value.get_token().column}'
+	mut narrowed_receiver_type := eg.analyzer.location_map[receiver_location_key] or { '' }
+	if narrowed_receiver_type == '' && obj_type != 'Any' && obj_type != base_receiver_type {
+		narrowed_receiver_type = obj_type
+	}
+	if narrowed_receiver_type.len > 0 {
+		mapped_narrowed_type := eg.map_python_type(narrowed_receiver_type, false)
+		mapped_base_type := eg.map_python_type(base_receiver_type, false)
+		if mapped_narrowed_type != 'Any'
+			&& (mapped_base_type == 'Any' || mapped_base_type.contains('|')
+			|| mapped_base_type.starts_with('SumType_')) {
+			obj = "(${obj} as ${mapped_narrowed_type})"
+			obj_type = narrowed_receiver_type
+		}
+	}
 	obj_base := if obj.contains('[') { obj.all_before('[') } else { obj }
 
 	if obj in eg.state.function_names || obj_base in eg.state.function_names {
