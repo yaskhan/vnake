@@ -286,6 +286,7 @@ pub fn (n MypyNode) str() string {
 	}
 	return 'Node'
 }
+
 pub fn (mut n MypyNode) is_statement() bool {
 	match n {
 		AssertStmt, AssignmentStmt, Block, BreakStmt, ClassDef, ContinueStmt, Decorator, DelStmt,
@@ -2210,7 +2211,6 @@ pub fn (mut n RefExpr) accept(mut v NodeVisitor) !AnyNode {
 		MemberExpr, NameExpr { n.accept(mut v)! }
 	}
 }
-
 
 
 
