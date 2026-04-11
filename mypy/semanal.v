@@ -1267,6 +1267,8 @@ fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
 	if !s.is_final_def || s.lvalues.len != 1 {
 		return
 	}
+	folded_value := constant_fold_expr(s.rvalue, sa.cur_mod_id)
+	has_explicit_value := assignment_has_explicit_value(s.rvalue)
 	lvalue := s.lvalues[0]
 	match lvalue {
 		NameExpr {
@@ -1274,10 +1276,10 @@ fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
 				if mut node := sym.node {
 					if mut node is Var {
 						node.is_final = true
-						if constant_fold_expr(s.rvalue, sa.cur_mod_id) != none {
+						if folded_value != none {
 							node.final_value = s.rvalue
 						}
-						if assignment_has_explicit_value(s.rvalue) {
+						if has_explicit_value {
 							node.has_explicit_value = true
 						}
 						sym.node = SymbolNodeRef(node)
@@ -1289,10 +1291,10 @@ fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
 			if mut node := lvalue.node {
 				if mut node is Var {
 					node.is_final = true
-					if constant_fold_expr(s.rvalue, sa.cur_mod_id) != none {
+					if folded_value != none {
 						node.final_value = s.rvalue
 					}
-					if assignment_has_explicit_value(s.rvalue) {
+					if has_explicit_value {
 						node.has_explicit_value = true
 					}
 				}
