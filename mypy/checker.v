@@ -1068,9 +1068,6 @@ pub fn (tc TypeChecker) lookup_qualified(name string) SymbolTableNode {
 }
 
 fn lookup_symbol_table_member(symbols map[string]SymbolTableNode, name string) SymbolTableNode {
-	if name !in symbols {
-		return SymbolTableNode{}
-	}
 	return symbols[name] or { SymbolTableNode{} }
 }
 
