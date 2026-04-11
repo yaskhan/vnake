@@ -684,6 +684,7 @@ pub fn (mut sa SemanticAnalyzer) visit_type_info(mut o TypeInfo) !AnyNode {
 
 	for _, mut sym in o.names.symbols {
 		if mut node := sym.node {
+			// Class symbol tables may point back to the owning TypeInfo.
 			if node is TypeInfo && node.fullname == o.fullname {
 				continue
 			}
