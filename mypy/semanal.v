@@ -1256,6 +1256,13 @@ fn (mut sa SemanticAnalyzer) store_declared_type(mut lvalue Expression, typ Mypy
 	}
 }
 
+fn assignment_has_explicit_value(rvalue Expression) bool {
+	if rvalue !is TempNode {
+		return true
+	}
+	return !(rvalue as TempNode).no_rhs
+}
+
 fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
 	if !s.is_final_def || s.lvalues.len != 1 {
 		return
@@ -1270,9 +1277,7 @@ fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
 						if constant_fold_expr(s.rvalue, sa.cur_mod_id) != none {
 							node.final_value = s.rvalue
 						}
-						if s.rvalue !is TempNode {
-							node.has_explicit_value = true
-						} else if !(s.rvalue as TempNode).no_rhs {
+						if assignment_has_explicit_value(s.rvalue) {
 							node.has_explicit_value = true
 						}
 						sym.node = SymbolNodeRef(node)
@@ -1287,9 +1292,7 @@ fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
 					if constant_fold_expr(s.rvalue, sa.cur_mod_id) != none {
 						node.final_value = s.rvalue
 					}
-					if s.rvalue !is TempNode {
-						node.has_explicit_value = true
-					} else if !(s.rvalue as TempNode).no_rhs {
+					if assignment_has_explicit_value(s.rvalue) {
 						node.has_explicit_value = true
 					}
 				}
@@ -1322,6 +1325,8 @@ fn (mut sa SemanticAnalyzer) check_classvar(mut s AssignmentStmt) {
 		if s.rvalue is TempNode && (s.rvalue as TempNode).no_rhs {
 			return
 		}
+		// Bare ClassVar with an initializer behaves like an inferred assignment, so we drop the
+		// outer wrapper and let downstream logic use the assigned value without a phantom wrapper type.
 		s.type_annotation = none
 	}
 }
