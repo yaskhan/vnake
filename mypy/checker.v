@@ -1023,17 +1023,17 @@ pub fn (tc TypeChecker) lookup(name string) SymbolTableNode {
 	if name in tc.globals.symbols {
 		return tc.globals.symbols[name] or { SymbolTableNode{} }
 	}
+	if 'builtins' in tc.modules {
+		builtins := tc.modules['builtins'] or { return SymbolTableNode{} }
+		if name in builtins.names.symbols {
+			return builtins.names.symbols[name] or { SymbolTableNode{} }
+		}
+	}
 	if name in tc.modules {
 		mod := tc.modules[name] or { return SymbolTableNode{} }
 		return SymbolTableNode{
 			kind: gdef
 			node: SymbolNodeRef(mod)
-		}
-	}
-	if 'builtins' in tc.modules {
-		builtins := tc.modules['builtins'] or { return SymbolTableNode{} }
-		if name in builtins.names.symbols {
-			return builtins.names.symbols[name] or { SymbolTableNode{} }
 		}
 	}
 	return SymbolTableNode{}
@@ -1048,9 +1048,6 @@ pub fn (tc TypeChecker) lookup_qualified(name string) SymbolTableNode {
 		return sym
 	}
 	parts := name.split('.')
-	if parts.len == 0 {
-		return SymbolTableNode{}
-	}
 	mut current := tc.lookup(parts[0])
 	for i in 1 .. parts.len {
 		part := parts[i]
