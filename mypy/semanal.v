@@ -75,6 +75,7 @@ pub mut:
 	deferral_debug_context               [][]string
 	transitive_submodule_imports         map[string]map[string]bool
 	patches                              []PatchEntry
+	future_import_flags                  map[string]bool
 }
 
 // new_semantic_analyzer creates a new SemanticAnalyzer
@@ -106,7 +107,7 @@ pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin
 		plugin:                               plugin
 		statement:                            none
 		cur_mod_node:                         none
-		msg: MessageBuilder{
+		msg:                                  MessageBuilder{
 			modules: map[string]&MypyFile{}
 		}
 		scope:                                Scope{}
@@ -123,6 +124,7 @@ pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin
 		deferral_debug_context:               [][]string{}
 		transitive_submodule_imports:         map[string]map[string]bool{}
 		patches:                              []PatchEntry{}
+		future_import_flags:                  map[string]bool{}
 	}
 	sa.msg.errors = &sa.errors
 	sa.msg.options = &sa.options
@@ -151,6 +153,7 @@ pub fn (sa SemanticAnalyzer) final_iteration() bool {
 
 // prepare_file prepares a file for analysis
 pub fn (mut sa SemanticAnalyzer) prepare_file(mut file_node MypyFile) {
+	sa.future_import_flags = file_node.future_import_flags.clone()
 	if 'builtins' in sa.modules {
 		file_node.names.symbols['__builtins__'] = SymbolTableNode{
 			kind: gdef
@@ -226,6 +229,7 @@ pub fn (mut sa SemanticAnalyzer) visit_mypy_file(mut file_node MypyFile) !AnyNod
 	for mut defn in file_node.defs {
 		defn.accept(mut sa)!
 	}
+	file_node.future_import_flags = sa.future_import_flags.clone()
 	return ''
 }
 
@@ -1450,7 +1454,9 @@ fn (sa SemanticAnalyzer) correct_relative_import(node ImportFrom) string {
 
 // set_future_import_flags sets future import flags
 fn (mut sa SemanticAnalyzer) set_future_import_flags(fullname string) {
-	// TODO: handle future imports if field is added to &MypyFile
+	if flag := future_imports[fullname] {
+		sa.future_import_flags[flag] = true
+	}
 }
 
 // push_type_args adds type args
@@ -1785,7 +1791,7 @@ pub fn (sa SemanticAnalyzer) is_incomplete_namespace(fullname string) bool {
 }
 
 pub fn (sa SemanticAnalyzer) is_future_flag_set(flag string) bool {
-	return false
+	return sa.future_import_flags[flag]
 }
 
 pub fn (sa SemanticAnalyzer) get_current_type() ?&TypeInfo {
