@@ -63,7 +63,7 @@ pub fn (mut m MessageBuilder) has_no_attr(original_type MypyTypeNode, typ MypyTy
 
 pub fn (mut m MessageBuilder) not_callable(typ MypyTypeNode, context Context) MypyTypeNode {
 	type_str := m.format_type(typ)
-	m.fail('${type_str} not callable', context, false, false, none) // TODO: operator
+	m.fail('${type_str} not callable', context, false, false, *operator)
 	return MypyTypeNode(AnyType{
 		type_of_any: .from_error
 	})
