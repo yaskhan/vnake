@@ -153,11 +153,7 @@ pub fn (sa SemanticAnalyzer) final_iteration() bool {
 
 // prepare_file prepares a file for analysis
 pub fn (mut sa SemanticAnalyzer) prepare_file(mut file_node MypyFile) {
-	sa.future_import_flags = if file_node.future_import_flags.len > 0 {
-		file_node.future_import_flags.clone()
-	} else {
-		map[string]bool{}
-	}
+	sa.future_import_flags = file_node.future_import_flags.clone()
 	if 'builtins' in sa.modules {
 		file_node.names.symbols['__builtins__'] = SymbolTableNode{
 			kind: gdef

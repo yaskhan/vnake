@@ -1,10 +1,10 @@
 module mypy
 
-fn new_test_semantic_analyzer() &SemanticAnalyzer {
+fn new_test_semantic_analyzer() SemanticAnalyzer {
 	options := Options{}
 	errors := new_errors(options)
 	plugin := new_plugin(options)
-	return new_semantic_analyzer(map[string]&MypyFile{}, errors, plugin, options)
+	return *new_semantic_analyzer(map[string]&MypyFile{}, errors, plugin, options)
 }
 
 fn test_recurse_into_functions_defaults_to_true() {
