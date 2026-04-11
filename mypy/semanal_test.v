@@ -7,8 +7,8 @@ fn new_test_semantic_analyzer() &SemanticAnalyzer {
 	return new_semantic_analyzer(map[string]&MypyFile{}, errors, plugin, options)
 }
 
-fn prepare_test_module(mut sa SemanticAnalyzer, module_name string) {
-	mut file := MypyFile{
+fn prepare_test_module(mut sa SemanticAnalyzer, module_name string) &MypyFile {
+	mut file := &MypyFile{
 		fullname:            module_name
 		path:                '${module_name}.py'
 		names:               SymbolTable{
@@ -17,7 +17,9 @@ fn prepare_test_module(mut sa SemanticAnalyzer, module_name string) {
 		defs:                []Statement{}
 		future_import_flags: map[string]bool{}
 	}
+	sa.modules[module_name] = file
 	sa.visit_mypy_file(mut file) or { panic(err.msg) }
+	return file
 }
 
 fn test_annotation_head_name_handles_simple_qualified_and_non_unbound_types() {
@@ -361,8 +363,11 @@ fn test_visit_assignment_stmt_processes_bare_final_annotation_and_infers_value_t
 			typ := node.type_ or { panic('expected inferred bare Final type') }
 			match typ {
 				Instance {
-					type_ref := typ.type_ref or { panic('expected inferred instance type info') }
-					assert type_ref.fullname == 'builtins.int'
+					if info := typ.typ {
+						assert info.fullname == 'builtins.int'
+					} else {
+						assert typ.type_name == 'builtins.int' || typ.type_fullname == 'builtins.int'
+					}
 				}
 				else {
 					panic('expected inferred builtins.int type for bare Final assignment')

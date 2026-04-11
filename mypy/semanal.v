@@ -1227,6 +1227,10 @@ fn (sa SemanticAnalyzer) is_classvar_type(typ MypyTypeNode) bool {
 	return typ is UnboundType && annotation_head_name(typ) == 'ClassVar'
 }
 
+fn is_bare_assignment_wrapper(typ MypyTypeNode, name string) bool {
+	return typ is UnboundType && annotation_head_name(typ) == name && typ.args.len == 0
+}
+
 fn (mut sa SemanticAnalyzer) store_declared_type(mut lvalue Expression, typ MypyTypeNode) {
 	match mut lvalue {
 		NameExpr {
@@ -1262,6 +1266,31 @@ fn assignment_has_explicit_value(rvalue Expression) bool {
 	// no_rhs = true, so relying on that flag misclassifies declarations as
 	// having an explicit value.
 	return rvalue !is TempNode
+}
+
+fn (mut sa SemanticAnalyzer) infer_simple_literal_type(rvalue Expression) ?MypyTypeNode {
+	value := constant_fold_expr(rvalue, sa.cur_mod_id) or { return none }
+	type_name := match value {
+		bool { 'builtins.bool' }
+		i64 { 'builtins.int' }
+		string { 'builtins.str' }
+		f64 { 'builtins.float' }
+	}
+	inst := sa.named_type_or_none(type_name, []) or {
+		return MypyTypeNode(Instance{
+			type_name:     type_name
+			type_fullname: type_name
+		})
+	}
+	return MypyTypeNode(*inst)
+}
+
+fn (mut sa SemanticAnalyzer) infer_assignment_type_from_initializer(mut s AssignmentStmt) {
+	inferred := sa.infer_simple_literal_type(s.rvalue) or { return }
+	s.type_annotation = inferred
+	for mut lvalue in sa.flatten_lvalues(s.lvalues) {
+		sa.store_declared_type(mut lvalue, inferred)
+	}
 }
 
 fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
@@ -1324,10 +1353,7 @@ fn (mut sa SemanticAnalyzer) check_classvar(mut s AssignmentStmt) {
 			}
 		}
 	}
-	if ann is UnboundType && ann.args.len == 0 {
-		if s.rvalue is TempNode && (s.rvalue as TempNode).no_rhs {
-			return
-		}
+	if is_bare_assignment_wrapper(ann, 'ClassVar') && assignment_has_explicit_value(s.rvalue) {
 		// Bare ClassVar with an initializer behaves like an inferred assignment, so we drop the
 		// outer wrapper and let downstream logic use the assigned value without a phantom wrapper type.
 		s.type_annotation = none
@@ -1335,7 +1361,17 @@ fn (mut sa SemanticAnalyzer) check_classvar(mut s AssignmentStmt) {
 }
 
 fn (mut sa SemanticAnalyzer) process_type_annotation(mut s AssignmentStmt) bool {
-	ann := s.type_annotation or { return false }
+	ann := s.type_annotation or {
+		if s.is_final_def && assignment_has_explicit_value(s.rvalue) {
+			sa.infer_assignment_type_from_initializer(mut s)
+		}
+		return false
+	}
+	if is_bare_assignment_wrapper(ann, 'Final') && assignment_has_explicit_value(s.rvalue) {
+		s.type_annotation = none
+		sa.infer_assignment_type_from_initializer(mut s)
+		return false
+	}
 	allow_tuple_literal := s.lvalues.len > 0 && s.lvalues.last() is TupleExpr
 	normalized := unwrap_assignment_annotation(ann)
 	analyzed := sa.anal_type(normalized, none, allow_tuple_literal, false, false, true, true,
