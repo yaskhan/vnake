@@ -1257,10 +1257,11 @@ fn (mut sa SemanticAnalyzer) store_declared_type(mut lvalue Expression, typ Mypy
 }
 
 fn assignment_has_explicit_value(rvalue Expression) bool {
-	if rvalue !is TempNode {
-		return true
-	}
-	return !(rvalue as TempNode).no_rhs
+	// Annotation-only declarations use TempNode as a placeholder for a
+	// missing RHS. Some producers construct TempNode{} without setting
+	// no_rhs = true, so relying on that flag misclassifies declarations as
+	// having an explicit value.
+	return rvalue !is TempNode
 }
 
 fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
