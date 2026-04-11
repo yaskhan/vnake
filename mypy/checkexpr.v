@@ -20,6 +20,7 @@ pub enum UseReverse {
 	never
 }
 
+@[heap]
 pub struct ExpressionChecker {
 pub mut:
 	chk                         ?&TypeChecker
@@ -38,15 +39,12 @@ pub mut:
 	literal_false_              ?Instance
 }
 
-pub fn new_expression_checker(chk ?&TypeChecker, msg MessageBuilder, plugin Plugin) ExpressionChecker {
-	return ExpressionChecker{
+pub fn new_expression_checker(chk ?&TypeChecker, msg MessageBuilder, plugin Plugin) &ExpressionChecker {
+	mut ec := &ExpressionChecker{
 		chk:                         chk
 		msg:                         msg
 		type_context:                [?MypyTypeNode(none)]
-		strfrm_checker:              StringFormatterChecker{
-			chk: unsafe { nil }
-			msg: unsafe { nil }
-		}
+		strfrm_checker:              new_string_formatter_checker(chk, none)
 		plugin:                      plugin
 		type_overrides:              map[string]MypyTypeNode{}
 		is_callee:                   false
@@ -58,6 +56,9 @@ pub fn new_expression_checker(chk ?&TypeChecker, msg MessageBuilder, plugin Plug
 		literal_true_:               none
 		literal_false_:              none
 	}
+	ec.strfrm_checker.msg = &ec.msg
+	ec.strfrm_checker.chk = chk
+	return ec
 }
 
 pub fn (mut ec ExpressionChecker) reset() {
@@ -65,6 +66,7 @@ pub fn (mut ec ExpressionChecker) reset() {
 }
 
 pub fn (mut ec ExpressionChecker) accept(node Expression) MypyTypeNode {
+	eprintln('DEBUG: EC.accept ${node}')
 	typ := match node {
 		AssignmentExpr {
 			ec.visit_assignment_expr(node)

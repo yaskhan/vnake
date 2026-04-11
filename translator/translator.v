@@ -147,6 +147,7 @@ pub fn (mut t Translator) map_annotation(node ?ast.Expression) string {
 	} else {
 		'Any'
 	}
+	eprintln('DEBUG: map_annotation node=${node} res=${res}')
 	return res
 }
 

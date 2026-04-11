@@ -560,7 +560,18 @@ pub fn (e Expression) as_lvalue() ?Lvalue {
 }
 
 pub fn (e Expression) get_context() Context {
-	return Node(e).get_context()
+	match e {
+		AssignmentExpr, AwaitExpr, BytesExpr, CallExpr, CastExpr, ComparisonExpr, ComplexExpr,
+		ConditionalExpr, DictExpr, DictionaryComprehension, EllipsisExpr, EnumCallExpr, FloatExpr,
+		FormatStringExpr, GeneratorExpr, IndexExpr, IntExpr, LambdaExpr, ListComprehension,
+		ListExpr, MemberExpr, NameExpr, NamedTupleExpr, NewTypeExpr, OpExpr, ParamSpecExpr,
+		PromoteExpr, RevealExpr, SetComprehension, SetExpr, SliceExpr, StarExpr, StrExpr,
+		SuperExpr, TempNode, TemplateStrExpr, TupleExpr, TypeAliasExpr, TypeApplication,
+		TypeVarExpr, TypeVarTupleExpr, TypedDictExpr, UnaryExpr, YieldExpr, YieldFromExpr,
+		AssertTypeExpr {
+			return e.get_context()
+		}
+	}
 }
 pub fn (e Expression) as_ref_expr() ?RefExpr {
 	return match e {
@@ -1016,7 +1027,7 @@ pub mut:
 	type_params          []TypeParam
 	fullname             string
 	abstract_status      int // 0=concrete, 1=abstract, 2=implicitly_abstract
-	info                 ?TypeInfo
+	info                 ?&TypeInfo
 	is_mypy_only         bool
 	is_unreachable       bool
 	is_conditional       bool
@@ -1039,7 +1050,7 @@ pub mut:
 	base  NodeBase
 	items []FuncDef
 	type_ ?MypyTypeNode
-	info  ?TypeInfo
+	info  ?&TypeInfo
 }
 
 pub fn (n OverloadedFuncDef) get_context() Context {
@@ -1466,7 +1477,7 @@ pub struct SuperExpr {
 pub mut:
 	base NodeBase
 	name string
-	info ?TypeInfo
+	info ?&TypeInfo
 }
 
 pub fn (n SuperExpr) get_context() Context {
@@ -1858,7 +1869,7 @@ pub mut:
 	base     NodeBase
 	name     string
 	old_type ?MypyTypeNode
-	info     ?TypeInfo
+	info     ?&TypeInfo
 }
 
 pub fn (n NewTypeExpr) get_context() Context {

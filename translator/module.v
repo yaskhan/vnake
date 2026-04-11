@@ -1644,6 +1644,7 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 		}
 
 		for line in m.state.output {
+			eprintln('DEBUG: visit_module line=[${line.trim_space()}]')
 			if stmt is ast.If && m.is_name_main(stmt) {
 				m.emitter.add_main_statement(line.trim_space())
 			} else if line.trim_space().starts_with('import ') {

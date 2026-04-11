@@ -1366,6 +1366,7 @@ pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string
 		for idx in eg.analyzer.func_param_mutability[func_name_str] { mutated[idx] = true }
 	}
 	for i, arg in args {
+		eprintln('DEBUG: process_mutated_args arg=${arg} mutated=${i in mutated} is_simple=${base.is_simple_mut_target(arg)}')
 		if i in mutated && !arg.starts_with('mut ') && arg !in ['none', 'true', 'false'] && base.is_simple_mut_target(arg) {
 			final_args << 'mut ${arg}'
 		} else {

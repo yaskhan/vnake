@@ -19,14 +19,14 @@ pub type FineGrainedDeferredNodeType = FuncDef | MypyFile | OverloadedFuncDef
 pub struct DeferredNode {
 pub:
 	node            DeferredNodeType
-	active_typeinfo ?TypeInfo
+	active_type ?&TypeInfo
 }
 
 // FineGrainedDeferredNode — node for fine-grained mode
 pub struct FineGrainedDeferredNode {
 pub:
 	node            FineGrainedDeferredNodeType
-	active_typeinfo ?TypeInfo
+	active_type ?&TypeInfo
 }
 
 // TypeMap — mapping of Expressions to types
@@ -40,7 +40,7 @@ pub:
 	is_local    bool
 }
 
-// TypeChecker — mypy type checker
+@[heap]
 pub struct TypeChecker {
 pub mut:
 	is_stub                  bool
@@ -85,15 +85,12 @@ pub mut:
 
 // new_type_checker creates a new TypeChecker
 pub fn new_type_checker(errors Errors, modules map[string]&MypyFile, options Options, tree &MypyFile, path string, plugin Plugin) &TypeChecker {
-	msg := MessageBuilder{
-		errors:  &errors
-		options: &options
-		modules: map[string]&MypyFile{}
-	}
 	mut tc := &TypeChecker{
 		is_stub:                  tree.is_stub
 		errors:                   errors
-		msg:                      msg
+		msg:                      MessageBuilder{
+			modules: map[string]&MypyFile{}
+		}
 		type_maps:                [TypeMap{}]
 		all_type_maps:            []TypeMap{}
 		persistent_type_map:      TypeMap{}
@@ -128,8 +125,10 @@ pub fn new_type_checker(errors Errors, modules map[string]&MypyFile, options Opt
 		allow_abstract_call:      false
 		recurse_into_functions:   true
 	}
+	tc.msg.errors = &tc.errors
+	tc.msg.options = &tc.options
 
-	tc.expr_checker = new_expression_checker(tc, msg, plugin)
+	tc.expr_checker = new_expression_checker(tc, tc.msg, plugin)
 	tc.pattern_checker = PatternChecker{
 		chk:          tc
 		type_context: []MypyTypeNode{}
@@ -208,11 +207,13 @@ pub fn (mut tc TypeChecker) visit_func_def(mut defn FuncDef) !AnyNode {
 
 // visit_class_def checks class definition
 pub fn (mut tc TypeChecker) visit_class_def(mut defn ClassDef) !AnyNode {
-	typ := defn.info or { return '' }
+	typ := defn.info or {
+		return ''
+	}
 
 	old_active := tc.active_type
 	tc.active_type = typ
-	tc.scope.push_class(*typ)
+	tc.scope.push_class(typ)
 	for mut stmt in defn.defs.body {
 		stmt.accept(mut tc)!
 	}
@@ -236,7 +237,6 @@ pub fn (mut tc TypeChecker) check_func_item(defn FuncItem, name string) {
 
 // check_func_def checks function definition
 fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
-	_ = name
 	tc.type_maps << TypeMap{}
 
 	// Manually add parameters to the current type map
@@ -921,7 +921,7 @@ pub fn (mut tc TypeChecker) store_type(node Expression, typ MypyTypeNode) {
 	tc.persistent_type_map[pkey] = typ
 }
 
-pub fn (tc &TypeChecker) lookup_persistent_type(node Expression) ?MypyTypeNode {
+pub fn (tc TypeChecker) lookup_persistent_type(node Expression) ?MypyTypeNode {
 	ctx := node.get_context()
 	pkey := '${ctx.line}:${ctx.column}:${node.str()}'
 	return tc.persistent_type_map[pkey] or { none }

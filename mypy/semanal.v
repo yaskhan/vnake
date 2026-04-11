@@ -30,6 +30,7 @@ pub const future_imports = {
 pub const core_builtin_classes = ['object', 'type', 'list', 'dict', 'str', 'int', 'float', 'bool', 'bytes', 'tuple', 'set']
 
 // SemanticAnalyzer вЂ” mypy semantic analyzer
+@[heap]
 pub struct SemanticAnalyzer {
 pub mut:
 	modules                              map[string]&MypyFile
@@ -39,8 +40,8 @@ pub mut:
 	locals                               []?SymbolTable
 	scope_stack                          []int
 	block_depth                          []int
-	cur_type                             ?TypeInfo
-	type_stack                           []?TypeInfo
+	cur_type                             ?&TypeInfo
+	type_stack                           []?&TypeInfo
 	tvar_scope                           TypeVarLikeScope
 	options                              Options
 	function_stack                       []FuncItem
@@ -75,8 +76,8 @@ pub mut:
 }
 
 // new_semantic_analyzer creates a new SemanticAnalyzer
-pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin Plugin, options Options) SemanticAnalyzer {
-	return SemanticAnalyzer{
+pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin Plugin, options Options) &SemanticAnalyzer {
+	mut sa := &SemanticAnalyzer{
 		modules:                              modules
 		globals:                              SymbolTable{}
 		global_decls:                         [map[string]bool{}]
@@ -85,7 +86,7 @@ pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin
 		scope_stack:                          [scope_global]
 		block_depth:                          [0]
 		cur_type:                             none
-		type_stack:                           []?TypeInfo{}
+		type_stack:                           []?&TypeInfo{}
 		tvar_scope:                           TypeVarLikeScope{}
 		options:                              options
 		function_stack:                       []FuncItem{}
@@ -103,9 +104,8 @@ pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin
 		plugin:                               plugin
 		statement:                            none
 		cur_mod_node:                         none
-		msg:                                  MessageBuilder{
-			errors:  &errors
-			options: &options
+		msg: MessageBuilder{
+			modules: map[string]&MypyFile{}
 		}
 		scope:                                Scope{}
 		incomplete_type_stack:                []bool{}
@@ -121,10 +121,13 @@ pub fn new_semantic_analyzer(modules map[string]&MypyFile, errors Errors, plugin
 		transitive_submodule_imports:         map[string]map[string]bool{}
 		patches:                              []PatchEntry{}
 	}
+	sa.msg.errors = &sa.errors
+	sa.msg.options = &sa.options
+	return sa
 }
 
 // type returns the current TypeInfo
-pub fn (sa SemanticAnalyzer) type() ?TypeInfo {
+pub fn (sa SemanticAnalyzer) type() ?&TypeInfo {
 	return sa.cur_type
 }
 
@@ -157,7 +160,7 @@ pub fn (mut sa SemanticAnalyzer) prepare_file(mut file_node MypyFile) {
 }
 
 // prepare_builtins_namespace adds special definitions to builtins
-fn (sa &SemanticAnalyzer) prepare_builtins_namespace(mut file MypyFile) {
+fn (sa SemanticAnalyzer) prepare_builtins_namespace(mut file MypyFile) {
 	mut names := file.names
 	for name in core_builtin_classes {
 		cdef := ClassDef{
@@ -1282,7 +1285,7 @@ fn (sa SemanticAnalyzer) recurse_into_functions() bool {
 }
 
 // enter_class enters a class
-fn (mut sa SemanticAnalyzer) enter_class(info TypeInfo) {
+fn (mut sa SemanticAnalyzer) enter_class(info &TypeInfo) {
 	sa.type_stack << sa.cur_type
 	sa.locals << none
 	sa.scope_stack << scope_class
@@ -1745,15 +1748,15 @@ pub fn (mut sa SemanticAnalyzer) record_incomplete_ref() {
 	sa.incomplete = true
 }
 
-pub fn (sa &SemanticAnalyzer) is_incomplete_namespace(fullname string) bool {
+pub fn (sa SemanticAnalyzer) is_incomplete_namespace(fullname string) bool {
 	return sa.incomplete_namespaces[fullname]
 }
 
-pub fn (sa &SemanticAnalyzer) is_future_flag_set(flag string) bool {
+pub fn (sa SemanticAnalyzer) is_future_flag_set(flag string) bool {
 	return false
 }
 
-pub fn (sa &SemanticAnalyzer) get_current_type() ?&TypeInfo {
+pub fn (sa SemanticAnalyzer) get_current_type() ?&TypeInfo {
 	if t := sa.cur_type {
 		return unsafe { &t }
 	}

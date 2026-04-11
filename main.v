@@ -125,6 +125,7 @@ pub fn generate_all_helpers(output_path string) bool {
 }
 
 pub fn transpile_file(source_file string, config TranspilerConfig, mut global_helpers GlobalHelpers, current_module string, scc_files []string, output_path string) bool {
+	eprintln('DEBUG: transpile_file START ${source_file}')
 	println('Transpiling ${source_file} (module: ${current_module})...')
 
 	source_code := os.read_file(source_file) or {
@@ -142,7 +143,7 @@ pub fn transpile_file(source_file string, config TranspilerConfig, mut global_he
 	tree := parser.parse_module()
 
 	mut options := mypy.Options.new()
-	mut errors := mypy.new_errors(*options)
+	mut errors := mypy.new_errors(options)
 	mut api := mypy.new_api(options, &errors)
 
 	mut file := mypy.bridge(tree) or {
