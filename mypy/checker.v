@@ -1054,16 +1054,10 @@ pub fn (tc TypeChecker) lookup_qualified(name string) SymbolTableNode {
 		current_node := current.node or { return SymbolTableNode{} }
 		match current_node {
 			TypeInfo {
-				if part !in current_node.names.symbols {
-					return SymbolTableNode{}
-				}
-				current = current_node.names.symbols[part] or { return SymbolTableNode{} }
+				current = lookup_symbol_table_member(current_node.names.symbols, part)
 			}
 			MypyFile {
-				if part !in current_node.names.symbols {
-					return SymbolTableNode{}
-				}
-				current = current_node.names.symbols[part] or { return SymbolTableNode{} }
+				current = lookup_symbol_table_member(current_node.names.symbols, part)
 			}
 			else {
 				return SymbolTableNode{}
@@ -1071,6 +1065,13 @@ pub fn (tc TypeChecker) lookup_qualified(name string) SymbolTableNode {
 		}
 	}
 	return current
+}
+
+fn lookup_symbol_table_member(symbols map[string]SymbolTableNode, name string) SymbolTableNode {
+	if name !in symbols {
+		return SymbolTableNode{}
+	}
+	return symbols[name] or { SymbolTableNode{} }
 }
 
 // type_type returns type 'type'
