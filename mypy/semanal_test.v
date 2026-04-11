@@ -94,3 +94,99 @@ fn test_prepare_file_restores_saved_future_import_flags() {
 	assert sa.is_future_flag_set('annotations')
 	assert !sa.is_future_flag_set('division')
 }
+
+fn test_visit_placeholder_node_marks_analysis_as_deferred_and_incomplete() {
+	mut sa := new_test_semantic_analyzer()
+	mut placeholder := PlaceholderNode{
+		fullname: 'pkg.Missing'
+		base:     NodeBase{
+			ctx: Context{
+				line:   3
+				column: 1
+			}
+		}
+	}
+
+	sa.visit_placeholder_node(mut placeholder) or { panic(err.msg) }
+
+	assert sa.deferred
+	assert sa.incomplete
+	assert sa.missing_names.len > 0
+	assert incomplete_ref_marker in sa.missing_names.last()
+}
+
+fn test_visit_type_info_traverses_class_body_and_restores_class_scope() {
+	mut sa := new_test_semantic_analyzer()
+	sa.errors.set_file('test.py', 'pkg.mod')
+
+	mut defn := &ClassDef{
+		name: 'Box'
+		defs: Block{
+			body: [
+				Statement(ExpressionStmt{
+					expr: Expression(NameExpr{
+						name: 'missing'
+						base: NodeBase{
+							ctx: Context{
+								line:   7
+								column: 2
+							}
+						}
+					})
+				}),
+			]
+		}
+	}
+	mut symtab := SymbolTable{}
+	mut info := new_type_info(mut symtab, defn, 'pkg.mod')
+	info.fullname = 'pkg.mod.Box'
+	defn.info = info
+
+	sa.visit_type_info(mut info) or { panic(err.msg) }
+
+	assert sa.cur_type == none
+	infos := sa.errors.error_info_map['test.py'] or { panic('expected collected error') }
+	assert infos.len == 1
+	assert infos[0].message == 'Name "missing" is not defined'
+}
+
+fn test_visit_type_info_without_defn_uses_class_scope_for_members() {
+	mut sa := new_test_semantic_analyzer()
+	sa.cur_mod_id = 'pkg.mod'
+
+	mut method := FuncDef{
+		name: 'method'
+		body: Block{
+			body: []Statement{}
+		}
+	}
+	mut info := TypeInfo{
+		fullname:    'pkg.mod.Box'
+		module_name: 'pkg.mod'
+		name:        'Box'
+		names:       SymbolTable{
+			symbols: {
+				'method': SymbolTableNode{
+					kind: mdef
+					node: SymbolNodeRef(method)
+				}
+			}
+		}
+	}
+
+	sa.visit_type_info(mut info) or { panic(err.msg) }
+
+	assert sa.cur_type == none
+	sym := info.names.symbols['method'] or { panic('expected method symbol') }
+	node := sym.node or { panic('expected method node') }
+	match node {
+		FuncDef {
+			assert node.fullname == 'pkg.mod.Box.method'
+			method_info := node.info or { panic('expected method to be analyzed in class scope') }
+			assert method_info.fullname == 'pkg.mod.Box'
+		}
+		else {
+			panic('expected FuncDef method node')
+		}
+	}
+}

@@ -29,6 +29,8 @@ pub const future_imports = {
 // CORE_BUILTIN_CLASSES вЂ” basic builtins classes
 pub const core_builtin_classes = ['object', 'type', 'list', 'dict', 'str', 'int', 'float', 'bool',
 	'bytes', 'tuple', 'set']
+// Marker used in missing_names to signal unresolved bindings in the current pass.
+pub const incomplete_ref_marker = '<incomplete_ref>'
 
 // SemanticAnalyzer вЂ” mypy semantic analyzer
 @[heap]
@@ -665,13 +667,35 @@ pub fn (mut sa SemanticAnalyzer) visit_type_alias(mut o TypeAlias) !AnyNode {
 
 // visit_placeholder_node handles placeholder node
 pub fn (mut sa SemanticAnalyzer) visit_placeholder_node(mut o PlaceholderNode) !AnyNode {
-	// TODO: visit_placeholder_node
+	// Unresolved placeholders must trigger another semantic-analysis pass.
+	sa.defer(o.get_context(), false)
+	// Record the incomplete state so callers can detect unfinished binding.
+	sa.record_incomplete_ref()
 	return ''
 }
 
 // visit_type_info handles type info
 pub fn (mut sa SemanticAnalyzer) visit_type_info(mut o TypeInfo) !AnyNode {
-	// TODO: visit_type_info
+	sa.enter_class(&o)
+	defer {
+		sa.leave_class()
+	}
+
+	if mut defn := o.defn {
+		defn.defs.accept(mut sa)!
+		return ''
+	}
+
+	for _, mut sym in o.names.symbols {
+		if mut node := sym.node {
+			// Class symbol tables may point back to the owning TypeInfo, so skip
+			// the self-edge to avoid infinite recursion during traversal.
+			if node is TypeInfo && node.fullname == o.fullname {
+				continue
+			}
+			node.accept(mut sa)!
+		}
+	}
 	return ''
 }
 
@@ -1781,7 +1805,7 @@ pub fn (mut sa SemanticAnalyzer) incomplete_feature_enabled(feature string, ctx 
 pub fn (mut sa SemanticAnalyzer) record_incomplete_ref() {
 	if sa.missing_names.len > 0 {
 		// Mark current context as incomplete
-		sa.missing_names.last()['<incomplete_ref>'] = true
+		sa.missing_names.last()[incomplete_ref_marker] = true
 	}
 	sa.incomplete = true
 }
