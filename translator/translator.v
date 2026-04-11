@@ -491,6 +491,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	old_strict_exports := t.state.strict_exports
 	old_sccs := t.state.scc_files.clone()
 	old_current_module := t.state.current_module_name
+	old_omit_builtins := t.state.omit_builtins
 	
 	t.state = base.new_translator_state()
 	t.state.mapper = old_mapper
@@ -499,6 +500,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.state.strict_exports = old_strict_exports
 	t.state.scc_files = old_sccs.clone()
 	t.state.current_module_name = old_current_module
+	t.state.omit_builtins = old_omit_builtins
 	
 	mut e := &VCodeEmitter{
 		module_name:     'main'

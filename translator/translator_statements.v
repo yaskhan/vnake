@@ -799,6 +799,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
 					pure := v_type.trim_left('?&')
 					is_interface := pure in t.state.known_interfaces || pure in t.state.class_to_impl
+					eprintln("DEBUG: visit_assign interface_check pure=${pure} is_iface=${is_interface} known=${t.state.known_interfaces.keys()}")
 					if is_interface {
 						t.emit_indented('${lhs} = ${rhs_text}')
 					} else {

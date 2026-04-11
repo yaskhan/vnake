@@ -15,6 +15,7 @@ pub mut:
 	constants        []string
 	globals          []string
 	defined_classes  map[string]bool
+	omit_builtins    bool
 }
 
 pub fn new_module_emitter() ModuleEmitter {
@@ -81,17 +82,19 @@ pub fn (e &ModuleEmitter) emit() string {
 		}
 	}
 
-	parts << 'pub struct NoneType {}'
-	parts << "pub fn (n NoneType) str() string { return 'None' }"
-	
-	mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
-	for cls_name, _ in e.defined_classes {
-		v_cls := if cls_name.starts_with('&') { cls_name } else { '&' + cls_name }
-		if v_cls !in any_variants {
-			any_variants << v_cls
+	if !e.omit_builtins {
+		parts << 'pub struct NoneType {}'
+		parts << "pub fn (n NoneType) str() string { return 'None' }"
+		
+		mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
+		for cls_name, _ in e.defined_classes {
+			v_cls := if cls_name.starts_with('&') { cls_name } else { '&' + cls_name }
+			if v_cls !in any_variants {
+				any_variants << v_cls
+			}
 		}
+		parts << 'pub type Any = ${any_variants.join(" | ")}'
 	}
-	parts << 'pub type Any = ${any_variants.join(" | ")}'
 
 	if e.constants.len > 0 {
 		parts << e.constants.join('\n')
@@ -765,7 +768,6 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 	}
 
 	if m.state.used_string_format || m.state.used_builtins['py_bytes_format'] {
-		m.emitter.add_helper_import('strconv')
 		m.emitter.add_helper_import('strings')
 		
 				m.emitter.add_helper_function('fn py_string_format(fmt string, args ...Any) string {
@@ -881,7 +883,6 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 	}
 
 	if m.state.used_builtins['py_bytes_format'] {
-		m.emitter.add_helper_import('strconv')
 		m.emitter.add_helper_import('strings')
 		m.emitter.add_helper_function("fn py_bytes_format_arg(arg Any) string {
     if arg is []u8 { return arg.bytestr() }
@@ -1643,6 +1644,7 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 		v_cls := m.state.class_to_impl[k] or { k }
 		m.emitter.defined_classes[v_cls] = true
 	}
+	m.emitter.omit_builtins = m.state.omit_builtins
 
 	mut body := node.body.clone()
 	mut doc_comments := []string{}

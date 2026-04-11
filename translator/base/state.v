@@ -29,6 +29,7 @@ pub mut:
 	mapper              voidptr
 	include_all_symbols bool
 	strict_exports      bool
+	omit_builtins       bool
 
 	output                       []string
 	tail                         []string

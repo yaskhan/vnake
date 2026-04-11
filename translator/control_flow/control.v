@@ -71,7 +71,9 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 					m.emit('return match ${expr} {')
 					for cls_name, _ in m.env.state.defined_classes {
 						v_cls := m.env.state.class_to_impl[cls_name] or { cls_name }
-						m.emit('    &${v_cls} { it }')
+						if m.env.state.implements_interface(v_cls, pure) {
+							m.emit('    &${v_cls} { it }')
+						}
 					}
 					m.emit("    else { panic('cannot cast Any to interface ${ret_type}') }")
 					m.emit('} as ${ret_type}')

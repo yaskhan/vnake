@@ -110,8 +110,10 @@ pub fn (a Analyzer) get_mutability(name string) ?MutabilityInfo {
 		return a.mutability_map[lookup]
 	}
 	if name !in [lookup] && name in a.mutability_map {
+		eprintln('DEBUG: get_mutability name=${name} ORIGINAL -> FOUND')
 		return a.mutability_map[name]
 	}
+	eprintln('DEBUG: get_mutability name=${name} lookup=${lookup} -> NOT FOUND')
 	return none
 }
 

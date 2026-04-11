@@ -213,10 +213,10 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 }
 
 pub fn (e &VCodeEmitter) emit_helpers() string {
-	return VCodeEmitter.emit_global_helpers(e.helper_imports, e.helper_structs, e.helper_functions, 'main')
+	return VCodeEmitter.emit_global_helpers(e.helper_imports, e.helper_structs, e.helper_functions, 'main', [])
 }
 
-pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, functions []string, module_name string) string {
+pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, functions []string, module_name string, classes []string) string {
 	mut lines := []string{}
 	lines << 'module ${module_name}'
 	lines << ''
@@ -238,18 +238,10 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	}
 
 	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
-	for s in structs {
-		mut name := ''
-		if s.starts_with('struct ') {
-			name = s['struct '.len..].all_before(' ').all_before('{').trim_space()
-		} else if s.starts_with('pub struct ') {
-			name = s['pub struct '.len..].all_before(' ').all_before('{').trim_space()
-		}
-		if name != '' && name !in ['NoneType', 'Interpolation', 'Template', 'PyDictItem', 'PyCountIterator', 'PyRepeatIterator', 'PyCycleIterator'] && !name.contains('[') {
-			v_name := '&' + name
-			if v_name !in variants {
-				variants << v_name
-			}
+	for cls in classes {
+		v_cls := if cls.starts_with('&') { cls } else { '&' + cls }
+		if v_cls !in variants {
+			variants << v_cls
 		}
 	}
 	lines << 'pub type Any = ${variants.join(" | ")}'

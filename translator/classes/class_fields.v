@@ -394,7 +394,7 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 
 				added_fields[field_name] = true
 				field_type := env.map_annotation_fn(stmt.annotation)
-				raw_type := env.visit_expr_fn(stmt.annotation)
+				raw_type := env.map_annotation_fn(stmt.annotation)
 
 				is_class_var := raw_type.contains('ClassVar[') || raw_type.starts_with('ClassVar')
 				is_init_var := raw_type.contains('InitVar[') || raw_type.starts_with('InitVar')
@@ -542,7 +542,7 @@ fn (h ClassFieldsHandler) generate_dataclass_factory(struct_name string, datacla
 		if stmt is ast.AnnAssign {
 			if stmt.target is ast.Name {
 				name := sanitize_name(stmt.target.id, false)
-				raw_type := env.visit_expr_fn(stmt.annotation)
+				raw_type := env.map_annotation_fn(stmt.annotation)
 
 				if val := stmt.value {
 					if struct_name !in env.state.dataclass_defaults {

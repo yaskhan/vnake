@@ -25,6 +25,7 @@ pub mut:
 	imports   []string
 	structs   []string
 	functions []string
+	classes   []string
 }
 
 pub fn new_global_helpers() GlobalHelpers {
@@ -32,6 +33,7 @@ pub fn new_global_helpers() GlobalHelpers {
 		imports:   []string{}
 		structs:   []string{}
 		functions: []string{}
+		classes:   []string{}
 	}
 }
 
@@ -39,11 +41,18 @@ pub fn (mut g GlobalHelpers) merge(trans &translator.Translator) {
 	g.imports << trans.get_helper_imports()
 	g.structs << trans.get_helper_structs()
 	g.functions << trans.get_helper_functions()
+	
+	for k, _ in trans.state.defined_classes {
+		v_cls := trans.state.class_to_impl[k] or { k }
+		if v_cls !in g.classes {
+			g.classes << v_cls
+		}
+	}
 }
 
 pub fn (g GlobalHelpers) write(path string, module_name string) bool {
 	v_code := translator.VCodeEmitter.emit_global_helpers(g.imports, g.structs, g.functions,
-		module_name)
+		module_name, g.classes)
 	os.write_file(path, v_code) or {
 		println('Error writing global helpers to ${path}: ${err}')
 		return false
@@ -113,7 +122,8 @@ pub fn generate_all_helpers(output_path string) bool {
 		trans.get_helper_imports(),
 		trans.get_helper_structs(),
 		trans.get_helper_functions(),
-		'main'
+		'main',
+		[]
 	)
 	
 	os.write_file(output_path, helpers_code) or {
@@ -208,6 +218,9 @@ pub fn transpile_file(source_file string, config TranspilerConfig, mut global_he
 	trans.state.current_module_name = current_module
 	trans.state.current_file_name = os.file_name(source_file)
 	trans.state.is_full_module = true
+	if !config.no_helpers {
+		trans.state.omit_builtins = true
+	}
 	for f in scc_files {
 		trans.state.scc_files[f] = true
 	}
