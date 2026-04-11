@@ -136,7 +136,8 @@ fn test_visit_type_info_traverses_class_body_and_restores_class_scope() {
 			]
 		}
 	}
-	mut info := new_type_info(mut SymbolTable{}, defn, 'pkg.mod')
+	mut symtab := SymbolTable{}
+	mut info := new_type_info(mut symtab, defn, 'pkg.mod')
 	info.fullname = 'pkg.mod.Box'
 	defn.info = info
 
