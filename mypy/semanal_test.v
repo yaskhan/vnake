@@ -20,6 +20,70 @@ fn prepare_test_module(mut sa SemanticAnalyzer, module_name string) {
 	sa.visit_mypy_file(mut file) or { panic(err.msg) }
 }
 
+fn test_annotation_head_name_handles_simple_qualified_and_non_unbound_types() {
+	assert annotation_head_name(MypyTypeNode(UnboundType{
+		name: 'Final'
+	})) == 'Final'
+	assert annotation_head_name(MypyTypeNode(UnboundType{
+		name: 'typing.ClassVar'
+	})) == 'ClassVar'
+	assert annotation_head_name(MypyTypeNode(AnyType{
+		type_of_any: .special_form
+	})) == ''
+}
+
+fn test_unwrap_assignment_annotation_removes_nested_wrappers() {
+	nested := MypyTypeNode(UnboundType{
+		name: 'Final'
+		args: [MypyTypeNode(UnboundType{
+			name: 'typing.ClassVar'
+			args: [MypyTypeNode(UnboundType{
+				name: 'builtins.int'
+			})]
+		})]
+	})
+	unwrapped := unwrap_assignment_annotation(nested)
+	match unwrapped {
+		UnboundType {
+			assert unwrapped.name == 'builtins.int'
+		}
+		else {
+			panic('expected innermost unbound type')
+		}
+	}
+}
+
+fn test_flatten_lvalues_flattens_nested_tuple_and_list_targets() {
+	sa := new_test_semantic_analyzer()
+	flattened := sa.flatten_lvalues([
+		Expression(TupleExpr{
+			items: [
+				Expression(NameExpr{
+					name: 'a'
+				}),
+				Expression(ListExpr{
+					items: [
+						Expression(NameExpr{
+							name: 'b'
+						}),
+						Expression(NameExpr{
+							name: 'c'
+						}),
+					]
+				}),
+			]
+		}),
+		Expression(NameExpr{
+			name: 'd'
+		}),
+	])
+	assert flattened.len == 4
+	assert (flattened[0] as NameExpr).name == 'a'
+	assert (flattened[1] as NameExpr).name == 'b'
+	assert (flattened[2] as NameExpr).name == 'c'
+	assert (flattened[3] as NameExpr).name == 'd'
+}
+
 fn test_recurse_into_functions_defaults_to_true() {
 	sa := new_test_semantic_analyzer()
 	assert sa.recurse_into_functions()
