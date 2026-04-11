@@ -111,6 +111,7 @@ fn test_visit_placeholder_node_marks_analysis_as_deferred_and_incomplete() {
 
 	assert sa.deferred
 	assert sa.incomplete
+	assert sa.missing_names.len > 0
 	assert incomplete_ref_marker in sa.missing_names.last()
 }
 

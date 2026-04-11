@@ -29,6 +29,7 @@ pub const future_imports = {
 // CORE_BUILTIN_CLASSES вЂ” basic builtins classes
 pub const core_builtin_classes = ['object', 'type', 'list', 'dict', 'str', 'int', 'float', 'bool',
 	'bytes', 'tuple', 'set']
+// Marker used in missing_names to signal unresolved bindings in the current pass.
 pub const incomplete_ref_marker = '<incomplete_ref>'
 
 // SemanticAnalyzer вЂ” mypy semantic analyzer
