@@ -31,7 +31,7 @@ pub fn (mut t Translator) visit_import(node ast.Import) {
 		module_name := alias.name
 		as_name := alias.asname or { module_name }
 		mut is_same_scc := false
-		for scc_file in t.state.scc_files.keys() {
+		for scc_file, _ in t.state.scc_files {
 			if matches_scc(module_name, scc_file) {
 				is_same_scc = true
 				break
@@ -82,7 +82,7 @@ pub fn (mut t Translator) visit_import_from(node ast.ImportFrom) {
 	}
 
 	mut is_same_scc := false
-	for scc_file in t.state.scc_files.keys() {
+	for scc_file, _ in t.state.scc_files {
 		if matches_scc(module_name, scc_file) {
 			is_same_scc = true
 			break

@@ -104,7 +104,7 @@ pub fn (mut m VariablesModule) visit_expr(node ast.Expression) string {
 fn (m &VariablesModule) type_utils_context() base.TypeUtilsContext {
 	return base.TypeUtilsContext{
 		imported_symbols: m.state.imported_symbols
-		scc_files:        m.state.scc_files.keys()
+		scc_files:        m.state.scc_files
 		used_builtins:    m.state.used_builtins
 		warnings:         m.state.warnings
 		include_all_symbols: m.state.include_all_symbols

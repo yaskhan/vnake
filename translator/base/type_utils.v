@@ -29,7 +29,7 @@ pub struct TypeUtilsContext {
 pub mut:
 	imported_symbols    map[string]string
 	defined_classes     map[string]map[string]bool
-	scc_files           []string
+	scc_files           map[string]bool
 	used_builtins    map[string]bool
 	warnings         []string
 	include_all_symbols bool
@@ -218,7 +218,7 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 				return nested_name
 			}
 
-			for f in ctx.scc_files {
+			for f, _ in ctx.scc_files {
 				norm := f.replace('.py', '').replace('/', '.').replace('\\', '.')
 				if module_prefix.ends_with(norm) {
 					prefix := get_scc_prefix(f)

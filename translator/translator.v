@@ -401,7 +401,7 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: t.state.imported_symbols
 		defined_classes:  t.state.defined_classes
-		scc_files:        t.state.scc_files.keys()
+		scc_files:        t.state.scc_files
 		used_builtins:    t.state.used_builtins
 		warnings:         t.state.warnings
 		include_all_symbols: t.state.include_all_symbols
