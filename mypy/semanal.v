@@ -434,7 +434,11 @@ pub fn (mut sa SemanticAnalyzer) visit_assignment_stmt(mut s AssignmentStmt) !An
 			sa.analyze_lvalue(mut lv, false, false)!
 		}
 	}
-	// TODO: additional checks
+	sa.store_final_status(mut s)
+	sa.check_classvar(mut s)
+	if sa.process_type_annotation(mut s) {
+		return ''
+	}
 	return ''
 }
 
@@ -1175,6 +1179,171 @@ pub fn (mut sa SemanticAnalyzer) analyze_lvalue(mut lval Lvalue, nested bool, ex
 		}
 	}
 	return ''
+}
+
+fn (sa SemanticAnalyzer) flatten_lvalues(lvalues []Expression) []Expression {
+	mut res := []Expression{}
+	for lval in lvalues {
+		match lval {
+			TupleExpr {
+				res << sa.flatten_lvalues(lval.items)
+			}
+			ListExpr {
+				res << sa.flatten_lvalues(lval.items)
+			}
+			else {
+				res << lval
+			}
+		}
+	}
+	return res
+}
+
+fn annotation_head_name(typ MypyTypeNode) string {
+	if typ is UnboundType {
+		parts := typ.name.split('.')
+		return parts.last()
+	}
+	return ''
+}
+
+fn unwrap_assignment_annotation(typ MypyTypeNode) MypyTypeNode {
+	mut current := typ
+	for {
+		snapshot := current
+		if snapshot is UnboundType {
+			ub := snapshot as UnboundType
+			if ub.args.len > 0 && annotation_head_name(snapshot) in ['Final', 'ClassVar'] {
+				current = ub.args[0]
+				continue
+			}
+		}
+		break
+	}
+	return current
+}
+
+fn (sa SemanticAnalyzer) is_classvar_type(typ MypyTypeNode) bool {
+	return typ is UnboundType && annotation_head_name(typ) == 'ClassVar'
+}
+
+fn (mut sa SemanticAnalyzer) store_declared_type(mut lvalue Expression, typ MypyTypeNode) {
+	match mut lvalue {
+		NameExpr {
+			if mut sym := sa.lookup_ptr(lvalue.name, lvalue.get_context()) {
+				if mut node := sym.node {
+					if mut node is Var {
+						node.type_ = typ
+						node.is_inferred = false
+						sym.node = SymbolNodeRef(node)
+						lvalue.node = MypyNode(node)
+					}
+				}
+			}
+		}
+		MemberExpr {
+			if mut node := lvalue.node {
+				if mut node is Var {
+					node.type_ = typ
+					node.is_inferred = false
+				}
+			}
+		}
+		StarExpr {
+			sa.store_declared_type(mut lvalue.expr, typ)
+		}
+		else {}
+	}
+}
+
+fn (mut sa SemanticAnalyzer) store_final_status(mut s AssignmentStmt) {
+	if !s.is_final_def || s.lvalues.len != 1 {
+		return
+	}
+	lvalue := s.lvalues[0]
+	match lvalue {
+		NameExpr {
+			if mut sym := sa.lookup_ptr(lvalue.name, lvalue.get_context()) {
+				if mut node := sym.node {
+					if mut node is Var {
+						node.is_final = true
+						if constant_fold_expr(s.rvalue, sa.cur_mod_id) != none {
+							node.final_value = s.rvalue
+						}
+						if s.rvalue !is TempNode {
+							node.has_explicit_value = true
+						} else if !(s.rvalue as TempNode).no_rhs {
+							node.has_explicit_value = true
+						}
+						sym.node = SymbolNodeRef(node)
+					}
+				}
+			}
+		}
+		MemberExpr {
+			if mut node := lvalue.node {
+				if mut node is Var {
+					node.is_final = true
+					if constant_fold_expr(s.rvalue, sa.cur_mod_id) != none {
+						node.final_value = s.rvalue
+					}
+					if s.rvalue !is TempNode {
+						node.has_explicit_value = true
+					} else if !(s.rvalue as TempNode).no_rhs {
+						node.has_explicit_value = true
+					}
+				}
+			}
+		}
+		else {}
+	}
+}
+
+fn (mut sa SemanticAnalyzer) check_classvar(mut s AssignmentStmt) {
+	if s.lvalues.len != 1 {
+		return
+	}
+	ann := s.type_annotation or { return }
+	if !sa.is_classvar_type(ann) {
+		return
+	}
+	if sa.is_class_scope() && s.lvalues[0] is NameExpr {
+		lvalue := s.lvalues[0] as NameExpr
+		if mut sym := sa.lookup_ptr(lvalue.name, lvalue.get_context()) {
+			if mut node := sym.node {
+				if mut node is Var {
+					node.is_classvar = true
+					sym.node = SymbolNodeRef(node)
+				}
+			}
+		}
+	}
+	if ann is UnboundType && ann.args.len == 0 {
+		if s.rvalue is TempNode && (s.rvalue as TempNode).no_rhs {
+			return
+		}
+		s.type_annotation = none
+	}
+}
+
+fn (mut sa SemanticAnalyzer) process_type_annotation(mut s AssignmentStmt) bool {
+	ann := s.type_annotation or { return false }
+	allow_tuple_literal := s.lvalues.len > 0 && s.lvalues.last() is TupleExpr
+	normalized := unwrap_assignment_annotation(ann)
+	analyzed := sa.anal_type(normalized, none, allow_tuple_literal, false, false, true, true,
+		none, none) or {
+		sa.defer(s.get_context(), false)
+		return true
+	}
+	if has_placeholder(analyzed) {
+		sa.defer(s.get_context(), false)
+		return true
+	}
+	s.type_annotation = analyzed
+	for mut lvalue in sa.flatten_lvalues(s.lvalues) {
+		sa.store_declared_type(mut lvalue, analyzed)
+	}
+	return false
 }
 
 // names_modified_by_assignment returns names modified in assignment

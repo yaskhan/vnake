@@ -7,6 +7,19 @@ fn new_test_semantic_analyzer() &SemanticAnalyzer {
 	return new_semantic_analyzer(map[string]&MypyFile{}, errors, plugin, options)
 }
 
+fn prepare_test_module(mut sa SemanticAnalyzer, module_name string) {
+	mut file := MypyFile{
+		fullname:            module_name
+		path:                '${module_name}.py'
+		names:               SymbolTable{
+			symbols: map[string]SymbolTableNode{}
+		}
+		defs:                []Statement{}
+		future_import_flags: map[string]bool{}
+	}
+	sa.visit_mypy_file(mut file) or { panic(err.msg) }
+}
+
 fn test_recurse_into_functions_defaults_to_true() {
 	sa := new_test_semantic_analyzer()
 	assert sa.recurse_into_functions()
@@ -188,5 +201,116 @@ fn test_visit_type_info_without_defn_uses_class_scope_for_members() {
 		else {
 			panic('expected FuncDef method node')
 		}
+	}
+}
+
+fn test_visit_assignment_stmt_processes_final_annotation_and_value() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := MypyFile{
+		fullname:            'pkg.mod'
+		path:                'pkg/mod.py'
+		names:               SymbolTable{
+			symbols: map[string]SymbolTableNode{}
+		}
+		defs:                [
+			Statement(AssignmentStmt{
+				lvalues: [Expression(NameExpr{
+					name: 'answer'
+				})]
+				rvalue:          Expression(IntExpr{
+					value: 42
+				})
+				type_annotation: MypyTypeNode(UnboundType{
+					name: 'Final'
+					args: [MypyTypeNode(UnboundType{
+						name: 'builtins.int'
+					})]
+				})
+			}),
+		]
+		future_import_flags: map[string]bool{}
+	}
+
+	sa.visit_mypy_file(mut file) or { panic(err.msg) }
+
+	sym := file.names.symbols['answer'] or { panic('expected answer symbol') }
+	node := sym.node or { panic('expected answer node') }
+	analyzed_stmt := file.defs[0] as AssignmentStmt
+	match node {
+		Var {
+			assert node.is_final
+			assert node.has_explicit_value
+			assert node.type_ != none
+			fval := node.final_value or { panic('expected final value to be stored') }
+			match fval {
+				IntExpr {
+					assert fval.value == 42
+				}
+				else {
+					panic('expected int final value')
+				}
+			}
+		}
+		else {
+			panic('expected Var symbol for final assignment')
+		}
+	}
+	analyzed_type := analyzed_stmt.type_annotation or { panic('expected normalized annotation') }
+	if analyzed_type is UnboundType {
+		assert analyzed_type.name != 'Final'
+	}
+}
+
+fn test_visit_assignment_stmt_marks_classvar_in_class_scope() {
+	mut sa := new_test_semantic_analyzer()
+	prepare_test_module(mut sa, 'pkg.mod')
+	sa.cur_mod_id = 'pkg.mod'
+	sa.globals = SymbolTable{
+		symbols: map[string]SymbolTableNode{}
+	}
+	sa.locals = [?SymbolTable(SymbolTable{
+		symbols: map[string]SymbolTableNode{}
+	})]
+	sa.scope_stack = [scope_class]
+	sa.cur_type = &TypeInfo{
+		name:        'Box'
+		fullname:    'pkg.mod.Box'
+		module_name: 'pkg.mod'
+		names:       SymbolTable{
+			symbols: map[string]SymbolTableNode{}
+		}
+	}
+
+	mut stmt := AssignmentStmt{
+		lvalues: [Expression(NameExpr{
+			name: 'value'
+		})]
+		rvalue:          Expression(IntExpr{
+			value: 1
+		})
+		type_annotation: MypyTypeNode(UnboundType{
+			name: 'ClassVar'
+			args: [MypyTypeNode(UnboundType{
+				name: 'builtins.int'
+			})]
+		})
+	}
+
+	sa.visit_assignment_stmt(mut stmt) or { panic(err.msg) }
+
+	lvalue := stmt.lvalues[0] as NameExpr
+	node := lvalue.node or { panic('expected bound class variable') }
+	match node {
+		Var {
+			assert node.is_classvar
+			assert node.type_ != none
+		}
+		else {
+			panic('expected Var node for class variable')
+		}
+	}
+	analyzed_type := stmt.type_annotation or { panic('expected normalized ClassVar annotation') }
+	if analyzed_type is UnboundType {
+		assert analyzed_type.name != 'ClassVar'
 	}
 }
