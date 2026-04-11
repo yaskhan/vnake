@@ -665,13 +665,30 @@ pub fn (mut sa SemanticAnalyzer) visit_type_alias(mut o TypeAlias) !AnyNode {
 
 // visit_placeholder_node handles placeholder node
 pub fn (mut sa SemanticAnalyzer) visit_placeholder_node(mut o PlaceholderNode) !AnyNode {
-	// TODO: visit_placeholder_node
+	sa.defer(o.get_context(), false)
+	sa.record_incomplete_ref()
 	return ''
 }
 
 // visit_type_info handles type info
 pub fn (mut sa SemanticAnalyzer) visit_type_info(mut o TypeInfo) !AnyNode {
-	// TODO: visit_type_info
+	if mut defn := o.defn {
+		sa.enter_class(&o)
+		defer {
+			sa.leave_class()
+		}
+		defn.defs.accept(mut sa)!
+		return ''
+	}
+
+	for _, mut sym in o.names.symbols {
+		if mut node := sym.node {
+			if node is TypeInfo && node.fullname == o.fullname {
+				continue
+			}
+			node.accept(mut sa)!
+		}
+	}
 	return ''
 }
 
