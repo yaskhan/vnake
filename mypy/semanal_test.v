@@ -325,6 +325,68 @@ fn test_visit_assignment_stmt_processes_final_annotation_and_value() {
 	}
 }
 
+fn test_visit_assignment_stmt_processes_bare_final_annotation_and_infers_value_type() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := MypyFile{
+		fullname:            'pkg.mod'
+		path:                'pkg/mod.py'
+		names:               SymbolTable{
+			symbols: map[string]SymbolTableNode{}
+		}
+		defs:                [
+			Statement(AssignmentStmt{
+				lvalues: [Expression(NameExpr{
+					name: 'count'
+				})]
+				rvalue:          Expression(IntExpr{
+					value: 200
+				})
+				type_annotation: MypyTypeNode(UnboundType{
+					name: 'Final'
+				})
+			}),
+		]
+		future_import_flags: map[string]bool{}
+	}
+
+	sa.visit_mypy_file(mut file) or { panic(err.msg) }
+
+	sym := file.names.symbols['count'] or { panic('expected count symbol') }
+	node := sym.node or { panic('expected count node') }
+	analyzed_stmt := file.defs[0] as AssignmentStmt
+	match node {
+		Var {
+			assert node.is_final
+			assert node.has_explicit_value
+			typ := node.type_ or { panic('expected inferred bare Final type') }
+			match typ {
+				Instance {
+					type_ref := typ.type_ref or { panic('expected inferred instance type info') }
+					assert type_ref.fullname == 'builtins.int'
+				}
+				else {
+					panic('expected inferred builtins.int type for bare Final assignment')
+				}
+			}
+			fval := node.final_value or { panic('expected bare Final value to be stored') }
+			match fval {
+				IntExpr {
+					assert fval.value == 200
+				}
+				else {
+					panic('expected int final value for bare Final assignment')
+				}
+			}
+		}
+		else {
+			panic('expected Var symbol for bare final assignment')
+		}
+	}
+	analyzed_type := analyzed_stmt.type_annotation or { panic('expected normalized bare Final annotation') }
+	if analyzed_type is UnboundType {
+		assert analyzed_type.name != 'Final'
+	}
+}
 fn test_visit_assignment_stmt_marks_classvar_in_class_scope() {
 	mut sa := new_test_semantic_analyzer()
 	prepare_test_module(mut sa, 'pkg.mod')
