@@ -6,7 +6,9 @@ fn new_test_type_checker() &TypeChecker {
 	tree := &MypyFile{
 		path:     'test.py'
 		fullname: '__main__'
-		names:    SymbolTable{}
+		names:    SymbolTable{
+			symbols: map[string]SymbolTableNode{}
+		}
 	}
 	plugin := new_plugin(options)
 	return new_type_checker(errors, map[string]&MypyFile{}, options, tree, tree.path, plugin)
@@ -27,6 +29,16 @@ fn new_test_instance(fullname string) Instance {
 
 fn set_root_type(mut tc TypeChecker, name string, typ MypyTypeNode) {
 	tc.type_maps[0][name] = typ
+}
+
+fn new_test_module(fullname string) &MypyFile {
+	return &MypyFile{
+		path:     '${fullname}.py'
+		fullname: fullname
+		names:    SymbolTable{
+			symbols: map[string]SymbolTableNode{}
+		}
+	}
 }
 
 fn test_find_isinstance_check_narrows_union_types() {
@@ -120,4 +132,78 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 	narrowed_proper := get_proper_type(narrowed)
 	narrowed_inst := narrowed_proper as Instance
 	assert narrowed_inst.type_name == 'builtins.int'
+}
+
+fn test_lookup_resolves_active_class_globals_builtins_and_modules() {
+	mut tc := new_test_type_checker()
+	mut builtins := new_test_module('builtins')
+	builtins.names.symbols['len'] = SymbolTableNode{
+		kind: gdef
+	}
+	tc.modules['builtins'] = builtins
+
+	tc.globals.symbols['answer'] = SymbolTableNode{
+		kind: gdef
+	}
+
+	mut info := &TypeInfo{
+		name:     'Box'
+		fullname: '__main__.Box'
+		names:    SymbolTable{
+			symbols: {
+				'value': SymbolTableNode{
+					kind: mdef
+				}
+			}
+		}
+	}
+	tc.active_type = info
+
+	assert tc.lookup('value').kind == mdef
+	assert tc.lookup('answer').kind == gdef
+	assert tc.lookup('len').kind == gdef
+
+	mut pkg := new_test_module('pkg')
+	tc.modules['pkg'] = pkg
+	pkg_symbol := tc.lookup('pkg')
+	pkg_node := pkg_symbol.node or { panic('expected module lookup to return module node') }
+	assert pkg_node is MypyFile
+}
+
+fn test_lookup_qualified_and_lookup_typeinfo_follow_module_symbols() {
+	mut tc := new_test_type_checker()
+	mut pkg := new_test_module('pkg')
+	mut method := FuncDef{
+		name:     'method'
+		fullname: 'pkg.Box.method'
+	}
+	mut info := &TypeInfo{
+		name:     'Box'
+		fullname: 'pkg.Box'
+		names:    SymbolTable{
+			symbols: {
+				'method': SymbolTableNode{
+					kind: mdef
+					node: SymbolNodeRef(method)
+				}
+			}
+		}
+	}
+	pkg.names.symbols['Box'] = SymbolTableNode{
+		kind: gdef
+		node: SymbolNodeRef(*info)
+	}
+	tc.modules['pkg'] = pkg
+
+	box_symbol := tc.lookup_qualified('pkg.Box')
+	box_node := box_symbol.node or { panic('expected pkg.Box to resolve to a class node') }
+	assert box_node is TypeInfo
+
+	method_symbol := tc.lookup_qualified('pkg.Box.method')
+	method_node := method_symbol.node or { panic('expected pkg.Box.method to resolve to a method node') }
+	assert method_node is FuncDef
+
+	resolved := tc.lookup_typeinfo('pkg.Box')
+	assert resolved.fullname == 'pkg.Box'
+	assert resolved.name == 'Box'
 }
