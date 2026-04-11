@@ -98,25 +98,16 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 	fields []string,
 	mut env ClassVisitEnv) string {
 	_ = h
-	_ = decorators
 	_ = source_mapping
 	_ = node
-
+	_ = decorators
 	pub_prefix := if is_exported { 'pub ' } else { '' }
 	mut res := []string{}
-	if doc_comment.len > 0 {
-		res << doc_comment.trim_right('\n')
-	}
+	res << doc_comment
 	res << '${pub_prefix}interface ${struct_name}${generics_str} {'
-	// V interfaces cannot have fields, but can embed other interfaces
-	for base_expr in node.bases {
-		b_name := env.visit_expr_fn(base_expr)
-		if b_name != 'object' && b_name != 'ABC' && b_name != 'Generic' && b_name != 'Protocol' {
-			res << '    ' + sanitize_name(b_name, true)
-		}
-	}
 
 	mut added_meth_names := []string{}
+
 	mut immut_methods := []string{}
 	mut mut_methods := []string{}
 
@@ -163,6 +154,19 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 				}
 			}
 
+			if mut_prefix == '' {
+				// Interface methods need to match ANY implementation that needs mut
+				for other_cls, _ in env.analyzer.class_hierarchy {
+					other_key := '${other_cls}.${method.name}.${arg.arg}'
+					if m_info := env.analyzer.get_mutability(other_key) {
+						if m_info.is_reassigned || m_info.is_mutated {
+							mut_prefix = 'mut '
+							break
+						}
+					}
+				}
+			}
+
 			p_args << '${mut_prefix}${arg_name} ${ann_str}'
 		}
 		mut m_name := sanitize_name(method.name, false)
@@ -190,6 +194,13 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 
 		mut ret_type := resolve_interface_method_return_type(struct_name, method, mut
 			env)
+		// Ensure return type is the interface, not the implementation
+		if ret_type.ends_with('_Impl') {
+			ret_type = ret_type.all_before_last('_Impl')
+		} else if ret_type.starts_with('&') && ret_type.ends_with('_Impl') {
+			ret_type = ret_type.all_before_last('_Impl').trim_left('&')
+		}
+		
 		mut ret := if ret_type.len > 0 { ' ' + ret_type } else { '' }
 		if ret.len > 1 && !ret.ends_with('?') {
 			if m_name == 'next' && !ret.contains(' ?') {
@@ -249,6 +260,16 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 			}
 		}
 	}
+	// Add methods from base interfaces recursively
+	for base_expr in node.bases {
+		base_name := env.visit_expr_fn(base_expr)
+		if base_name in ['object', 'Any'] { continue }
+		v_base := env.map_type_fn(base_name, '', true, true, false)
+		if v_base != 'Any' {
+			res << "    ${v_base}"
+		}
+	}
+
 	res << '}'
 	return res.join('\n')
 }

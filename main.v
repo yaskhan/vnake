@@ -38,9 +38,15 @@ pub fn new_global_helpers() GlobalHelpers {
 }
 
 pub fn (mut g GlobalHelpers) merge(trans &translator.Translator) {
-	g.imports << trans.get_helper_imports()
-	g.structs << trans.get_helper_structs()
-	g.functions << trans.get_helper_functions()
+	for imp in trans.get_helper_imports() {
+		if imp !in g.imports { g.imports << imp }
+	}
+	for s in trans.get_helper_structs() {
+		if s !in g.structs { g.structs << s }
+	}
+	for f in trans.get_helper_functions() {
+		if f !in g.functions { g.functions << f }
+	}
 	
 	for k, _ in trans.state.defined_classes {
 		v_cls := trans.state.class_to_impl[k] or { k }

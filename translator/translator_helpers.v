@@ -64,7 +64,8 @@ fn (t &Translator) is_pure_literal_expr(node ast.Expression) bool {
 
 fn (mut t Translator) append_helpers() {
 	eprintln('DEBUG: append_helpers START. used_builtins=${t.state.used_builtins.keys()}')
-	if 'py_any' in t.state.used_builtins {
+	if !t.state.omit_builtins {
+		if 'py_any' in t.state.used_builtins {
 		t.emit_helper_function_code('fn py_any[T](a []T) bool {\n    for item in a {\n        if item {\n            return true\n        }\n    }\n    return false\n}')
 	}
 	if 'py_all' in t.state.used_builtins {
@@ -255,7 +256,6 @@ fn (mut t Translator) append_helpers() {
 		t.emit_helper_function_code('fn (mut a []T) insert_many[T](index int, val []T) {
     a.insert(index, val)
 }')
-	}
 	if 'py_bool' in t.state.used_builtins {
 		t.emit_helper_function_code('fn py_bool(val Any) bool {
     if val is bool { return val }
@@ -266,6 +266,8 @@ fn (mut t Translator) append_helpers() {
     if val is []Any { return val.len > 0 }
     return true
 }')
+	}
+	}
 	}
     for name, def in t.state.generated_sum_types {
         if name.contains('|') {

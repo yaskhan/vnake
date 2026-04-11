@@ -231,18 +231,18 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 				// or if the variable was explicitly narrowed
 				if node.value !is ast.Name && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
 					res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
-				} else {
+				} else if node.value is ast.Name {
 					// Check if narrowed and unwrap the receiver explicitly
-					name_node := node.value
-					if name_node is ast.Name {
-						sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
-							'', map[string]bool{})
-						if sanitized in eg.state.narrowed_vars {
-							res = "${obj}.${attr_name}"
-						} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-							res = "(${obj} or { panic('unwrap failed for ${attr_name}') }).${attr_name}"
-						}
+					sanitized := base.sanitize_name(node.value.id, false, map[string]bool{},
+						'', map[string]bool{})
+					if sanitized in eg.state.narrowed_vars {
+						res = "${obj}.${attr_name}"
+					} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+						res = "(${obj} or { panic('unwrap failed for ${attr_name}') }).${attr_name}"
 					}
+				} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+					// Hard-unwrap for options when target is not option
+					res = "(${obj} or { panic('unwrap failed for ${attr_name}') }).${attr_name}"
 				}
 			}
 		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {

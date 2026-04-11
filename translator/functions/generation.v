@@ -344,6 +344,21 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			is_mut = m_info.is_reassigned || m_info.is_mutated
 		}
 
+		if !is_mut {
+			// Check other implementations IF we are in a class
+			if struct_name.len > 0 {
+				for other_cls, _ in env.analyzer.class_hierarchy {
+					other_key := '${other_cls}.${node.name}.${arg.arg}'
+					if m_info_o := env.analyzer.get_mutability(other_key) {
+						if m_info_o.is_reassigned || m_info_o.is_mutated {
+							is_mut = true
+							break
+						}
+					}
+				}
+			}
+		}
+
 		clean_type_arg := arg_type.trim_left('?')
 		is_primitive_arg := clean_type_arg in ['int', 'string', 'bool', 'f32', 'f64', 'i64', 'i16',
 			'i8', 'u8', 'u16', 'u32', 'u64', 'byte', 'rune', 'void', 'any']
