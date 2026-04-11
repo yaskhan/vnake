@@ -111,7 +111,7 @@ fn test_visit_placeholder_node_marks_analysis_as_deferred_and_incomplete() {
 
 	assert sa.deferred
 	assert sa.incomplete
-	assert '<incomplete_ref>' in sa.missing_names.last()
+	assert incomplete_ref_marker in sa.missing_names.last()
 }
 
 fn test_visit_type_info_traverses_class_body_and_restores_class_scope() {

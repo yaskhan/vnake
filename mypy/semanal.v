@@ -29,6 +29,7 @@ pub const future_imports = {
 // CORE_BUILTIN_CLASSES вЂ” basic builtins classes
 pub const core_builtin_classes = ['object', 'type', 'list', 'dict', 'str', 'int', 'float', 'bool',
 	'bytes', 'tuple', 'set']
+pub const incomplete_ref_marker = '<incomplete_ref>'
 
 // SemanticAnalyzer вЂ” mypy semantic analyzer
 @[heap]
@@ -1798,7 +1799,7 @@ pub fn (mut sa SemanticAnalyzer) incomplete_feature_enabled(feature string, ctx 
 pub fn (mut sa SemanticAnalyzer) record_incomplete_ref() {
 	if sa.missing_names.len > 0 {
 		// Mark current context as incomplete
-		sa.missing_names.last()['<incomplete_ref>'] = true
+		sa.missing_names.last()[incomplete_ref_marker] = true
 	}
 	sa.incomplete = true
 }
