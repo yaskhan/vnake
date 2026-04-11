@@ -1017,16 +1017,16 @@ pub fn (tc TypeChecker) lookup(name string) SymbolTableNode {
 	}
 	if active := tc.active_type {
 		if name in active.names.symbols {
-			return active.names.symbols[name] or { SymbolTableNode{} }
+			return active.names.symbols[name]
 		}
 	}
 	if name in tc.globals.symbols {
-		return tc.globals.symbols[name] or { SymbolTableNode{} }
+		return tc.globals.symbols[name]
 	}
 	if 'builtins' in tc.modules {
 		builtins := tc.modules['builtins'] or { return SymbolTableNode{} }
 		if name in builtins.names.symbols {
-			return builtins.names.symbols[name] or { SymbolTableNode{} }
+			return builtins.names.symbols[name]
 		}
 	}
 	if name in tc.modules {
