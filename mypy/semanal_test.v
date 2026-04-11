@@ -149,3 +149,44 @@ fn test_visit_type_info_traverses_class_body_and_restores_class_scope() {
 	assert infos.len == 1
 	assert infos[0].message == 'Name "missing" is not defined'
 }
+
+fn test_visit_type_info_without_defn_uses_class_scope_for_members() {
+	mut sa := new_test_semantic_analyzer()
+	sa.cur_mod_id = 'pkg.mod'
+
+	mut method := FuncDef{
+		name: 'method'
+		body: Block{
+			body: []Statement{}
+		}
+	}
+	mut info := TypeInfo{
+		fullname:    'pkg.mod.Box'
+		module_name: 'pkg.mod'
+		name:        'Box'
+		names:       SymbolTable{
+			symbols: {
+				'method': SymbolTableNode{
+					kind: mdef
+					node: SymbolNodeRef(method)
+				}
+			}
+		}
+	}
+
+	sa.visit_type_info(mut info) or { panic(err.msg) }
+
+	assert sa.cur_type == none
+	sym := info.names.symbols['method'] or { panic('expected method symbol') }
+	node := sym.node or { panic('expected method node') }
+	match node {
+		FuncDef {
+			assert node.fullname == 'pkg.mod.Box.method'
+			method_info := node.info or { panic('expected method to be analyzed in class scope') }
+			assert method_info.fullname == 'pkg.mod.Box'
+		}
+		else {
+			panic('expected FuncDef method node')
+		}
+	}
+}

@@ -676,11 +676,12 @@ pub fn (mut sa SemanticAnalyzer) visit_placeholder_node(mut o PlaceholderNode) !
 
 // visit_type_info handles type info
 pub fn (mut sa SemanticAnalyzer) visit_type_info(mut o TypeInfo) !AnyNode {
+	sa.enter_class(&o)
+	defer {
+		sa.leave_class()
+	}
+
 	if mut defn := o.defn {
-		sa.enter_class(&o)
-		defer {
-			sa.leave_class()
-		}
 		defn.defs.accept(mut sa)!
 		return ''
 	}
