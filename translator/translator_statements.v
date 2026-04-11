@@ -485,9 +485,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 
 		lhs := base.sanitize_name(id, false, map[string]bool{}, '', map[string]bool{})
 		mut rhs_text := rhs
-		if t.state.current_class.ends_with('Task') && rhs == 'r' && lhs in ['h', 'd', 'i', 'w'] {
-			rhs_text = '(${rhs} as ${t.state.current_class}Rec)'
-		}
 		mut lhs_t := t.guess_type(target)
 		eprintln('DEBUG: visit_assign id=${id} lhs_t=${lhs_t} loc=${target.get_token().line}:${target.get_token().column}')
 		if id.len > 0 && id in t.analyzer.raw_type_map {
@@ -557,10 +554,17 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 					if inner in t.state.defined_classes && !t.state.defined_classes[inner]['is_struct'] && !t.state.defined_classes[inner]['is_type_alias'] {
 						is_ref = true
 					}
-					if (v_inferred.starts_with("&") || is_ref) && !inner.starts_with("&") {
-						inner = "&" + inner
+					is_interface := inner in t.state.known_interfaces || inner in t.state.class_to_impl
+					if (v_inferred.starts_with("&") || is_ref) && !inner.starts_with("&") && !inner.starts_with('[]') {
+						if !is_interface {
+							inner = "&" + inner
+						}
 					}
-					t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
+					if is_interface {
+						t.emit_indented("${lhs} = ${rhs_text}")
+					} else {
+						t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
+					}
 				}
 			} else {
 				t.emit_indented('${lhs} = ${rhs_text}')
@@ -789,21 +793,30 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				t.state.current_assignment_type = prev_assignment_type
 				return
 			}
-			if t.state.current_class.ends_with('Task') && rhs_text == 'r' && lhs in ['h', 'd', 'i', 'w'] {
-				rhs_text = '(${rhs_text} as ${t.state.current_class}Rec)'
-			}
 			is_opt := t.state.current_assignment_type.starts_with('?') || t.state.current_assignment_type == 'Any'
 			v_type := t.state.current_assignment_type
 			if t.is_declared_local(lhs) {
 				if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
-					t.emit_indented('${lhs} = ${v_type}(${rhs_text})')
+					pure := v_type.trim_left('?&')
+					is_interface := pure in t.state.known_interfaces || pure in t.state.class_to_impl
+					if is_interface {
+						t.emit_indented('${lhs} = ${rhs_text}')
+					} else {
+						t.emit_indented('${lhs} = ${v_type}(${rhs_text})')
+					}
 				} else {
 					t.emit_indented('${lhs} = ${rhs_text}')
 				}
 			} else {
 				if lhs in t.mutable_locals || is_opt {
 					if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
-						t.emit_indented('mut ${lhs} := ${v_type}(${rhs_text})')
+						pure := v_type.trim_left('?&')
+						is_interface := pure in t.state.known_interfaces || pure in t.state.class_to_impl
+						if is_interface {
+							t.emit_indented('mut ${lhs} := ${rhs_text}')
+						} else {
+							t.emit_indented('mut ${lhs} := ${v_type}(${rhs_text})')
+						}
 					} else {
 						t.emit_indented('mut ${lhs} := ${rhs_text}')
 					}

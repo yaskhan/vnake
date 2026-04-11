@@ -14,6 +14,7 @@ pub mut:
 	main_statements  []string
 	constants        []string
 	globals          []string
+	defined_classes  map[string]bool
 }
 
 pub fn new_module_emitter() ModuleEmitter {
@@ -26,6 +27,7 @@ pub fn new_module_emitter() ModuleEmitter {
 		main_statements:  []string{}
 		constants:        []string{}
 		globals:          []string{}
+		defined_classes:  map[string]bool{}
 	}
 }
 
@@ -78,6 +80,18 @@ pub fn (e &ModuleEmitter) emit() string {
 			parts << 'import ${name}'
 		}
 	}
+
+	parts << 'pub struct NoneType {}'
+	parts << "pub fn (n NoneType) str() string { return 'None' }"
+	
+	mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
+	for cls_name, _ in e.defined_classes {
+		v_cls := if cls_name.starts_with('&') { cls_name } else { '&' + cls_name }
+		if v_cls !in any_variants {
+			any_variants << v_cls
+		}
+	}
+	parts << 'pub type Any = ${any_variants.join(" | ")}'
 
 	if e.constants.len > 0 {
 		parts << e.constants.join('\n')
@@ -519,7 +533,6 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 	m.collect_global_refs(node, top_level_names, mut assigned_locally, mut globals)
 
 	for name, _ in globals {
-		eprintln('DEBUG: scan_module_symbols FOUND GLOBAL: ${name}')
 		m.state.global_vars[name] = true
 	}
 
@@ -920,6 +933,29 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }")
 	}
 
+	if 'py_subscript' in m.state.used_builtins {
+		m.emitter.add_helper_function('fn py_subscript(val Any, idx Any) Any {
+	if val is []Any {
+		if idx is int { return val[idx] }
+		if idx is i64 { return val[int(idx)] }
+	}
+	if val is map[string]Any {
+		if idx is string { return val[idx] }
+	}
+	return NoneType{}
+}')
+	}
+
+	if 'py_repeat_list' in m.state.used_builtins || m.state.used_builtins['py_repeat_list'] {
+		m.emitter.add_helper_function('fn py_repeat_list[T](arr []T, n int) []T {
+	mut res := []T{cap: arr.len * n}
+	for _ in 0 .. n {
+		res << arr
+	}
+	return res
+}')
+	}
+
 	if m.state.used_builtins['py_subscript_int'] {
 		m.emitter.add_helper_function('fn py_subscript_int[T](a []T, idx int) T {
     if idx < 0 { return a[a.len + idx] }
@@ -1311,6 +1347,9 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_cycle[T](items []T) PyCycleIterator[T] { return PyCycleIterator[T]{items: items, idx: 0} }')
 	}
 
+	if m.state.used_builtins['vexc'] {
+		m.emitter.add_import('div72.vexc')
+	}
 	if 'pathlib' in imported || m.state.used_builtins['py_path_new'] {
 		m.emitter.add_helper_import('os')
 		m.emitter.add_helper_struct('struct PyPath { path string }')
@@ -1593,6 +1632,17 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 	m.coroutine_handler.scan_module(node)
 	m.scan_module_symbols(node)
 	m.emitter.module_name = m.state.current_module_name
+	mut ve := unsafe { &VCodeEmitter(m.state.emitter) }
+	for imp in ve.imports {
+		m.emitter.add_import(imp)
+	}
+	for imp in ve.helper_imports {
+		m.emitter.add_helper_import(imp)
+	}
+	for k, _ in m.state.defined_classes {
+		v_cls := m.state.class_to_impl[k] or { k }
+		m.emitter.defined_classes[v_cls] = true
+	}
 
 	mut body := node.body.clone()
 	mut doc_comments := []string{}
@@ -1626,7 +1676,6 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 			m.state.in_main = true
 			
 			// Extract handled functions/structs from VCodeEmitter
-			mut ve := unsafe { &VCodeEmitter(m.state.emitter) }
 			for f in ve.functions {
 				m.emitter.add_helper_function(f)
 			}

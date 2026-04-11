@@ -597,7 +597,7 @@ fn (mut b ASTReadBuffer) read_func_def() FuncDef {
 }
 
 fn (mut b ASTReadBuffer) read_argument() Argument {
-	v_ := b.read_var()
+	mut v_ := b.read_var()
 	mut node := Argument{
 		variable: v_
 	}
@@ -637,10 +637,10 @@ fn (mut b ASTReadBuffer) read_class_def() ClassDef {
 }
 
 fn (mut b ASTReadBuffer) read_decorator() Decorator {
-	f_ := b.read_func_def()
+	mut f_ := b.read_func_def()
 	b.expect_end_tag()
 	decos_ := b.read_list_expr()
-	v_ := b.read_var()
+	mut v_ := b.read_var()
 	mut node := Decorator{
 		func:       f_
 		decorators: decos_

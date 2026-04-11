@@ -58,7 +58,29 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 				m.emit('return none')
 			}
 		} else if expr.len > 0 {
-			m.emit('return ${expr}')
+			ret_type := m.env.state.current_function_return_type
+			pure := ret_type.trim_left('?&')
+			is_interface := pure in m.env.state.known_interfaces || pure in m.env.state.class_to_impl
+			if is_interface && expr != 'none' {
+				mut v_type := 'Any'
+				if f := m.env.guess_type_fn {
+					v_type = f(val)
+				}
+				eprintln('DEBUG: visit_return interface=${ret_type} expr=${expr} expr_v_type=${v_type}')
+				if v_type == 'Any' || v_type == '' || (expr.contains('.') && !expr.contains('(')) {
+					m.emit('return match ${expr} {')
+					for cls_name, _ in m.env.state.defined_classes {
+						v_cls := m.env.state.class_to_impl[cls_name] or { cls_name }
+						m.emit('    &${v_cls} { it }')
+					}
+					m.emit("    else { panic('cannot cast Any to interface ${ret_type}') }")
+					m.emit('} as ${ret_type}')
+				} else {
+					m.emit('return ${expr} as ${ret_type}')
+				}
+			} else {
+				m.emit('return ${expr}')
+			}
 		} else {
 			m.emit('return')
 		}

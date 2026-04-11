@@ -436,7 +436,11 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		return struct_name_tuple
 	})
 
-	if res == 'TaskState' || res == '&TaskState' { return 'TaskState' }
+	pure_res := res.trim_left('?&')
+	if pure_res in t.state.known_interfaces || pure_res in t.state.class_to_impl {
+		return res.replace('&', '')
+	}
+
 	if res.len == 0 {
 		return type_str
 	}
@@ -446,7 +450,7 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 	is_type_var := pure_v in t.state.type_vars || pure_v in t.state.current_class_generics
 	
 	if t.state.is_v_class_type(pure_v) && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') && !is_type_var {
-		is_interface := pure_v in t.state.known_interfaces || pure_v == 'TaskState' || pure_v.ends_with('Protocol')
+		is_interface := pure_v in t.state.known_interfaces || pure_v in t.state.class_to_impl || pure_v.ends_with('Protocol')
 		if is_interface {
 			return if final_res.starts_with('?') { '?' + pure_v } else { pure_v }
 		}
@@ -683,6 +687,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	// Use structured output if requested
 	if t.state.is_full_module {
+		t.append_helpers() // Ensure helpers are added to t.state.emitter
 		mut mt := new_module_translator(mut t.state, t.analyzer, fn [mut t] (stmt ast.Statement) {
 			t.visit_stmt(stmt)
 		})

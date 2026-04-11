@@ -70,7 +70,8 @@ pub fn (mut pc PatternChecker) visit_or_pattern(p OrPattern) PatternTypeResult {
 
 pub fn (mut pc PatternChecker) visit_value_pattern(p ValuePattern) PatternTypeResult {
 	// Value must match expected type. We just check the right side.
-	pc.require_type_checker().expr_checker.accept(p.expr)
+	mut tc := pc.require_type_checker()
+	tc.expr_checker.accept(p.expr)
 	return PatternTypeResult{
 		type_: pc.type_context.last()
 	}

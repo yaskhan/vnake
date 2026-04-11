@@ -58,6 +58,7 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 			if is_none {
 				if (op == 'is not' && positive) || (op == '!=' && positive) || (op == 'is' && !positive) || (op == '==' && !positive) {
 					mut orig_type := m.guess_type(left)
+					eprintln("DEBUG: collect_narrowing var=${var_name} orig_type=${orig_type} op=${op} pos=${positive}")
 					eprintln('DEBUG: collect_narrowing var=${var_name} orig_type=${orig_type}')
 					if !orig_type.starts_with('?') && orig_type != 'Any' {
 						orig_type = '?' + orig_type
@@ -95,10 +96,12 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		eprintln('DEBUG: apply_flow_narrowing var=${var_name} n_type=${n_type} base_type=${base_type}')
 
 		mut is_auto := false
-		if base_type.starts_with('?') && (narrowed_type == base_type[1..] || '&' + narrowed_type == base_type[1..] || narrowed_type == '&' + base_type[1..]) {
-			is_auto = true
-		} else if (base_type.contains('|') || base_type.starts_with('SumType_')) && !narrowed_type.contains('|') {
-			is_auto = false // SumTypes need explicit 'as'
+		if branch_suffix != '_while' {
+			if base_type.starts_with('?') && (narrowed_type == base_type[1..] || '&' + narrowed_type == base_type[1..] || narrowed_type == '&' + base_type[1..]) {
+				is_auto = true
+			} else if (base_type.contains('|') || base_type.starts_with('SumType_')) && !narrowed_type.contains('|') {
+				is_auto = false // SumTypes need explicit 'as'
+			}
 		}
 
 		if is_auto {

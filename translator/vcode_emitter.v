@@ -237,7 +237,22 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		lines << ''
 	}
 
-	lines << 'pub type Any = bool | f64 | i64 | int | string | voidptr | NoneType | Interpolation | Template | []Any | map[string]Any | []u8'
+	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
+	for s in structs {
+		mut name := ''
+		if s.starts_with('struct ') {
+			name = s['struct '.len..].all_before(' ').all_before('{').trim_space()
+		} else if s.starts_with('pub struct ') {
+			name = s['pub struct '.len..].all_before(' ').all_before('{').trim_space()
+		}
+		if name != '' && name !in ['NoneType', 'Interpolation', 'Template', 'PyDictItem', 'PyCountIterator', 'PyRepeatIterator', 'PyCycleIterator'] && !name.contains('[') {
+			v_name := '&' + name
+			if v_name !in variants {
+				variants << v_name
+			}
+		}
+	}
+	lines << 'pub type Any = ${variants.join(" | ")}'
 	lines << ''
 
 	lines << 'pub struct NoneType {}'

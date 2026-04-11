@@ -499,7 +499,7 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 			return analyzer_ptr.get_type(node.id) or { 'int' }
 		}
 	}
-	return 'int'
+	return 'Any'
 }
 
 fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_location bool) string {

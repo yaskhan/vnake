@@ -105,10 +105,13 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	mut name := eg.state.name_remap[node.id] or { node.id }
+	if name != node.id {
+		eprintln("DEBUG: visit_name remapped ${node.id} -> ${name} (in_lhs=${eg.state.in_assignment_lhs})")
+	}
 	
 	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
 	// don't use it for assignment LHS, as we must assign to the base variable.
-	if eg.state.in_assignment_lhs && (name.contains('(') || name.contains(' ') || name.contains(' as ')) {
+	if eg.state.in_assignment_lhs && (name.contains('(') || name.contains(' ') || name.contains(' as ') || name.starts_with('narrowed_')) {
 		name = node.id
 	}
 
@@ -116,8 +119,12 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	
 	v_type := eg.guess_type(node)
 	if v_type.starts_with('?') && !eg.state.in_assignment_lhs {
-		// Unwrap if explicitly narrowed OR if the target context requires non-optional type
-		if eg.state.narrowed_vars[sanitized] || (!eg.target_type.starts_with('?') && eg.target_type != 'Any' && eg.target_type != '') {
+		// If explicitly narrowed in this scope, V 0.5 already considers it non-optional
+		if eg.state.narrowed_vars[sanitized] {
+			return sanitized
+		}
+		// Unwrap if the target context requires non-optional type
+		if (!eg.target_type.starts_with('?') && eg.target_type != 'Any' && eg.target_type != '') {
 			return "(${sanitized} or { panic('narrowed var is none') })"
 		}
 	}

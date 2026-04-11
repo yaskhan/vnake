@@ -104,6 +104,12 @@ fn (mut t Translator) append_helpers() {
 	if 'py_range' in t.state.used_builtins {
 		t.emit_helper_function_code('fn py_range(args ...int) []int {\n    mut res := []int{}\n    mut start := 0\n    mut stop := 0\n    mut step := 1\n    if args.len == 1 {\n        stop = args[0]\n    } else if args.len == 2 {\n        start = args[0]\n        stop = args[1]\n    } else if args.len >= 3 {\n        start = args[0]\n        stop = args[1]\n        step = args[2]\n    }\n    if step > 0 {\n        for i := start; i < stop; i += step {\n            res << i\n        }\n    } else if step < 0 {\n        for i := start; i > stop; i += step {\n            res << i\n        }\n    }\n    return res\n}')
 	}
+	if 'py_subscript' in t.state.used_builtins {
+		t.emit_helper_function_code("fn py_subscript(val Any, idx Any) Any {\n\tif val is []Any {\n\t\tif idx is int { return val[idx] }\n\t\tif idx is i64 { return val[int(idx)] }\n\t}\n\tif val is map[string]Any {\n\t\tif idx is string { return val[idx] }\n\t}\n\treturn NoneType{}\n}")
+	}
+	if 'py_repeat_list' in t.state.used_builtins {
+		t.emit_helper_function_code("fn py_repeat_list[T](arr []T, n int) []T {\n\tmut res := []T{cap: arr.len * n}\n\tfor _ in 0 .. n {\n\t\tres << arr\n\t}\n\treturn res\n}")
+	}
 	if 'py_urlencode' in t.state.used_builtins {
 		t.state.used_builtins['net.urllib'] = true
 		t.emit_helper_function_code('fn py_urlencode(params map[string]string) string {\n    // stub\n    return ""\n}')

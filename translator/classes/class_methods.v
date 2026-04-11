@@ -126,7 +126,7 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 		mut args := []string{}
 		mut all_args := method.args.posonlyargs.clone()
 		all_args << method.args.args
-			for arg in all_args {
+		for arg in all_args {
 			if arg.arg == 'self' || (is_m_classmethod && arg.arg == 'cls') {
 				continue
 			}
@@ -134,10 +134,21 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 			mut a_type := 'int'
 			if ann := arg.annotation {
 				a_type = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env, arg_name)
-				} else if arg_name in env.analyzer.type_map {
-					a_type = map_python_type(env.analyzer.type_map[arg_name], struct_name, false, mut env, arg_name)
-				}
-			args << '${arg_name} ${a_type}'
+			} else if arg_name in env.analyzer.type_map {
+				a_type = map_python_type(env.analyzer.type_map[arg_name], struct_name, false, mut env, arg_name)
+			}
+			
+			mut is_mut := false
+			p_key_mut := if struct_name.len > 0 {
+				'${struct_name}.${method.name}.${arg.arg}'
+			} else {
+				'${method.name}.${arg.arg}'
+			}
+			if m_info := env.analyzer.get_mutability(p_key_mut) {
+				is_mut = m_info.is_reassigned || m_info.is_mutated
+			}
+			
+			args << '${if is_mut { 'mut ' } else { '' }}${arg_name} ${a_type}'
 		}
 
 		mut ret_type := 'void'

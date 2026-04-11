@@ -415,7 +415,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			&& r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'NoneType']
 			&& !r_clean_ptr.starts_with('LiteralEnum_') && !r_clean_ptr.starts_with('SumType_')
 			&& !r_clean_ptr.starts_with('TupleStruct_')
-			&& r_clean_ptr !in v_gens_to_declare && r_clean_ptr !in env.state.known_interfaces && !r_clean_ptr.ends_with('Protocol') && r_clean_ptr != 'TaskState' && !ret_type.starts_with('&') {
+			&& r_clean_ptr !in v_gens_to_declare && r_clean_ptr !in env.state.known_interfaces && r_clean_ptr !in env.state.class_to_impl && !r_clean_ptr.ends_with('Protocol') && !ret_type.starts_with('&') {
 			if ret_type.starts_with('?') {
 				ret_type = '?&' + ret_type[1..]
 			} else {

@@ -59,7 +59,7 @@ pub mut:
 	errors                               Errors
 	plugin                               Plugin
 	statement                            ?Statement
-	cur_mod_node                         ?MypyFile
+	cur_mod_node                         ?&MypyFile
 	msg                                  MessageBuilder
 	scope                                Scope
 	recurse_into_function_bodies         bool
@@ -1586,7 +1586,7 @@ pub fn (mut sa SemanticAnalyzer) anal_type(typ MypyTypeNode, tvar_scope ?&TypeVa
 		tvar_scope:                         if ts := tvar_scope { ts } else { &sa.tvar_scope }
 		plugin:                             sa.plugin
 		options:                            sa.options
-		cur_mod_node:                       if mn := sa.cur_mod_node { mn } else { MypyFile{} }
+		cur_mod_node:                       sa.cur_mod_node or { &MypyFile{} }
 		is_typeshed_stub:                   sa.is_typeshed_stub_file
 		allow_tuple_literal:                allow_tuple_literal
 		allow_unbound_tvars:                allow_unbound_tvars

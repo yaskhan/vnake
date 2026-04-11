@@ -362,7 +362,8 @@ pub fn (mut ec ExpressionChecker) visit_call_expr_inner(e CallExpr, allow_none_r
 pub fn (mut ec ExpressionChecker) check_call_expr_with_callee_type(callee_type MypyTypeNode, e CallExpr) MypyTypeNode {
 	ret_type, _ := ec.check_call(callee_type, e.args, e.arg_kinds, e.base)
 	if get_proper_type(ret_type) is UninhabitedType {
-		ec.require_type_checker().binder.unreachable()
+		mut tc := ec.require_type_checker()
+		tc.binder.unreachable()
 	}
 	return ret_type
 }
@@ -600,9 +601,11 @@ pub fn (mut ec ExpressionChecker) visit_comparison_expr(e ComparisonExpr) MypyTy
 pub fn (mut ec ExpressionChecker) visit_assignment_expr(e AssignmentExpr) MypyTypeNode {
 	value := ec.accept(e.value)
 	if mut lval := e.target.as_lvalue() {
-		ec.require_type_checker().check_assignment(mut lval, e.value, value)
+		mut tc := ec.require_type_checker()
+		tc.check_assignment(mut lval, e.value, value)
 	}
-	ec.require_type_checker().store_type(e.target, value)
+	mut tc2 := ec.require_type_checker()
+	tc2.store_type(e.target, value)
 	return value
 }
 

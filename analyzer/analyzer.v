@@ -101,7 +101,15 @@ pub fn (mut a Analyzer) set_raw_type(name string, typ string) {
 
 // get_mutability returns mutability information
 pub fn (a Analyzer) get_mutability(name string) ?MutabilityInfo {
-	if name in a.mutability_map {
+	mut lookup := name
+	if lookup.contains('_Impl.') {
+		lookup = lookup.replace('_Impl.', '.')
+	}
+	if lookup in a.mutability_map {
+		eprintln('DEBUG: get_mutability name=${name} lookup=${lookup} -> FOUND')
+		return a.mutability_map[lookup]
+	}
+	if name !in [lookup] && name in a.mutability_map {
 		return a.mutability_map[name]
 	}
 	return none

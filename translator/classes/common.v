@@ -85,7 +85,7 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 
 	if clean_type == struct_name || clean_type.replace('_Impl', '') == struct_name || clean_type == struct_name.replace('_Impl', '') {
 		real_name := struct_name.replace('_Impl', '')
-		if real_name in env.state.known_interfaces || real_name == 'TaskState' || real_name.ends_with('State') {
+		if real_name in env.state.known_interfaces || real_name in env.state.class_to_impl {
 			return if is_optional { '?${real_name}' } else { real_name }
 		}
 		return if is_optional { '?&${real_name}' } else { '&${real_name}' }
@@ -106,7 +106,7 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 	pure_v := final_v.trim_left('?&')
 	
 	if env.state.is_v_class_type(pure_v) && !pure_v.starts_with('&') && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') {
-		if (pure_v in env.state.known_interfaces || pure_v == 'TaskState' || pure_v == 'Task' || pure_v == 'TaskRec') {
+		if pure_v in env.state.known_interfaces || pure_v in env.state.class_to_impl {
 			return if final_v.starts_with('?') { '?' + pure_v } else { pure_v }
 		}
 		if final_v.starts_with('?') {
@@ -117,7 +117,10 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 	}
 	if struct_name == 'Task' && field_name == 'link' {
 	}
-	if final_v.contains('TaskState') { return final_v.replace('&', '') }
+	pure_final := final_v.trim_left('?&')
+	if pure_final in env.state.known_interfaces || pure_final in env.state.class_to_impl {
+		return final_v.replace('&', '')
+	}
 	return final_v
 }
 

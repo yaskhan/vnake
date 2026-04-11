@@ -30,6 +30,7 @@ pub fn analyze_type_alias(typ MypyTypeNode, api SemanticAnalyzerCoreInterface, t
 // TypeAnalyser — semantic analyzer for types
 // Converts unbound types to bound types
 pub struct TypeAnalyser {
+	cur_mod_node                       &MypyFile
 pub mut:
 	api                                SemanticAnalyzerCoreInterface
 	fail_func                          fn (string, Context, &ErrorCode) = unsafe { nil }
@@ -51,7 +52,6 @@ pub mut:
 	report_invalid_types               bool
 	plugin                             Plugin
 	options                            Options
-	cur_mod_node                       MypyFile
 	is_typeshed_stub                   bool
 	aliases_used                       map[string]bool
 	prohibit_self_type                 ?string

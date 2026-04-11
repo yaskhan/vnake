@@ -36,12 +36,45 @@ fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
 	if typ.starts_with('?') { return false }
 	if typ.starts_with('SumType_') { return true }
 	if typ.starts_with('map[') && typ.ends_with(']Any') { return true }
-	// For Any type (sum type containing NoneType), always use `is NoneType` check
-	// because Any is a sum type and `== none` doesn't work with sum types
+	// For Any type (sum type containing NoneType), use is NoneType check
+	// unless we know it's an optional pointer.
 	if typ == 'Any' {
+		if node is ast.Name {
+			// If it's a narrowed variable, it might be an optional
+			if node.id in eg.state.narrowed_vars {
+				eprintln('DEBUG: should_use_is_none_type Any NARROWED var=${node.id} -> false')
+				return false
+			}
+			// Check Mypy type directly - if Mypy says it's Optional, use == none
+			loc := '${node.get_token().line}:${node.get_token().column}'
+			if mypy_t := eg.analyzer.get_mypy_type(node.id, loc) {
+				eprintln('DEBUG: should_use_is_none_type Any var=${node.id} mypy_t=${mypy_t}')
+				if mypy_t.starts_with('Optional[') || mypy_t.contains('| None') || mypy_t == 'None' {
+					return false
+				}
+			}
+		}
+		if node is ast.Attribute {
+			loc := '${node.get_token().line}:${node.get_token().column}'
+			if mypy_t := eg.analyzer.get_mypy_type(node.attr, loc) {
+				eprintln('DEBUG: should_use_is_none_type Any attr=${node.attr} mypy_t=${mypy_t}')
+				if mypy_t.starts_with('Optional[') || mypy_t.contains('| None') || mypy_t == 'None' {
+					return false
+				}
+			}
+		}
 		return true
 	}
-	return false
+	// Optional types should always use `== none`
+	if typ.starts_with('?') {
+		return false
+	}
+	// Interface variables should use `== none`
+	pure := typ.trim_left('?&[]').all_before('[')
+	if pure in eg.state.known_interfaces || pure in eg.state.class_to_impl {
+		return false
+	}
+	return typ == 'Any' || typ.starts_with('SumType_')
 }
 
 
@@ -362,9 +395,14 @@ fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) str
 		return "${expr} != none"
 	}
 	
-	// For simple identifiers in `or` context, conservatively add none check
+	// For simple identifiers in `or` context, use proper check based on type
 	if node is ast.Name {
-		return "(${expr} !is NoneType && ${expr} != 0)"
+		if v_type == 'Any' || v_type.starts_with('SumType_') {
+			return "(${expr} !is NoneType && ${expr} != 0)"
+		}
+		if v_type.starts_with('?') {
+			return "${expr} != none"
+		}
 	}
 	
 	// For strings and collections

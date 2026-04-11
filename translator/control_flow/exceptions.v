@@ -32,6 +32,7 @@ pub fn (mut m ControlFlowModule) visit_raise(node ast.Raise) {
 		return
 	}
 
+	eprintln('TRACER: visit_raise called')
 	m.env.state.used_builtins['vexc'] = true
 	if exc := node.exc {
 		if exc is ast.Call {
@@ -59,9 +60,19 @@ pub fn (mut m ControlFlowModule) visit_raise(node ast.Raise) {
 		if m.env.state.current_function_return_type.len > 0 {
 			if m.env.state.current_function_return_type == 'void' {
 				m.emit('return')
-			} else {
+			} else if m.env.state.current_function_return_type.starts_with('?') || m.env.state.current_function_return_type == 'Any' {
 				m.emit('return none')
-			}
+			} else {
+                // For non-optional return types, we return early to satisfy the compiler.
+                // vexc.raise already marks the error state.
+				ret_type := m.env.state.current_function_return_type
+				pure_type := ret_type.trim_left('?&')
+				if pure_type in m.env.state.known_interfaces || pure_type in m.env.state.class_to_impl {
+					m.emit('panic("Exception raised in function returning interface ${ret_type}")')
+				} else {
+                	m.emit('return ${ret_type}{}')
+				}
+            }
 		}
 	} else {
 		m.emit('if vexc.get_curr_exc().name != "" {')
