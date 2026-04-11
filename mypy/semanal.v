@@ -666,7 +666,9 @@ pub fn (mut sa SemanticAnalyzer) visit_type_alias(mut o TypeAlias) !AnyNode {
 
 // visit_placeholder_node handles placeholder node
 pub fn (mut sa SemanticAnalyzer) visit_placeholder_node(mut o PlaceholderNode) !AnyNode {
+	// Unresolved placeholders must trigger another semantic-analysis pass.
 	sa.defer(o.get_context(), false)
+	// Record the incomplete state so callers can detect unfinished binding.
 	sa.record_incomplete_ref()
 	return ''
 }
@@ -684,7 +686,8 @@ pub fn (mut sa SemanticAnalyzer) visit_type_info(mut o TypeInfo) !AnyNode {
 
 	for _, mut sym in o.names.symbols {
 		if mut node := sym.node {
-			// Class symbol tables may point back to the owning TypeInfo.
+			// Class symbol tables may point back to the owning TypeInfo, so skip
+			// the self-edge to avoid infinite recursion during traversal.
 			if node is TypeInfo && node.fullname == o.fullname {
 				continue
 			}
