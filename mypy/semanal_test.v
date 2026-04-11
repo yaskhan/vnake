@@ -17,6 +17,8 @@ fn prepare_test_module(mut sa SemanticAnalyzer, module_name string) &MypyFile {
 		defs:                []Statement{}
 		future_import_flags: map[string]bool{}
 	}
+	// Register the heap-allocated module before visiting it so any saved analyzer references
+	// (for example cur_mod_node during later type analysis) continue to point at owned storage.
 	sa.modules[module_name] = file
 	sa.visit_mypy_file(mut file) or { panic(err.msg) }
 	return file

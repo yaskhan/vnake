@@ -1276,13 +1276,14 @@ fn (mut sa SemanticAnalyzer) infer_simple_literal_type(rvalue Expression) ?MypyT
 		string { 'builtins.str' }
 		f64 { 'builtins.float' }
 	}
-	inst := sa.named_type_or_none(type_name, []) or {
-		return MypyTypeNode(Instance{
-			type_name:     type_name
-			type_fullname: type_name
-		})
+	mut inst := Instance{
+		type_name:     type_name
+		type_fullname: type_name
 	}
-	return MypyTypeNode(*inst)
+	if resolved := sa.named_type_or_none(type_name, []) {
+		inst = *resolved
+	}
+	return MypyTypeNode(inst)
 }
 
 fn (mut sa SemanticAnalyzer) infer_assignment_type_from_initializer(mut s AssignmentStmt) {
