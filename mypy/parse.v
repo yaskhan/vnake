@@ -47,6 +47,7 @@ fn empty_tree(fnam string, mod_name ?string) &MypyFile {
 		is_stub:                 fnam.ends_with('.pyi')
 		is_partial_stub_package: false
 		plugin_deps:             map[string]bool{}
+		future_import_flags:     map[string]bool{}
 	}
 }
 
@@ -91,8 +92,11 @@ pub fn load_from_raw(fnam string, mod_name ?string, raw_data FileRawData, mut er
 		if code_name := e.code {
 			code = mypy_error_codes[code_name] or { syntax }
 		}
-		errors.report(e.line, e.column, capitalize_first_word(e.message), code.code,
-			if e.blocker { 'error' } else { 'warning' }, e.blocker, false)
+		errors.report(e.line, e.column, capitalize_first_word(e.message), code.code, if e.blocker {
+			'error'
+		} else {
+			'warning'
+		}, e.blocker, false)
 	}
 	return tree
 }
