@@ -117,7 +117,9 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 	}
 
 	mut added_meth_names := []string{}
-	mut has_methods := false
+	mut immut_methods := []string{}
+	mut mut_methods := []string{}
+
 	for method in methods {
 		if method.name == '__init__' {
 			continue
@@ -132,10 +134,6 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 		}
 		if is_static {
 			continue
-		}
-
-		if !has_methods {
-			has_methods = true
 		}
 
 		mut p_args := []string{}
@@ -153,7 +151,6 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 			}
 			arg_name := sanitize_name(arg.arg, false)
 
-			// Check if parameter is mutated (needs 'mut' qualifier)
 			mut mut_prefix := ''
 			p_key := if struct_name.len > 0 {
 				'${struct_name}.${method.name}.${arg.arg}'
@@ -194,20 +191,44 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 		mut ret_type := resolve_interface_method_return_type(struct_name, method, mut
 			env)
 		mut ret := if ret_type.len > 0 { ' ' + ret_type } else { '' }
-		// Ensure ? suffix consistency for interface methods
 		if ret.len > 1 && !ret.ends_with('?') {
-			// Check if method should return optional type (e.g., next() methods)
 			if m_name == 'next' && !ret.contains(' ?') {
-				// Make return type optional if not already
 				mut ret_trimmed := ret.trim_space()
 				if !ret_trimmed.starts_with('?') {
 					ret_trimmed = '?' + ret_trimmed
 				}
-				ret = ret_trimmed
+				ret = ' ' + ret_trimmed
 			}
 		}
-		res << '    ${m_name}(${p_args.join(', ')})${ret}'
+
+		mut is_mut_self := false
+		self_keys := [
+			'${struct_name}.${method.name}.self',
+			'${struct_name}.${base.to_camel_case(method.name)}.self'
+		]
+		for sk in self_keys {
+			if m_info := env.analyzer.get_mutability(sk) {
+				if m_info.is_mutated {
+					is_mut_self = true
+					break
+				}
+			}
+		}
+
+		if is_mut_self {
+			mut_methods << '    ${m_name}(${p_args.join(', ')})${ret}'
+		} else {
+			immut_methods << '    ${m_name}(${p_args.join(', ')})${ret}'
+		}
 		added_meth_names << m_name
+	}
+	
+	if immut_methods.len > 0 {
+		res << immut_methods.join('\n')
+	}
+	if mut_methods.len > 0 {
+		res << 'mut:'
+		res << mut_methods.join('\n')
 	}
 	
 	// Add field getters for non-private fields so they can be accessed via the interface

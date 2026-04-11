@@ -103,7 +103,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 				if fid.starts_with('new_') {
 					return fid[4..]
 				}
-				if sig := t.call_signatures[fid] {
+				if sig := t.get_call_signature(fid) {
 					return sig.return_type
 				}
 			} else if node.func is ast.Attribute {
@@ -111,7 +111,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 				rec_type := t.guess_expr_type(attr.value)
 				if rec_type != 'Any' {
 					sig_key := rec_type.trim_left('?&') + '.' + attr.attr
-					if sig := t.call_signatures[sig_key] {
+					if sig := t.get_call_signature(sig_key) {
 						return sig.return_type
 					}
 				}
@@ -1469,7 +1469,19 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 		// Check for method-based mutability if object is a parameter
 		obj_name := t.expr_to_name(attr.value)
 		if obj_name.len > 0 {
-			// This part usually handled by FunctionMutabilityScanner but let's double check
+			obj_type := t.guess_expr_type(attr.value).trim_left('?&')
+			mut_keys := [
+				'${obj_type}.${attr.attr}.self',
+				'${obj_type}.${to_camel_case(attr.attr)}.self'
+			]
+			for mk in mut_keys {
+				if m_info := t.mutability_map[mk] {
+					if m_info.is_mutated {
+						t.mark_mutated(obj_name)
+						break
+					}
+				}
+			}
 		}
 	}
 	if node.func is ast.Name {

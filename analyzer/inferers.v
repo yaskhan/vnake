@@ -844,6 +844,12 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 				attr := node.func
 				if is_mutating_method(attr.attr) {
 					f.mark_mutated(attr.value)
+				} else {
+					// Propagate mutability from called method (best effort without full types)
+					// We might not know obj_type here, so we check various possibilities
+					if attr.value is ast.Name {
+						// name.method()
+					}
 				}
 			}
 			if node.func is ast.Name {
@@ -853,6 +859,16 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 					for idx in mutated_indices {
 						if idx < node.args.len {
 							f.mark_mutated(node.args[idx])
+						}
+					}
+				} else {
+					// Check user-defined function for param mutability
+					for idx, _ in node.args {
+						p_key := '${func_name}.${idx}' // fallback index-based check
+						if m_info := f.mutability_map[p_key] {
+							if m_info.is_mutated || m_info.is_reassigned {
+								f.mark_mutated(node.args[idx])
+							}
 						}
 					}
 				}

@@ -270,17 +270,41 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		rec_type := guess_type(f.value, ctx, false)
 		if rec_type != 'Any' {
 			pure_rec := rec_type.trim_left('?&')
-			mut attr_name := pure_rec + '.' + (f.attr.to_lower()) // Simplistic
-			// Re-sanitize to be sure
-			attr_name = pure_rec + '.' + base.to_snake_case(f.attr).to_lower()
-			eprintln('DEBUG: guess_type_attribute LOOKING UP rec_type=${rec_type} pure_rec=${pure_rec} attr=${f.attr} attr_name=${attr_name}')
+			mut attr_name := pure_rec + '.' + base.to_snake_case(f.attr).to_lower()
+			
+			if ctx.analyzer != unsafe { nil } {
+				a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
+				// Try direct lookup first
+				if sig := a.get_call_signature(pure_rec + '.' + f.attr) {
+					return sig.return_type
+				}
+				
+				// Try mapping V name to Python name (e.g., run_task -> runTask)
+				mut py_name := f.attr
+				if py_name.starts_with('py_') { py_name = py_name[3..] }
+				
+				// Scan all signatures of the class for a match
+				// Note: a.mypy_store.collected_signatures is map[class]map[method]Signature
+				if class_sigs := a.mypy_store.collected_signatures[pure_rec] {
+					for actual_py_name, _ in class_sigs {
+						if base.to_snake_case(actual_py_name).to_lower() == py_name {
+							if sig := a.get_call_signature(pure_rec + '.' + actual_py_name) {
+								return sig.return_type
+							}
+						}
+					}
+				}
+
+				if res := a.get_type(attr_name) {
+					if res != 'Any' { return res }
+				}
+			}
+
 			if attr_name in ctx.type_map {
 				res := ctx.type_map[attr_name]
-				eprintln('DEBUG: guess_type_attribute attr_name=${attr_name} res=${res}')
 				if res.starts_with('fn (') {
 					return res.all_after_last(") ").trim_space()
 				}
-
 			}
 			ret_key := attr_name + '@return'
 			if ret_key in ctx.type_map {

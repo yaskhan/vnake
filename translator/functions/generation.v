@@ -120,6 +120,27 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			if m_info_self := env.analyzer.get_mutability(p_key) {
 				is_mutated = is_mutated || m_info_self.is_mutated
 			}
+			// Try without scope or with remapped scope
+			if !is_mutated && struct_name.len > 0 {
+				pure_struct := struct_name.all_before_last('_Impl')
+				mut py_func := node.name
+				if py_func.starts_with('py_') { py_func = py_func[3..] }
+				
+				// Try CamelCase too
+				keys := [
+					'${pure_struct}.${py_func}.self',
+					'${pure_struct}.${base.to_camel_case(py_func)}.self',
+					'${struct_name}.${node.name}.self'
+				]
+				for k in keys {
+					if info := env.analyzer.get_mutability(k) {
+						if info.is_mutated {
+							is_mutated = true
+							break
+						}
+					}
+				}
+			}
 
 			if dec_info.is_property {
 				is_mutated = false
@@ -141,7 +162,9 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			} else {
 				''
 			}
-			receiver_str = '(${args[0].arg} &${struct_name}${gen_s}) '
+			mut m_pfx := if is_mutated { 'mut ' } else { '' }
+			mut s_pfx := if is_mutated { '' } else { '&' }
+			receiver_str = '(${m_pfx}${args[0].arg} ${s_pfx}${struct_name}${gen_s}) '
 			receiver_name = args[0].arg
 		}
 		args = args[1..].clone()
@@ -333,7 +356,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			is_mut = false
 		}
 
-		args_str_list << '${if is_mut { 'mut ' } else { '' }}${arg_name} ${arg_type}'
+		mut final_p_prefix := if is_mut { 'mut ' } else { '' }
+		args_str_list << '${final_p_prefix}${arg_name} ${arg_type}'
 	}
 
 	if node.args.vararg != none && node.args.kwarg != none {

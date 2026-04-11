@@ -239,7 +239,7 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 
 	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
 	for cls in classes {
-		v_cls := if cls.starts_with('&') { cls } else { '&' + cls }
+		v_cls := cls.trim_left('&')
 		if v_cls !in variants {
 			variants << v_cls
 		}

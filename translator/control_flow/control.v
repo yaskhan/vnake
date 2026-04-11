@@ -66,19 +66,46 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 				if f := m.env.guess_type_fn {
 					v_type = f(val)
 				}
-				eprintln('DEBUG: visit_return interface=${ret_type} expr=${expr} expr_v_type=${v_type}')
-				if v_type == 'Any' || v_type == '' || (expr.contains('.') && !expr.contains('(')) {
-					m.emit('return match ${expr} {')
+				
+				is_opt_target := ret_type.starts_with('?')
+				is_opt_source := v_type.starts_with('?')
+				
+				if v_type == 'Any' || v_type == '' || is_opt_source || (expr.contains('.') && !expr.contains('(')) {
+					m.emit('mut ret_match_val := ?${pure}(none)')
+					m.emit('if mut val_raw := ${expr} {')
+					m.env.state.indent_level++
+					m.emit('match val_raw {')
 					for cls_name, _ in m.env.state.defined_classes {
 						v_cls := m.env.state.class_to_impl[cls_name] or { cls_name }
 						if m.env.state.implements_interface(v_cls, pure) {
-							m.emit('    &${v_cls} { it }')
+							// If val_raw is an interface, don't use & in match branch
+							prefix := if pure != 'Any' && pure != '' { '' } else { '&' }
+							m.emit('    ${prefix}${v_cls} { ret_match_val = val_raw }')
 						}
 					}
-					m.emit("    else { panic('cannot cast Any to interface ${ret_type}') }")
-					m.emit('} as ${ret_type}')
+					v_pure := v_type.trim_left('?&')
+					is_v_interface := v_pure in m.env.state.known_interfaces
+					// If we are matching to return an interface, OMIT NoneType branch from the match itself.
+					// None should be handled by the outer 'if mut val_raw := ...' or by 'ret_match_val' default.
+					if (v_type == 'Any' || v_type == '') && !is_v_interface && pure == 'Any' {
+						m.emit('    NoneType { ret_match_val = none }')
+					}
+					m.emit("    else { panic('cannot cast Any to interface ${pure}') }")
+					m.emit('}')
+					m.env.state.indent_level--
+					m.emit('}')
+					if is_opt_target {
+						m.emit('return ret_match_val')
+					} else {
+						m.emit('return ${pure}(ret_match_val or { panic("missing return value") })')
+					}
 				} else {
-					m.emit('return ${expr} as ${ret_type}')
+				if expr.contains('(') && !expr.starts_with('(') && !expr.contains(' or {') && (v_type.starts_with('?') || v_type == 'Any') {
+					// Add unwrap for potential Option return from method calls when casting to interface
+					m.emit('return ${pure}((${expr} or { panic("missing return value") }))')
+				} else {
+					m.emit('return ${pure}(${expr})')
+				}
 				}
 			} else {
 				m.emit('return ${expr}')

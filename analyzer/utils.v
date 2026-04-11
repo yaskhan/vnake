@@ -1,6 +1,29 @@
 module analyzer
 
 import ast
+import strings
+
+pub fn to_camel_case(name string) string {
+	if name.len == 0 || name == '_' {
+		return name
+	}
+	mut parts := name.split('_')
+	mut res := strings.new_builder(name.len)
+	for i, part in parts {
+		if part.len == 0 {
+			continue
+		}
+		if i == 0 {
+			res.write_string(part)
+		} else {
+			res.write_string(part[0..1].to_upper())
+			if part.len > 1 {
+				res.write_string(part[1..])
+			}
+		}
+	}
+	return res.str()
+}
 
 pub fn expr_name(node ast.Expression) string {
 	return match node {

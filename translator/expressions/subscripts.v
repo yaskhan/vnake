@@ -96,7 +96,11 @@ pub fn (mut eg ExprGen) visit_subscript(node ast.Subscript) string {
 
 	if val_type == 'Any' {
 		eg.state.used_builtins['py_subscript'] = true
-		return 'py_subscript(${value}, ${index})'
+		res := 'py_subscript(${value}, ${index})'
+		if eg.target_type != 'Any' && eg.target_type != '' && !eg.target_type.starts_with('?') {
+			return '${eg.target_type}(${res})'
+		}
+		return res
 	}
 	return '${value}[${index}]'
 }

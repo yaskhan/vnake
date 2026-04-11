@@ -46,6 +46,18 @@ pub fn (a Analyzer) get_type(name string) ?string {
 	if name in a.type_map {
 		return a.type_map[name]
 	}
+	
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := a.get_class_bases(cls)
+		for b in bases {
+			if res := a.get_type('${b}.${attr}') {
+				return res
+			}
+		}
+	}
+
 	if !name.contains('.') && a.scope_names.len > 0 {
 		for i := a.scope_names.len - 1; i >= 0; i-- {
 			qual := a.scope_names[..i + 1].join('.') + '.' + name
@@ -134,7 +146,31 @@ pub fn (a Analyzer) get_class_bases(class_name string) []string {
 	if class_name in a.class_hierarchy {
 		return a.class_hierarchy[class_name]
 	}
+	// Also check with _Impl suffix if needed
+	if class_name.ends_with('_Impl') {
+		base_name := class_name.all_before_last('_Impl')
+		if base_name in a.class_hierarchy {
+			return a.class_hierarchy[base_name]
+		}
+	}
 	return []
+}
+
+pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
+	if sig := a.call_signatures[name] {
+		return sig
+	}
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := a.get_class_bases(cls)
+		for b in bases {
+			if res := a.get_call_signature('${b}.${attr}') {
+				return res
+			}
+		}
+	}
+	return none
 }
 // load_mypy_data loads data from MypyPluginStore
 pub fn (mut a Analyzer) load_mypy_data(store MypyPluginStore) {

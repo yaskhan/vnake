@@ -155,12 +155,19 @@ pub fn (mut eg ExprGen) process_call_args(node ast.Call, call_sig ?analyzer.Call
 	mut args := []string{}
 	for i, arg in node.args {
 		old_type := eg.state.current_assignment_type
+		mut param_type := ''
 		if sig := call_sig {
 			if i < sig.args.len {
-				eg.state.current_assignment_type = eg.map_python_type(sig.args[i], false)
+				param_type = eg.map_python_type(sig.args[i], false)
+				eg.state.current_assignment_type = param_type
 			}
 		}
-		args << eg.visit(arg)
+		mut arg_text := eg.visit(arg)
+		arg_type := eg.guess_type(arg)
+		if param_type.len > 0 && arg_type.starts_with('?') && !param_type.starts_with('?') && param_type != 'Any' {
+			arg_text = '(${arg_text} or { panic("missing arg") })'
+		}
+		args << arg_text
 		eg.state.current_assignment_type = old_type
 	}
 	return args
@@ -874,7 +881,6 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		eg.state.used_builtins['py_counter'] = true
 		return 'py_counter(${args[0]})'
 	}
-
 	if (func_name_str == 'defaultdict' || (module_name == 'collections' && func_name == 'defaultdict')) && args.len >= 1 {
 		mut d_type := 'Any'
 		if node.args.len > 0 {
@@ -1199,12 +1205,25 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	// Check if this is a mutable method call that needs a mutable receiver
 	mut is_mut_receiver := false
 	if obj_type_raw != 'Any' && obj_type_raw != '' {
-		key := '${obj_type_raw}.${attr}.self'
-		if info := eg.analyzer.get_mutability(key) {
-			if info.is_mutated {
-				is_mut_receiver = true
+		obj_type_clean := obj_type_raw.trim_left('?&')
+		keys := [
+			'${obj_type_clean}.${attr}.self',
+			'${obj_type_clean}.${base.to_camel_case(attr)}.self'
+		]
+		for k in keys {
+			if info := eg.analyzer.get_mutability(k) {
+				if info.is_mutated {
+					is_mut_receiver = true
+					break
+				}
 			}
 		}
+	}
+
+	if is_mut_receiver && !base.is_simple_mut_target(recv) && !recv.starts_with('mut ') {
+		tmp := eg.state.create_temp_with_prefix('py_mut_recv_')
+		eg.emit('mut ${tmp} := ${recv}')
+		recv = 'mut ${tmp}'
 	}
 
 	if is_mut_receiver {
@@ -1356,19 +1375,54 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	}
 	sanitized_attr := base.sanitize_name(attr, false, map[string]bool{}, '', map[string]bool{})
 	processed_args := eg.process_mutated_args('${obj_type_raw}.${sanitized_attr}', final_args, none)
-	return '${recv}.${sanitized_attr}(${processed_args.join(', ')})'
+	
+	mut call_str := '${recv}.${sanitized_attr}(${processed_args.join(', ')})'
+	
+	// Handle Option return unwrapping if target type is not optional but call returns optional
+	attr_pure := obj_type_raw.trim_left('?&')
+	mut call_ret_type := ''
+	if eg.analyzer != unsafe { nil } {
+		a := &analyzer.Analyzer(eg.analyzer)
+		if sig := a.get_call_signature('${attr_pure}.${attr}') {
+			call_ret_type = sig.return_type
+		} else if sig2 := a.get_call_signature('${attr_pure}.${base.to_camel_case(attr)}') {
+			call_ret_type = sig2.return_type
+		}
+	}
+	
+	if call_ret_type.starts_with('?') && !eg.state.current_assignment_type.starts_with('?') && eg.state.current_assignment_type != 'Any' && eg.state.current_assignment_type != '' {
+		call_str = '(${call_str} or { panic("missing return value") })'
+	}
+	
+	return call_str
 }
 
 pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string, call_sig ?analyzer.CallSignature) []string {
 	mut final_args := []string{}
 	mut mutated := map[int]bool{}
-	if func_name_str in eg.analyzer.func_param_mutability {
-		for idx in eg.analyzer.func_param_mutability[func_name_str] { mutated[idx] = true }
+	mut func_keys := [func_name_str]
+	if func_name_str.contains('.') {
+		parts := func_name_str.split('.')
+		if parts.len >= 2 {
+			func_keys << '${parts[0]}.${base.to_camel_case(parts[1])}'
+		}
+	}
+	for fk in func_keys {
+		if fk in eg.analyzer.func_param_mutability {
+			for idx in eg.analyzer.func_param_mutability[fk] { mutated[idx] = true }
+		}
 	}
 	for i, arg in args {
 		eprintln('DEBUG: process_mutated_args arg=${arg} mutated=${i in mutated} is_simple=${base.is_simple_mut_target(arg)}')
-		if i in mutated && !arg.starts_with('mut ') && arg !in ['none', 'true', 'false'] && base.is_simple_mut_target(arg) {
-			final_args << 'mut ${arg}'
+		if i in mutated && !arg.starts_with('mut ') && arg !in ['none', 'true', 'false'] {
+			if base.is_simple_mut_target(arg) {
+				final_args << 'mut ${arg}'
+			} else {
+				// Capture complex expression in a temporary mutable variable
+				tmp := eg.state.create_temp_with_prefix('py_mut_arg_')
+				eg.emit('mut ${tmp} := ${arg}')
+				final_args << 'mut ${tmp}'
+			}
 		} else {
 			final_args << arg
 		}

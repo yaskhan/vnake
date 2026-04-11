@@ -1,6 +1,7 @@
 module classes
 
 import ast
+import base
 
 pub struct ClassMethodsHandler {}
 
@@ -162,10 +163,27 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 			ret_type = '?${ret_type}'
 		}
 
+		mut mut_pfx := ''
+		self_keys := [
+			'${struct_name}.${method.name}.self',
+			'${struct_name}.${base.to_camel_case(method.name)}.self'
+		]
+		for sk in self_keys {
+			if m_info := env.analyzer.get_mutability(sk) {
+				eprintln('DEBUG: process_interface_methods key=${sk} mutated=${m_info.is_mutated}')
+				if m_info.is_mutated {
+					mut_pfx = 'mut '
+					break
+				}
+			} else {
+				eprintln('DEBUG: process_interface_methods key=${sk} NOT FOUND')
+			}
+		}
+
 		if ret_type == 'void' {
-			interface_methods << '    ${m_name}(${args.join(", ")})'
+			interface_methods << '    ${mut_pfx}${m_name}(${args.join(", ")})'
 		} else {
-			interface_methods << '    ${m_name}(${args.join(", ")}) ${ret_type}'
+			interface_methods << '    ${mut_pfx}${m_name}(${args.join(", ")}) ${ret_type}'
 		}
 	}
 

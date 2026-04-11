@@ -88,7 +88,7 @@ pub fn (e &ModuleEmitter) emit() string {
 		
 		mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
 		for cls_name, _ in e.defined_classes {
-			v_cls := if cls_name.starts_with('&') { cls_name } else { '&' + cls_name }
+			v_cls := cls_name.trim_left('&')
 			if v_cls !in any_variants {
 				any_variants << v_cls
 			}

@@ -103,6 +103,25 @@ pub fn (t &TypeInferenceBase) get_type(name string) string {
 		eprintln('DEBUG: analyzer.get_type ${name} = ${res}')
 		return res 
 	}
+	
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := t.get_class_bases(cls)
+		for b in bases {
+			if b == 'object' { continue }
+			mut res := t.get_type('${b}.${attr}')
+			if res != 'Any' {
+				return res
+			}
+			// Try CamelCase
+			res = t.get_type('${b}.${to_camel_case(attr)}')
+			if res != 'Any' {
+				return res
+			}
+		}
+	}
+
 	if !name.contains('.') && t.scope_names.len > 0 {
 		for i := t.scope_names.len - 1; i >= 0; i-- {
 			qual := t.scope_names[..i+1].join('.') + '.' + name
@@ -116,6 +135,28 @@ pub fn (t &TypeInferenceBase) get_type(name string) string {
 	return 'Any'
 }
 
+pub fn (t &TypeInferenceBase) get_call_signature(name string) ?CallSignature {
+	if name in t.call_signatures {
+		return t.call_signatures[name]
+	}
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := t.get_class_bases(cls)
+		for b in bases {
+			if b == 'object' { continue }
+			if res := t.get_call_signature('${b}.${attr}') {
+				return res
+			}
+			// Try CamelCase
+			if res := t.get_call_signature('${b}.${to_camel_case(attr)}') {
+				return res
+			}
+		}
+	}
+	return none
+}
+
 pub fn (t &TypeInferenceBase) has_type(name string) bool {
 	return name in t.type_map
 }
@@ -125,7 +166,27 @@ pub fn (mut t TypeInferenceBase) set_mutability(name string, info MutabilityInfo
 }
 
 pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
-	return t.mutability_map[name] or { MutabilityInfo{} }
+	if name in t.mutability_map { 
+		return t.mutability_map[name] 
+	}
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := t.get_class_bases(cls)
+		for b in bases {
+			if b == 'object' { continue }
+			res := t.get_mutability('${b}.${attr}')
+			if res.is_mutated || res.is_reassigned {
+				return res
+			}
+			// Try CamelCase
+			res_c := t.get_mutability('${b}.${to_camel_case(attr)}')
+			if res_c.is_mutated || res_c.is_reassigned {
+				return res_c
+			}
+		}
+	}
+	return MutabilityInfo{}
 }
 
 pub fn (mut t TypeInferenceBase) add_class_to_hierarchy(class_name string, bases []string) {
