@@ -10,10 +10,8 @@ pub mut:
 }
 
 pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut env ClassVisitEnv, mut classes ClassesModule) {
-	eprintln('DEBUG: visit_class_def START name=${node.name}')
 	if node.name == 'TaskState' {
 		for i, stmt in node.body {
-			eprintln('DEBUG: TaskState body[${i}]=${stmt.str()}')
 		}
 	}
 	mut struct_name := sanitize_name(node.name, true)
@@ -486,7 +484,6 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 				if !f.name.starts_with('_') && !f.name.ends_with('_Impl') {
 					// Avoid creating getters for fields that already have matching methods
 					mut already_has_method := false
-					eprintln("DEBUG: checking field ${f.name} against methods: ${methods.map(it.name)}")
 					for m in methods {
 						if base.to_snake_case(m.name).to_lower() == f.name {
 							already_has_method = true
@@ -494,7 +491,6 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 						}
 					}
 					if already_has_method {
-						eprintln("DEBUG: struct ${struct_name_for_body} already has method ${f.name} (from ${methods.map(it.name)}), skipping getter")
 					}
 					if !already_has_method {
 						mut f_type := f.def.split(' ').last()

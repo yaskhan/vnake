@@ -20,7 +20,7 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 		return 'rune(${args[0]}).str()'
 	}
 	if func_name_str == 'ord' && args.len > 0 {
-		return '${args[0]}[0]'
+		return '${args[0]}[0].u32()'
 	}
 
 	module_name, func_name := eg.resolve_module_and_func(node, func_name_str)
@@ -1118,10 +1118,14 @@ pub fn (mut eg ExprGen) handle_fallback_call(node ast.Call, func_name_str string
 			typ := eg.guess_type(node.func)
 			// Local function variables that take *args are translated to fn ([]Any) in V, 
 			// so we must wrap the call arguments.
-			if typ.contains('fn ([]Any)') || typ.contains('fn (...') {
+			if typ.contains('fn ([]Any)') {
 				mut any_args := []string{}
 				for a in args { any_args << "Any(${a})" }
 				return "${func_name}([${any_args.join(', ')}])"
+			} else if typ.contains('fn (...') {
+				mut any_args := []string{}
+				for a in args { any_args << "Any(${a})" }
+				return "${func_name}(${any_args.join(', ')})"
 			}
 		}
 	}

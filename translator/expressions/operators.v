@@ -42,13 +42,11 @@ fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
 		if node is ast.Name {
 			// If it's a narrowed variable, it might be an optional
 			if node.id in eg.state.narrowed_vars {
-				eprintln('DEBUG: should_use_is_none_type Any NARROWED var=${node.id} -> false')
 				return false
 			}
 			// Check Mypy type directly - if Mypy says it's Optional, use == none
 			loc := '${node.get_token().line}:${node.get_token().column}'
 			if mypy_t := eg.analyzer.get_mypy_type(node.id, loc) {
-				eprintln('DEBUG: should_use_is_none_type Any var=${node.id} mypy_t=${mypy_t}')
 				if mypy_t.starts_with('Optional[') || mypy_t.contains('| None') || mypy_t == 'None' {
 					return false
 				}
@@ -57,7 +55,6 @@ fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
 		if node is ast.Attribute {
 			loc := '${node.get_token().line}:${node.get_token().column}'
 			if mypy_t := eg.analyzer.get_mypy_type(node.attr, loc) {
-				eprintln('DEBUG: should_use_is_none_type Any attr=${node.attr} mypy_t=${mypy_t}')
 				if mypy_t.starts_with('Optional[') || mypy_t.contains('| None') || mypy_t == 'None' {
 					return false
 				}
@@ -387,7 +384,6 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) string {
 	v_type := eg.guess_type(node)
 	expr := eg.visit(node)
-	eprintln('DEBUG: build_truthiness_for_or expr=${expr} type=${v_type} is_or=${is_or}')
 	
 	// For Any type (sum type), use is NoneType check for proper none detection
 	if v_type == 'Any' {

@@ -233,7 +233,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	}
 	first_target := node.targets[0]
 	if first_target is ast.Name {
-		eprintln("DEBUG: visit_assign TOP id=${(first_target as ast.Name).id}")
 	}
 	if node.targets.len > 1 {
 		t.emit_indented('//##LLM@@ Multiple assignment not fully lowered.')
@@ -392,7 +391,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			}
 		}
-		eprintln("DEBUG: visit_assign set target_type=${target_type} for ${id}")
 		eg.target_type = target_type
 		t.state.current_assignment_type = target_type
 		rhs = eg.visit(node.value)
@@ -418,14 +416,12 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			// High-fidelity type alias resolution
 			mut inferred_found := ''
 			if inf1 := t.analyzer.get_type(id) {
-				 // eprintln('DEBUG ALIAS RESOLVE1: id=${id} inf1=${inf1}')
 				inferred_found = inf1
 			}
 			
 			if inferred_found == '' || inferred_found == 'int' || inferred_found == 'Any' {
 				qual := t.analyzer.get_qualified_name(id)
 				if inf2 := t.analyzer.get_type(qual) {
-					 // eprintln('DEBUG ALIAS RESOLVE2: id=${id} qual=${qual} inf2=${inf2}')
 					if inf2 != 'int' && inf2 != 'Any' {
 						inferred_found = inf2
 					}
@@ -476,7 +472,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 						}
 					}
 					t.emit_indented('type ${target.id} = ${def}')
-					eprintln('EMITTED ALIAS: type ${target.id} = ${def}')
 					t.declare_local(target.id)
 					return
 				}
@@ -486,7 +481,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		lhs := base.sanitize_name(id, false, map[string]bool{}, '', map[string]bool{})
 		mut rhs_text := rhs
 		mut lhs_t := t.guess_type(target)
-		eprintln('DEBUG: visit_assign id=${id} lhs_t=${lhs_t} loc=${target.get_token().line}:${target.get_token().column}')
 		if id.len > 0 && id in t.analyzer.raw_type_map {
 			lhs_t = t.analyzer.raw_type_map[id]
 		}
@@ -502,7 +496,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			return
 		}
 
-		eprintln('DEBUG: visit_assign id=${id} indent=${t.state.indent_level} in_globals=${id in t.state.global_vars}')
 		if id in t.state.global_vars || (t.state.indent_level == 0 && id.len > 1) {
 			mut v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
 			if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
@@ -608,7 +601,6 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			// Force explicit type cast for initial optional assignment
 			v_type_final := if is_opt_none && !v_inferred.starts_with('?') && v_inferred != 'Any' { '?' + v_inferred } else { v_inferred }
 			
-			eprintln("DEBUG: visit_assign check ${id}: id_in_mut=${id in t.mutable_locals} lhs_in_mut=${lhs in t.mutable_locals} id=${id} lhs=${lhs}")
 			if id in t.mutable_locals || lhs in t.mutable_locals || is_opt_none {
 				if v_type_final.starts_with('?') || v_type_final.contains('|') {
 					t.emit_indented('mut ${lhs} := ${v_type_final}(${rhs_text})')
@@ -764,7 +756,6 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			}
 			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
 				v_id := base.sanitize_name(id_inv, false, map[string]bool{}, "", map[string]bool{})
-				eprintln('DEBUG: visit_ann_assign Final id_inv=${id_inv} v_id=${v_id} found_in_map=${v_id in t.state.global_var_types}')
 				mut is_mutated := false
 				m_info := t.analyzer.get_mutability(id_inv)
 				is_mutated = m_info.is_mutated
@@ -783,8 +774,8 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				
 				if is_mutated || is_struct {
 					decl_type := t.state.global_var_types[v_id] or { t.state.current_assignment_type }
-					eprintln('DEBUG: visit_ann_assign Final EMITTING __global ${v_id} ${decl_type}')
-					t.emit_indented('__global ${v_id} ${decl_type}')
+					mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
+					ve.add_global('__global ${v_id} ${decl_type}')
 					t.emit_indented('${v_id} = ${rhs_text}')
 				} else {
 					t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
@@ -798,7 +789,6 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
 					pure := v_type.trim_left('?&')
 					is_interface := pure in t.state.known_interfaces || pure in t.state.class_to_impl
-					eprintln("DEBUG: visit_assign interface_check pure=${pure} is_iface=${is_interface} known=${t.state.known_interfaces.keys()}")
 					if is_interface {
 						t.emit_indented('${lhs} = ${rhs_text}')
 					} else {

@@ -18,6 +18,10 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 		if eg.state.mapper != unsafe { nil } {
 			mapper := unsafe { &stdlib_map.StdLibMapper(eg.state.mapper) }
+			if res := mapper.get_constant_mapping(module_name, node.attr) {
+				eg.state.used_builtins[res] = true
+				return res
+			}
 			if res := mapper.get_mapping(module_name, node.attr, []) {
 				eg.state.used_builtins[res] = true
 				return res
@@ -154,7 +158,6 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 	mut res := "${obj}.${attr_name}"
 	obj_type_name := obj_type.trim_left('?&').all_before('[')
-	eprintln("DEBUG: visit_attribute attr=${attr_name} obj=${obj} obj_type=${obj_type} is_iface=${obj_type_name in eg.state.known_interfaces || obj_type_name in eg.state.class_to_impl}")
 	
 	obj_name := eg.analyzer.render_expr(node.value)
 	full_name := '${obj_name}.${node.attr}'
@@ -191,7 +194,6 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 			}
 		}
 
-		eprintln("DEBUG: visit_attribute attr=${attr_name} target_type=${eg.target_type} orig=${original_type}")
 		
 		mut mapped_check := eg.map_python_type(obj_type, false)
 		if narrowed_receiver_type != '' { mapped_check = eg.map_python_type(narrowed_receiver_type, false) }

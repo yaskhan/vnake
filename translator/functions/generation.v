@@ -102,7 +102,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	args << node.args.kwonlyargs
 
 	// Receiver handling
-	if is_method && node.name != '__new__' && args.len > 0 && args[0].arg in ['self', 'cls'] {
+	if is_method && node.name != '__new__' && args.len > 0 {
 		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
 			mut is_mutated := h.is_mutating_method(node, struct_name, &env)
 			mut func_keys := []string{}

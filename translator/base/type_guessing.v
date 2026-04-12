@@ -8,7 +8,6 @@ pub type TypeGuessingContext = models.TypeGuessingContext
 
 // guess_type infers a best-effort V type for an Expression node.
 pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location bool) string {
-	eprintln('DEBUG: guess_type node=${node.str().limit(20)} loc=${node.get_token().line}:${node.get_token().column}')
 	if use_location {
 		loc_key := '${node.get_token().line}:${node.get_token().column}'
 		if loc_key in ctx.location_map {
@@ -132,9 +131,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 	}
 	if node.func is ast.Name {
 		fid := node.func.id
-		eprintln('DEBUG: guess_type_call fid=${fid}')
 		if fid in ctx.defined_classes {
-			eprintln('DEBUG: guess_type_call FOUND CLASS ${fid}')
 			return '&' + fid
 		}
 		if ctx.coroutine_handler != unsafe { nil } {
@@ -145,7 +142,6 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 			}
 		}
 		if fid.len > 0 && fid[0].is_capital() {
-			eprintln('DEBUG: guess_type_call fid=${fid} in defined_classes=${fid in ctx.defined_classes}')
 			if fid in ctx.defined_classes {
 				return '&' + fid
 			}
@@ -451,7 +447,6 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 	}
 	actual_name := ctx.name_remap[node.id] or { node.id }
 	if node.id == 't' {
-		eprintln('DEBUG: guess_type_name node.id=t actual_name=${actual_name} in_type_map=${node.id in ctx.type_map} type=${ctx.type_map[node.id]}')
 	}
 	if actual_name.starts_with('(') && actual_name.contains(' as ') {
 		return actual_name.all_after(' as ').all_before(')').trim_space()

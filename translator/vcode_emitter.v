@@ -195,7 +195,14 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 	if e.structs.len > 0 { lines << e.structs.join('\n\n'); lines << '' }
 	if e.helper_structs.len > 0 { lines << e.helper_structs.join('\n\n'); lines << '' }
 	if e.globals.len > 0 {
-		for g in e.globals { lines << '__global ${g.replace("pub ", "")}' }
+		for g in e.globals {
+			mut sanitized := g.replace('pub ', '')
+			if sanitized.starts_with('__global ') {
+				lines << sanitized
+			} else {
+				lines << '__global ${sanitized}'
+			}
+		}
 		lines << ''
 	}
 	if e.constants.len > 0 {

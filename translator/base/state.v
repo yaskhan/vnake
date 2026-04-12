@@ -274,7 +274,6 @@ pub fn (mut s TranslatorState) update_class_hierarchy() {
 	}
 
 	for class_name, _ in s.defined_classes {
-		eprintln('DEBUG: state defined class: ${class_name}')
 		if class_name !in s.class_hierarchy {
 			s.class_hierarchy[class_name] = []string{}
 		}

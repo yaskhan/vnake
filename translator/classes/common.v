@@ -46,7 +46,6 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 				if loc_map := env.analyzer.mypy_store.collected_types[key] {
 					for _, typ in loc_map {
 						t_v := analyzer.map_python_type_to_v(typ)
-						eprintln('DEBUG: map_python_type MYPY lookup struct=${struct_name} field=${field_name} key=${key} typ=${typ} -> ${t_v}')
 						real_type = t_v
 						break
 					}

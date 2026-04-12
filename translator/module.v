@@ -84,6 +84,8 @@ pub fn (e &ModuleEmitter) emit() string {
 
 	if !e.omit_builtins {
 		parts << 'pub struct NoneType {}'
+		parts << 'pub struct PyVersionInfo { pub: major int minor int micro int }'
+		parts << 'pub const sys_version_info = PyVersionInfo{major: 3, minor: 11, micro: 0}'
 		parts << "pub fn (n NoneType) str() string { return 'None' }"
 		
 		mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
@@ -195,8 +197,8 @@ fn (m &ModuleTranslator) is_name_main(node ast.If) bool {
 		if compare.ops.len == 1 && compare.comparators.len == 1 {
 			if compare.left is ast.Name && compare.left.id == '__name__' {
 				if compare.comparators[0] is ast.Constant {
-					comparator := compare.comparators[0] as ast.Constant
-					return comparator.value == '__main__'
+					val := clean_string_constant((compare.comparators[0] as ast.Constant).value)
+					return val == '__main__'
 				}
 			}
 		}
@@ -347,7 +349,6 @@ fn (m &ModuleTranslator) collect_names_from_expr(expr ast.Expression, mut names 
 fn (m &ModuleTranslator) collect_global_refs(node ast.ASTNode, top_level map[string]bool, mut assigned_locally map[string]bool, mut globals map[string]bool) {
 	if node is ast.Module {
 		for s in node.body {
-			eprintln('DEBUG: collect_global_refs STMT: ${s.str()}')
 			if s is ast.FunctionDef || s is ast.ClassDef {
 				m.walk_stmt_refs(s, top_level, mut assigned_locally, mut globals)
 			}
@@ -1676,30 +1677,29 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 			m.state.in_main = false
 			m.visit_stmt_fn(stmt)
 			m.state.in_main = true
-			
-			// Extract handled functions/structs from VCodeEmitter
-			for f in ve.functions {
-				m.emitter.add_helper_function(f)
-			}
-			ve.functions.clear()
-			for s in ve.structs {
-				m.emitter.add_helper_struct(s)
-			}
-			ve.structs.clear()
-			for g in ve.globals {
-				m.emitter.add_global(g)
-			}
-			ve.globals.clear()
-			for c in ve.constants {
-				m.emitter.add_constant(c)
-			}
-			ve.constants.clear()
 		} else {
 			m.visit_stmt_fn(stmt)
 		}
 
+		// Extract handled functions/structs from VCodeEmitter after every statement
+		for f in ve.functions {
+			m.emitter.add_helper_function(f)
+		}
+		ve.functions.clear()
+		for s in ve.structs {
+			m.emitter.add_helper_struct(s)
+		}
+		ve.structs.clear()
+		for g in ve.globals {
+			m.emitter.add_global(g)
+		}
+		ve.globals.clear()
+		for c in ve.constants {
+			m.emitter.add_constant(c)
+		}
+		ve.constants.clear()
+
 		for line in m.state.output {
-			eprintln('DEBUG: visit_module line=[${line.trim_space()}]')
 			if stmt is ast.If && m.is_name_main(stmt) {
 				m.emitter.add_main_statement(line.trim_space())
 			} else if line.trim_space().starts_with('import ') {

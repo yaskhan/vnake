@@ -26,7 +26,6 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 		return '${subject_expr} == ${val}', bindings
 	}
 	if pattern is ast.MatchSequence {
-		// m.env.state.warnings << 'PATTERN: MatchSequence'
 		mut array_types := ['[]int', '[]f64', '[]string', '[]bool', '[]Any']
 		mut star_idx := -1
 		for i, p in pattern.patterns {
@@ -106,7 +105,9 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 			}
 
 			sub_cond, sub_binds := m.compile_pattern(p, sub_expr)
-			checks << '(${sub_cond})'
+			if sub_cond != 'true' {
+				checks << '(${sub_cond})'
+			}
 			for k, v in sub_binds {
 				bindings[k] = v
 			}
@@ -120,6 +121,7 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 		}
 		return full_condition, bindings
 	}
+
 	if pattern is ast.MatchMapping {
 		// m.env.state.warnings << 'PATTERN: MatchMapping'
 		map_types := ['map[string]int', 'map[string]string', 'map[string]Any']
@@ -260,11 +262,11 @@ pub fn (mut m ControlFlowModule) visit_match(node ast.Match) {
 
 	m.emit('// Match statement lowered to if blocks')
 	for case in node.cases {
-		if case.pattern is ast.MatchClass { m.env.state.warnings << 'CASE PATTERN: MatchClass' }
-		else if case.pattern is ast.MatchAs {
-			m.env.state.warnings << 'CASE PATTERN: MatchAs name=' + (case.pattern.name or { 'none' }) + ' sub=' + if case.pattern.pattern != none { typeof(case.pattern.pattern).name } else { 'none' }
+		p := case.pattern
+		if p is ast.MatchClass || p is ast.MatchAs || p is ast.MatchValue || p is ast.MatchSingleton || p is ast.MatchSequence || p is ast.MatchMapping || p is ast.MatchStar || p is ast.MatchOr {
+			continue
 		}
-		else { m.env.state.warnings << 'CASE PATTERN: ' + typeof(case.pattern).name }
+		m.env.state.warnings << 'UNSUPPORTED CASE PATTERN TYPE: ' + typeof(p).name
 	}
 	m.emit('${subject_var} := ${subject}')
 	m.emit('${subject_any} := Any(${subject_var})')
