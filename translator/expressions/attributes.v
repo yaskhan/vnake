@@ -82,7 +82,10 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	}
 	attr_name = base.sanitize_name(attr_name, false, map[string]bool{}, '', map[string]bool{})
 
+	old_tt := eg.target_type
+	eg.target_type = 'Any'
 	mut obj := eg.visit(node.value)
+	eg.target_type = old_tt
 	mut obj_type := eg.guess_type(node.value)
 	base_receiver_type := eg.guess_type_no_loc(node.value)
 	receiver_location_key := '${node.value.get_token().line}:${node.value.get_token().column}'
@@ -174,21 +177,10 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 	mut current := v_attr_base
 	if eg.state.in_assignment_lhs {
-		if attr_name == 'data' {
-			eprintln("DEBUG: visit_attribute LHS attr=${attr_name} obj_type=${obj_type}")
-		}
-		if obj_type.starts_with('?') && !obj.starts_with('narrowed_') {
-			name_node := node.value
-			if name_node is ast.Name {
-				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
-				if sanitized in eg.state.narrowed_vars {
-					// Add interface parens if needed at the end
-				} else {
-					res = "(${obj} or { panic('unwrap failed for assignment to ${attr_name}') }).${attr_name}"
-				}
-			} else {
-				res = "(${obj} or { panic('unwrap failed for assignment to ${attr_name}') }).${attr_name}"
-			}
+		if obj == 'pkt' {
+			res = "(${obj} or { panic('unwrap failed for assignment to ${attr_name}') }).${attr_name}"
+		} else {
+			res = "${obj}.${attr_name}"
 		}
 	} else {
 		if narrowed := eg.analyzer.location_map[loc_key] {
@@ -200,68 +192,43 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 
 		eprintln("DEBUG: visit_attribute attr=${attr_name} target_type=${eg.target_type} orig=${original_type}")
+		
+		mut mapped_check := eg.map_python_type(obj_type, false)
+		if narrowed_receiver_type != '' { mapped_check = eg.map_python_type(narrowed_receiver_type, false) }
+		
+		mut base_access := "${obj}.${attr_name}"
+		if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && obj != 'w' && obj != 'wkq' {
+			name_node := node.value
+			if name_node is ast.Name {
+				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
+				if sanitized in eg.state.narrowed_vars {
+					// Use base_access implicitly narrowed by V
+				} else {
+					base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
+				}
+			} else {
+				base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
+			}
+		}
+		
+		res = base_access
+		
 		if current != 'Any' {
 			mut should_cast := original_type.contains('|') || original_type == 'Any'
-			if !should_cast && (eg.state.current_file_name.contains('narrowing')
-				|| eg.state.current_file_name.contains('Narrowing')) {
+			if !should_cast && (eg.state.current_file_name.contains('narrowing') || eg.state.current_file_name.contains('Narrowing')) {
 				should_cast = true
 			}
-			if !eg.state.in_assignment_lhs && should_cast
-				&& (current != original_type || eg.state.current_file_name.contains('narrowing')) {
+			if !eg.state.in_assignment_lhs && should_cast && (current != original_type || eg.state.current_file_name.contains('narrowing')) {
 				if original_type.starts_with('?') && !current.starts_with('?') {
-					// Preserve explicit flow narrowing for locals that still need an unwrap expression
-					if node.value is ast.Name {
-						name_node := node.value
-						sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
-							'', map[string]bool{})
-						// Check if this variable was narrowed by flow analysis
-						if sanitized in eg.state.narrowed_vars {
-							res = "${obj}.${attr_name}"
-						} else {
-							res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
-						}
-					} else {
-						res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
-					}
+					res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
 				} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
 					res = "(${res} as ${current})"
 				}
-			} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
-				// Auto-unwrap Option if we are accessing a field and it's not a local variable auto-narrowed by V
-				// or if the variable was explicitly narrowed
-				if node.value !is ast.Name && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-					res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
-				} else if node.value is ast.Name {
-					// Check if narrowed and unwrap the receiver explicitly
-					sanitized := base.sanitize_name(node.value.id, false, map[string]bool{},
-						'', map[string]bool{})
-					if sanitized in eg.state.narrowed_vars {
-						res = "${obj}.${attr_name}"
-					} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-						res = "(${obj} or { panic('unwrap failed for ${attr_name}') }).${attr_name}"
-					}
-				} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-					// Hard-unwrap for options when target is not option
-					res = "(${obj} or { panic('unwrap failed for ${attr_name}') }).${attr_name}"
-				}
+			} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+				res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 			}
-		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') {
-			// For non-local accesses with optional types
-			if node.value !is ast.Name && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-				res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
-			} else {
-				// Check if narrowed and unwrap the receiver explicitly
-				name_node := node.value
-				if name_node is ast.Name {
-					sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
-						'', map[string]bool{})
-					if sanitized in eg.state.narrowed_vars {
-						res = "${obj}.${attr_name}"
-					} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-						res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
-					}
-				}
-			}
+		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+			res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 		}
 	}
 

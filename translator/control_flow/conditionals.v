@@ -65,6 +65,8 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 					}
 					if orig_type.starts_with('?') {
 						res[var_name] = orig_type.trim_left('?')
+					} else if orig_type == 'Any' {
+						res[var_name] = 'Any' // Trust Any
 					}
 				} else if (op == 'is' && positive) || (op == '==' && positive) || (op == 'is not' && !positive) || (op == '!=' && !positive) {
 					res[var_name] = 'none'

@@ -548,7 +548,7 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 				for name, _ in names {
 					if name == '__all__' { continue }
 					mut is_mutated := false
-					m_info := m.analyzer.get_mutability(name) or { analyzer.MutabilityInfo{} }
+					m_info := m.analyzer.get_mutability(name)
 					if m_info.is_mutated {
 						is_mutated = true
 					}
@@ -562,7 +562,7 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 			m.collect_names_from_expr(stmt.target, mut names)
 			for name, _ in names {
 				mut is_mutated := false
-				m_info := m.analyzer.get_mutability(name) or { analyzer.MutabilityInfo{} }
+				m_info := m.analyzer.get_mutability(name)
 				if m_info.is_mutated {
 					is_mutated = true
 				}

@@ -70,9 +70,18 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 				is_opt_target := ret_type.starts_with('?')
 				is_opt_source := v_type.starts_with('?')
 				
-				if v_type == 'Any' || v_type == '' || is_opt_source || (expr.contains('.') && !expr.contains('(')) {
+				// We only use the match dispatch if the source is Optional or Any.
+				// For non-optional concrete types, simple conversion is enough.
+				is_concrete_cast := !is_opt_source && v_type != 'Any' && v_type != ''
+				
+				if !is_concrete_cast && (v_type == 'Any' || v_type == '' || is_opt_source || (expr.contains('.') && !expr.contains('('))) {
 					m.emit('mut ret_match_val := ?${pure}(none)')
-					m.emit('if mut val_raw := ${expr} {')
+					// If it's potentially an interface but NOT an Option, don't use 'if mut'
+					if is_opt_source {
+						m.emit('if mut val_raw := ${expr} {')
+					} else {
+						m.emit('{ mut val_raw := ${expr}')
+					}
 					m.env.state.indent_level++
 					m.emit('match val_raw {')
 					for cls_name, _ in m.env.state.defined_classes {

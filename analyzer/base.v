@@ -171,18 +171,22 @@ pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
 	}
 	if name.contains('.') {
 		cls := name.all_before_last('.')
-		attr := name.all_after_last('.')
+		meth_arg := name.all_after_last('.')
+		
+		// 1. Look UP (inheritance)
 		bases := t.get_class_bases(cls)
 		for b in bases {
 			if b == 'object' { continue }
-			res := t.get_mutability('${b}.${attr}')
-			if res.is_mutated || res.is_reassigned {
-				return res
-			}
-			// Try CamelCase
-			res_c := t.get_mutability('${b}.${to_camel_case(attr)}')
-			if res_c.is_mutated || res_c.is_reassigned {
-				return res_c
+			res := t.get_mutability('${b}.${meth_arg}')
+			if res.is_mutated || res.is_reassigned { return res }
+		}
+		
+		// 2. Look DOWN (interfaces -> implementations)
+		// If current class is a base/interface, check if ANY child-impl has mut
+		for potential_impl, parents in t.class_hierarchy {
+			if cls in parents {
+				res := t.get_mutability('${potential_impl}.${meth_arg}')
+				if res.is_mutated || res.is_reassigned { return res }
 			}
 		}
 	}

@@ -112,7 +112,7 @@ pub fn (mut a Analyzer) set_raw_type(name string, typ string) {
 }
 
 // get_mutability returns mutability information
-pub fn (a Analyzer) get_mutability(name string) ?MutabilityInfo {
+pub fn (a Analyzer) get_mutability(name string) MutabilityInfo {
 	mut lookup := name
 	if lookup.contains('_Impl.') {
 		lookup = lookup.replace('_Impl.', '.')
@@ -125,8 +125,9 @@ pub fn (a Analyzer) get_mutability(name string) ?MutabilityInfo {
 		eprintln('DEBUG: get_mutability name=${name} ORIGINAL -> FOUND')
 		return a.mutability_map[name]
 	}
-	eprintln('DEBUG: get_mutability name=${name} lookup=${lookup} -> NOT FOUND')
-	return none
+	
+	// Delegate to mixin for hierarchical lookup
+	return a.TypeInferenceVisitorMixin.TypeInferenceUtilsMixin.TypeInferenceBase.get_mutability(name)
 }
 
 // set_mutability sets mutability information

@@ -766,9 +766,8 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				v_id := base.sanitize_name(id_inv, false, map[string]bool{}, "", map[string]bool{})
 				eprintln('DEBUG: visit_ann_assign Final id_inv=${id_inv} v_id=${v_id} found_in_map=${v_id in t.state.global_var_types}')
 				mut is_mutated := false
-				if m_info := t.analyzer.get_mutability(id_inv) {
-					is_mutated = m_info.is_mutated
-				}
+				m_info := t.analyzer.get_mutability(id_inv)
+				is_mutated = m_info.is_mutated
 				
 				// Detect if it's a struct/class type or mutated
 				c_type := t.state.current_assignment_type.trim_left('?&')

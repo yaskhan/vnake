@@ -145,9 +145,8 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 			} else {
 				'${method.name}.${arg.arg}'
 			}
-			if m_info := env.analyzer.get_mutability(p_key_mut) {
-				is_mut = m_info.is_reassigned || m_info.is_mutated
-			}
+			m_info := env.analyzer.get_mutability(p_key_mut)
+			is_mut = m_info.is_reassigned || m_info.is_mutated
 			
 			args << '${if is_mut { 'mut ' } else { '' }}${arg_name} ${a_type}'
 		}
@@ -169,14 +168,11 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 			'${struct_name}.${base.to_camel_case(method.name)}.self'
 		]
 		for sk in self_keys {
-			if m_info := env.analyzer.get_mutability(sk) {
-				eprintln('DEBUG: process_interface_methods key=${sk} mutated=${m_info.is_mutated}')
-				if m_info.is_mutated {
-					mut_pfx = 'mut '
-					break
-				}
-			} else {
-				eprintln('DEBUG: process_interface_methods key=${sk} NOT FOUND')
+			m_info := env.analyzer.get_mutability(sk)
+			eprintln('DEBUG: process_interface_methods key=${sk} mutated=${m_info.is_mutated}')
+			if m_info.is_mutated {
+				mut_pfx = 'mut '
+				break
 			}
 		}
 

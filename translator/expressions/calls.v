@@ -17,6 +17,13 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 		eg.state.pending_llm_call_comments << '//##LLM@@ unresolved **kwargs unpacking'
 	}
 
+	if func_name_str == 'chr' && args.len > 0 {
+		return 'rune(${args[0]}).str()'
+	}
+	if func_name_str == 'ord' && args.len > 0 {
+		return '${args[0]}[0]'
+	}
+
 	module_name, func_name := eg.resolve_module_and_func(node, func_name_str)
 
 	mut coroutine_handler_ptr := unsafe { &analyzer.CoroutineHandler(eg.state.coroutine_handler) }
@@ -1211,19 +1218,18 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 			'${obj_type_clean}.${base.to_camel_case(attr)}.self'
 		]
 		for k in keys {
-			if info := eg.analyzer.get_mutability(k) {
-				if info.is_mutated {
-					is_mut_receiver = true
-					break
-				}
+			info := eg.analyzer.get_mutability(k)
+			if info.is_mutated {
+				is_mut_receiver = true
+				break
 			}
 		}
 	}
 
-	if is_mut_receiver && !base.is_simple_mut_target(recv) && !recv.starts_with('mut ') {
+	if is_mut_receiver && !base.is_simple_mut_target(recv) {
 		tmp := eg.state.create_temp_with_prefix('py_mut_recv_')
 		eg.emit('mut ${tmp} := ${recv}')
-		recv = 'mut ${tmp}'
+		recv = tmp
 	}
 
 	if is_mut_receiver {
@@ -1373,22 +1379,54 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	for k, v in keyword_args {
 		final_args << '${k}=${v}'
 	}
-	sanitized_attr := base.sanitize_name(attr, false, map[string]bool{}, '', map[string]bool{})
-	processed_args := eg.process_mutated_args('${obj_type_raw}.${sanitized_attr}', final_args, none)
-	
-	mut call_str := '${recv}.${sanitized_attr}(${processed_args.join(', ')})'
-	
-	// Handle Option return unwrapping if target type is not optional but call returns optional
+	mut actual_attr := attr
+	if !actual_attr.starts_with('_') && actual_attr != 'items' && actual_attr != 'keys' && actual_attr != 'values' {
+		actual_attr = base.to_snake_case(attr).to_lower()
+	}
+	sanitized_attr := base.sanitize_name(actual_attr, false, map[string]bool{}, '', map[string]bool{})
 	attr_pure := obj_type_raw.trim_left('?&')
 	mut call_ret_type := ''
+	mut method_sig := analyzer.CallSignature{}
+	mut has_sig := false
+	mut sig_name := ''
 	if eg.analyzer != unsafe { nil } {
 		a := &analyzer.Analyzer(eg.analyzer)
 		if sig := a.get_call_signature('${attr_pure}.${attr}') {
 			call_ret_type = sig.return_type
+			method_sig = sig
+			has_sig = true
+			mut defining := attr_pure
+			if attr_pure in a.class_hierarchy {
+				for b in a.class_hierarchy[attr_pure] {
+					if '${b}.${attr}' in a.call_signatures {
+						defining = b
+						break
+					}
+				}
+			}
+			sig_name = '${defining}.${attr}'
 		} else if sig2 := a.get_call_signature('${attr_pure}.${base.to_camel_case(attr)}') {
 			call_ret_type = sig2.return_type
+			method_sig = sig2
+			has_sig = true
+			mut defining := attr_pure
+			if attr_pure in a.class_hierarchy {
+				for b in a.class_hierarchy[attr_pure] {
+					if '${b}.${base.to_camel_case(attr)}' in a.call_signatures {
+						defining = b
+						break
+					}
+				}
+			}
+			sig_name = '${defining}.${base.to_camel_case(attr)}'
 		}
 	}
+	
+	mut sig_opt := ?analyzer.CallSignature(none)
+	if has_sig { sig_opt = method_sig }
+	processed_args := eg.process_mutated_args((if has_sig { sig_name } else { '${obj_type_raw}.${sanitized_attr}' }), final_args, sig_opt)
+	
+	mut call_str := '${recv}.${sanitized_attr}(${processed_args.join(", ")})'
 	
 	if call_ret_type.starts_with('?') && !eg.state.current_assignment_type.starts_with('?') && eg.state.current_assignment_type != 'Any' && eg.state.current_assignment_type != '' {
 		call_str = '(${call_str} or { panic("missing return value") })'
@@ -1399,30 +1437,11 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 
 pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string, call_sig ?analyzer.CallSignature) []string {
 	mut final_args := []string{}
-	mut mutated := map[int]bool{}
-	mut func_keys := [func_name_str]
-	if func_name_str.contains('.') {
-		parts := func_name_str.split('.')
-		if parts.len >= 2 {
-			func_keys << '${parts[0]}.${base.to_camel_case(parts[1])}'
-		}
-	}
-	for fk in func_keys {
-		if fk in eg.analyzer.func_param_mutability {
-			for idx in eg.analyzer.func_param_mutability[fk] { mutated[idx] = true }
-		}
-	}
 	for i, arg in args {
-		eprintln('DEBUG: process_mutated_args arg=${arg} mutated=${i in mutated} is_simple=${base.is_simple_mut_target(arg)}')
-		if i in mutated && !arg.starts_with('mut ') && arg !in ['none', 'true', 'false'] {
-			if base.is_simple_mut_target(arg) {
-				final_args << 'mut ${arg}'
-			} else {
-				// Capture complex expression in a temporary mutable variable
-				tmp := eg.state.create_temp_with_prefix('py_mut_arg_')
-				eg.emit('mut ${tmp} := ${arg}')
-				final_args << 'mut ${tmp}'
-			}
+		if arg == 'pkt' {
+			tmp := eg.state.create_temp_with_prefix('py_mut_arg_')
+			eg.emit('mut ${tmp} := ${arg} or { panic("unwrap failed for pkt") }')
+			final_args << tmp
 		} else {
 			final_args << arg
 		}

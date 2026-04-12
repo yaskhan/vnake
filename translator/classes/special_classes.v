@@ -148,23 +148,34 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 			} else {
 				'${method.name}.${arg.arg}'
 			}
-			if m_info := env.analyzer.get_mutability(p_key) {
-				if m_info.is_reassigned || m_info.is_mutated {
-					mut_prefix = 'mut '
-				}
+			m_info := env.analyzer.get_mutability(p_key)
+			if m_info.is_reassigned || m_info.is_mutated {
+				mut_prefix = 'mut '
 			}
 
 			if mut_prefix == '' {
 				// Interface methods need to match ANY implementation that needs mut
 				for other_cls, _ in env.analyzer.class_hierarchy {
 					other_key := '${other_cls}.${method.name}.${arg.arg}'
-					if m_info := env.analyzer.get_mutability(other_key) {
-						if m_info.is_reassigned || m_info.is_mutated {
-							mut_prefix = 'mut '
-							break
-						}
+					m_info_impl := env.analyzer.get_mutability(other_key)
+					if m_info_impl.is_reassigned || m_info_impl.is_mutated {
+						mut_prefix = 'mut '
+						break
 					}
 				}
+				if mut_prefix == '' {
+					// Check stubs too
+					stub_key := '${struct_name}_Impl.${method.name}.${arg.arg}'
+					m_info_stub := env.analyzer.get_mutability(stub_key)
+					if m_info_stub.is_reassigned || m_info_stub.is_mutated {
+						mut_prefix = 'mut '
+					}
+				}
+			}
+
+			if mut_prefix != '' && (ann_str.contains('&') || ann_str.starts_with('?')) {
+				// References don't need mut parameter flags
+				mut_prefix = ''
 			}
 
 			p_args << '${mut_prefix}${arg_name} ${ann_str}'
@@ -212,24 +223,33 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 			}
 		}
 
-		mut is_mut_self := false
-		self_keys := [
-			'${struct_name}.${method.name}.self',
-			'${struct_name}.${base.to_camel_case(method.name)}.self'
-		]
-		for sk in self_keys {
-			if m_info := env.analyzer.get_mutability(sk) {
+		mut is_meth_mut := false
+		p_key_recv := '${struct_name}.${method.name}.self'
+		meth_info := env.analyzer.get_mutability(p_key_recv)
+		if meth_info.is_mutated {
+			is_meth_mut = true
+		}
+		if !is_meth_mut {
+			// Check implementations
+			for other_cls, _ in env.analyzer.class_hierarchy {
+				other_key := '${other_cls}.${method.name}.self'
+				m_info := env.analyzer.get_mutability(other_key)
 				if m_info.is_mutated {
-					is_mut_self = true
+					is_meth_mut = true
 					break
 				}
 			}
 		}
+		
+		// In V 0.5, since we blindly declare `self` as mutable in implementations (`generation.v`)
+		// to bypass un-tracked intra-class mutating calls, we MUST also declare it mutable
+		// in the interface, to satisfy V's structural interface compatibility requirements.
+		is_meth_mut = true
 
-		if is_mut_self {
-			mut_methods << '    ${m_name}(${p_args.join(', ')})${ret}'
+		if is_meth_mut {
+			mut_methods << '    ${m_name}(${p_args.join(", ")})${ret}'
 		} else {
-			immut_methods << '    ${m_name}(${p_args.join(', ')})${ret}'
+			immut_methods << '    ${m_name}(${p_args.join(", ")})${ret}'
 		}
 		added_meth_names << m_name
 	}

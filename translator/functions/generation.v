@@ -117,9 +117,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 				}
 			}
 			p_key := '${struct_name}.${node.name}.self'
-			if m_info_self := env.analyzer.get_mutability(p_key) {
-				is_mutated = is_mutated || m_info_self.is_mutated
-			}
+			m_info_self := env.analyzer.get_mutability(p_key)
+			is_mutated = is_mutated || m_info_self.is_mutated
 			// Try without scope or with remapped scope
 			if !is_mutated && struct_name.len > 0 {
 				pure_struct := struct_name.all_before_last('_Impl')
@@ -133,17 +132,23 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 					'${struct_name}.${node.name}.self'
 				]
 				for k in keys {
-					if info := env.analyzer.get_mutability(k) {
-						if info.is_mutated {
-							is_mutated = true
-							break
-						}
+					info := env.analyzer.get_mutability(k)
+					if info.is_mutated {
+						is_mutated = true
+						break
 					}
 				}
 			}
 
 			if dec_info.is_property {
 				is_mutated = false
+			}
+
+			// In V 0.5, since we do not natively track intra-class method call mutability,
+			// always declare `self` as mutable to satisfy the V compiler for complex object updates.
+			// V will only emit warnings for unused mut declarations, avoiding fatal errors.
+			if !dec_info.is_property {
+				is_mutated = true
 			}
 
 			mut is_interface_impl := false
@@ -339,21 +344,19 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		} else {
 			'${node.name}.${arg.arg}'
 		}
-		if m_info := env.analyzer.get_mutability(p_key_mut) {
-			is_reassigned = m_info.is_reassigned
-			is_mut = m_info.is_reassigned || m_info.is_mutated
-		}
+		m_info := env.analyzer.get_mutability(p_key_mut)
+		is_reassigned = m_info.is_reassigned
+		is_mut = m_info.is_reassigned || m_info.is_mutated
 
 		if !is_mut {
 			// Check other implementations IF we are in a class
 			if struct_name.len > 0 {
 				for other_cls, _ in env.analyzer.class_hierarchy {
 					other_key := '${other_cls}.${node.name}.${arg.arg}'
-					if m_info_o := env.analyzer.get_mutability(other_key) {
-						if m_info_o.is_reassigned || m_info_o.is_mutated {
-							is_mut = true
-							break
-						}
+					m_info_o := env.analyzer.get_mutability(other_key)
+					if m_info_o.is_reassigned || m_info_o.is_mutated {
+						is_mut = true
+						break
 					}
 				}
 			}
@@ -367,8 +370,18 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			local_mut_copies << [arg_name, arg_name]
 			is_mut = false
 		}
-		if is_mut && is_primitive_arg {
+		
+		if !is_primitive_arg {
 			is_mut = false
+		}
+
+		if !is_mut {
+			if arg_name == 'self' || arg_name == 'cls' {
+				is_mut = true
+				if arg_type.contains('&') {
+					arg_type = arg_type.replace('&', '')
+				}
+			}
 		}
 
 		mut final_p_prefix := if is_mut { 'mut ' } else { '' }
