@@ -69,9 +69,10 @@ pub fn keyfunc(name string) string {
 	ext := os.file_ext(name)
 	init_weight := if base == '__init__' { '0' } else { '1' }
 	ext_weight := match ext {
-		'.pyi' { '0' }
-		'.py' { '1' }
-		else { '2' }
+		'' { '0' }
+		'.pyi' { '1' }
+		'.py' { '2' }
+		else { '3' }
 	}
 	return '${init_weight}:${ext_weight}:${base}:${name}'
 }
