@@ -80,3 +80,39 @@ fn test_create_source_list_respects_explicit_package_bases() {
 	assert discovered_sources[0].module == 'pkg.mod'
 	assert discovered_sources[0].base_dir == base_dir
 }
+
+fn test_create_source_list_reports_invalid_exclude_pattern() {
+	root := create_test_temp_dir()
+	defer {
+		os.rmdir_all(root) or {}
+	}
+
+	write_test_file(os.join_path(root, 'top.py'), 'x = 1\n')
+
+	mut options := Options.new()
+	options.exclude = ['[']
+
+	create_source_list([root], *options, none, false) or {
+		assert err.msg().contains('Invalid exclude pattern')
+		return
+	}
+	panic('expected invalid exclude pattern error')
+}
+
+fn test_find_sources_in_dir_reports_directory_read_failures() {
+	root := create_test_temp_dir()
+	defer {
+		os.rmdir_all(root) or {}
+	}
+
+	missing_dir := os.join_path(root, 'missing')
+	options := Options.new()
+	mut finder := new_source_finder(*options, none) or { panic(err.msg()) }
+
+	finder.find_sources_in_dir(missing_dir) or {
+		assert err.msg().contains('Failed to read directory')
+		assert err.msg().contains(missing_dir)
+		return
+	}
+	panic('expected directory read failure')
+}

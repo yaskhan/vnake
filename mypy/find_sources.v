@@ -27,7 +27,7 @@ pub fn create_source_list(paths []string,
 	options Options,
 	fscache ?&FileSystemCache,
 	allow_empty_dir bool) ![]BuildSource {
-	mut finder := new_source_finder(options, fscache)
+	mut finder := new_source_finder(options, fscache)!
 
 	mut sources := []BuildSource{}
 	for path in paths {
@@ -40,7 +40,7 @@ pub fn create_source_list(paths []string,
 				base_dir: base_dir
 			}
 		} else if finder.is_dir(clean_path) {
-			sub_sources := finder.find_sources_in_dir(clean_path)
+			sub_sources := finder.find_sources_in_dir(clean_path)!
 			if sub_sources.len == 0 && !allow_empty_dir {
 				return error('There are no .py[i] files in directory \'${clean_path}\'')
 			}
@@ -96,6 +96,7 @@ pub fn normalise_package_base(root string) string {
 // SourceFinder — source finder
 pub struct SourceFinder {
 pub mut:
+	fscache                FileSystemCache
 	options                Options
 	explicit_package_bases ?[]string
 	exclude_patterns       []regex.RE
@@ -106,11 +107,13 @@ pub mut:
 }
 
 // new_source_finder creates a new SourceFinder
-pub fn new_source_finder(options Options) SourceFinder {
+pub fn new_source_finder(options Options, fscache ?&FileSystemCache) !SourceFinder {
+	cache := if provided := fscache { *provided } else { FileSystemCache{} }
 	return SourceFinder{
+		fscache:                cache
 		options:                options
 		explicit_package_bases: get_explicit_package_bases(options)
-		exclude_patterns:       compile_exclude_patterns(options.exclude)
+		exclude_patterns:       compile_exclude_patterns(options.exclude)!
 		namespace_packages:     options.namespace_packages
 		exclude:                options.exclude
 		exclude_gitignore:      options.exclude_gitignore
@@ -147,10 +150,10 @@ pub fn (f SourceFinder) is_explicit_package_base(path string) bool {
 	return false
 }
 
-pub fn (mut f SourceFinder) find_sources_in_dir(path string) []BuildSource {
+pub fn (mut f SourceFinder) find_sources_in_dir(path string) ![]BuildSource {
 	mut sources := []BuildSource{}
 	mut seen := map[string]bool{}
-	mut names := os.ls(path) or { return sources }
+	mut names := f.list_dir(path) or { return error('Failed to read directory "${path}": ${err.msg()}') }
 	names.sort_with_compare(fn (a &string, b &string) int {
 		ka := keyfunc(*a)
 		kb := keyfunc(*b)
@@ -171,8 +174,8 @@ pub fn (mut f SourceFinder) find_sources_in_dir(path string) []BuildSource {
 		if matches_source_exclude(subpath, f.exclude_patterns) {
 			continue
 		}
-		if os.is_dir(subpath) {
-			sub_sources := f.find_sources_in_dir(subpath)
+		if f.is_dir(subpath) {
+			sub_sources := f.find_sources_in_dir(subpath)!
 			if sub_sources.len > 0 {
 				seen[name] = true
 				sources << sub_sources
@@ -196,10 +199,15 @@ pub fn (mut f SourceFinder) find_sources_in_dir(path string) []BuildSource {
 }
 
 fn (f SourceFinder) is_dir(path string) bool {
-	return os.is_dir(path)
+	mut cache := f.fscache
+	return cache.isdir(path)
 }
 
-fn (f SourceFinder) crawl_up(path string) (string, string) {
+fn (mut f SourceFinder) list_dir(path string) ![]string {
+	return f.fscache.listdir(path)
+}
+
+fn (mut f SourceFinder) crawl_up(path string) (string, string) {
 	abs_path := os.abs_path(path)
 	parent := os.dir(abs_path)
 	filename := os.base(abs_path)
@@ -211,7 +219,7 @@ fn (f SourceFinder) crawl_up(path string) (string, string) {
 	return module_join(parent_module, module_name), base_dir
 }
 
-fn (f SourceFinder) crawl_up_dir(dir string) (string, string) {
+fn (mut f SourceFinder) crawl_up_dir(dir string) (string, string) {
 	module_name, base_dir, ok := f.crawl_up_helper(os.abs_path(dir))
 	if ok {
 		return module_name, base_dir
@@ -219,7 +227,7 @@ fn (f SourceFinder) crawl_up_dir(dir string) (string, string) {
 	return '', os.abs_path(dir)
 }
 
-fn (f SourceFinder) crawl_up_helper(dir string) (string, string, bool) {
+fn (mut f SourceFinder) crawl_up_helper(dir string) (string, string, bool) {
 	if f.explicit_package_bases != none && f.is_explicit_package_base(dir) {
 		return '', normalise_package_base(dir), true
 	}
@@ -249,10 +257,10 @@ fn (f SourceFinder) crawl_up_helper(dir string) (string, string, bool) {
 	return module_join(mod_prefix, name), base_dir, true
 }
 
-fn (f SourceFinder) get_init_file(dir string) ?string {
+fn (mut f SourceFinder) get_init_file(dir string) ?string {
 	for ext in py_extensions {
 		path := os.join_path(dir, '__init__' + ext)
-		if os.is_file(path) {
+		if f.fscache.isfile(path) {
 			return path
 		}
 	}
@@ -279,16 +287,13 @@ fn should_skip_source_name(name string) bool {
 	return name in skipped_source_names || name.starts_with('.')
 }
 
-fn compile_exclude_patterns(patterns []string) []regex.RE {
+fn compile_exclude_patterns(patterns []string) ![]regex.RE {
 	mut compiled := []regex.RE{}
 	for pattern in patterns {
 		if pattern.len == 0 {
 			continue
 		}
-		re := regex.regex_opt(pattern) or {
-			eprintln('mypy: ignoring invalid exclude pattern "${pattern}": ${err.msg()}')
-			continue
-		}
+		re := regex.regex_opt(pattern) or { return error('Invalid exclude pattern "${pattern}": ${err.msg()}') }
 		compiled << re
 	}
 	return compiled
