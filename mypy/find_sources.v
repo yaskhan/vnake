@@ -108,7 +108,7 @@ pub mut:
 
 // new_source_finder creates a new SourceFinder
 pub fn new_source_finder(options Options, fscache ?&FileSystemCache) !SourceFinder {
-	cache := if provided := fscache { *provided } else { FileSystemCache{} }
+	cache := if provided := fscache { *provided } else { new_file_system_cache() }
 	return SourceFinder{
 		fscache:                cache
 		options:                options
@@ -198,9 +198,8 @@ pub fn (mut f SourceFinder) find_sources_in_dir(path string) ![]BuildSource {
 	return sources
 }
 
-fn (f SourceFinder) is_dir(path string) bool {
-	mut cache := f.fscache
-	return cache.isdir(path)
+fn (mut f SourceFinder) is_dir(path string) bool {
+	return f.fscache.isdir(path)
 }
 
 fn (mut f SourceFinder) list_dir(path string) ![]string {
