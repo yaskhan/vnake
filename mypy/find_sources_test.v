@@ -33,10 +33,10 @@ fn test_create_source_list_discovers_modules_in_directory_tree() {
 	write_test_file(os.join_path(root, 'pkg', 'mod.py'), 'y = 2\n')
 
 	options := Options.new()
-	sources := create_source_list([root], *options, none, false) or { panic(err.msg()) }
-	by_module := collect_sources_by_module(sources)
+	discovered_sources := create_source_list([root], *options, none, false) or { panic(err.msg()) }
+	by_module := collect_sources_by_module(discovered_sources)
 
-	assert sources.len == 3
+	assert discovered_sources.len == 3
 	assert by_module['top'].path == os.join_path(root, 'top.py')
 	assert by_module['pkg'].path == os.join_path(root, 'pkg', '__init__.py')
 	assert by_module['pkg.mod'].path == os.join_path(root, 'pkg', 'mod.py')
@@ -53,11 +53,11 @@ fn test_find_sources_in_dir_prefers_stub_files_for_same_module_name() {
 	write_test_file(os.join_path(root, 'pkg.pyi'), 'x: int\n')
 
 	options := Options.new()
-	sources := create_source_list([root], *options, none, false) or { panic(err.msg()) }
+	discovered_sources := create_source_list([root], *options, none, false) or { panic(err.msg()) }
 
-	assert sources.len == 1
-	assert sources[0].module == 'pkg'
-	assert sources[0].path == os.join_path(root, 'pkg.pyi')
+	assert discovered_sources.len == 1
+	assert discovered_sources[0].module == 'pkg'
+	assert discovered_sources[0].path == os.join_path(root, 'pkg.pyi')
 }
 
 fn test_create_source_list_respects_explicit_package_bases() {
@@ -74,9 +74,9 @@ fn test_create_source_list_respects_explicit_package_bases() {
 	options.explicit_package_bases = true
 	options.mypy_path = [base_dir]
 
-	sources := create_source_list([module_path], *options, none, false) or { panic(err.msg()) }
+	discovered_sources := create_source_list([module_path], *options, none, false) or { panic(err.msg()) }
 
-	assert sources.len == 1
-	assert sources[0].module == 'pkg.mod'
-	assert sources[0].base_dir == base_dir
+	assert discovered_sources.len == 1
+	assert discovered_sources[0].module == 'pkg.mod'
+	assert discovered_sources[0].base_dir == base_dir
 }
