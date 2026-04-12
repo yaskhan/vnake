@@ -48,7 +48,11 @@ pub fn create_source_list(paths []string,
 				sources << s
 			}
 		} else {
-			mod := if options.scripts_are_modules { os.base(clean_path) } else { '__main__' }
+			mod := if options.scripts_are_modules {
+				strip_py(os.base(clean_path)) or { os.base(clean_path) }
+			} else {
+				'__main__'
+			}
 			sources << BuildSource{
 				path:   clean_path
 				module: mod

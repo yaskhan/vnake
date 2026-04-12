@@ -1,9 +1,10 @@
 module mypy
 
 import os
+import time
 
 fn new_find_sources_test_dir() string {
-	root := os.join_path(os.temp_dir(), 'mypy_find_sources_' + random_string())
+	root := os.join_path(os.temp_dir(), 'mypy_find_sources_${time.now().unix_nano()}')
 	os.mkdir_all(root) or { panic(err.msg()) }
 	return os.abs_path(root)
 }
