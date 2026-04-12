@@ -65,7 +65,8 @@ pub fn create_source_list(paths []string,
 
 // keyfunc determines sort order for directory list
 pub fn keyfunc(name string) string {
-	base := name.all_before_last('.')
+	dot := name.last_index('.') or { -1 }
+	base := if dot >= 0 { name[..dot] } else { name }
 	ext := os.file_ext(name)
 	init_weight := if base == '__init__' { '0' } else { '1' }
 	ext_weight := match ext {
@@ -285,7 +286,10 @@ fn compile_exclude_patterns(patterns []string) []regex.RE {
 		if pattern.len == 0 {
 			continue
 		}
-		re := regex.regex_opt(pattern) or { continue }
+		re := regex.regex_opt(pattern) or {
+			eprintln('Warning: ignoring invalid exclude pattern "${pattern}": ${err.msg()}')
+			continue
+		}
 		compiled << re
 	}
 	return compiled

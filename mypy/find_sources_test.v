@@ -4,9 +4,9 @@ import os
 import time
 
 fn create_test_temp_dir() string {
-	root := os.join_path(os.temp_dir(), 'mypy_find_sources_${time.now().unix_nano()}')
-	os.mkdir_all(root) or { panic(err.msg()) }
-	return os.abs_path(root)
+	temp_test_dir := os.join_path(os.temp_dir(), 'mypy_find_sources_${time.now().unix_nano()}')
+	os.mkdir_all(temp_test_dir) or { panic(err.msg()) }
+	return os.abs_path(temp_test_dir)
 }
 
 fn write_test_file(path string, contents string) {
