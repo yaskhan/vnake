@@ -120,12 +120,7 @@ fn (mut t Translator) declare_local(name string) {
 }
 
 fn (t &Translator) is_declared_local(name string) bool {
-	for i := t.state.scope_stack.len - 1; i >= 0; i-- {
-		if name in t.state.scope_stack[i] {
-			return true
-		}
-	}
-	return false
+	return t.state.is_declared_local(name)
 }
 
 fn (mut t Translator) visit_expr(node ast.Expression) string {

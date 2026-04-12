@@ -207,7 +207,21 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	token := node.get_token()
 	loc_key := '${token.line}:${token.column}'
 	if loc_key in eg.analyzer.location_map {
-		op_type = eg.analyzer.location_map[loc_key]
+		mut raw_op_type := eg.analyzer.location_map[loc_key]
+		// Sanitize union types like 'int | int' to 'int'
+		if raw_op_type.contains(' | ') {
+			mut parts := raw_op_type.split(' | ').map(it.trim_space())
+			parts.sort()
+			mut unique_parts := []string{}
+			for p in parts { if p !in unique_parts { unique_parts << p } }
+			if unique_parts.len == 1 {
+				op_type = unique_parts[0]
+			} else {
+				op_type = raw_op_type
+			}
+		} else {
+			op_type = raw_op_type
+		}
 	}
 
 	// Support for string and array repetition

@@ -1690,6 +1690,10 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 				m.emitter.add_global(g)
 			}
 			ve.globals.clear()
+			for c in ve.constants {
+				m.emitter.add_constant(c)
+			}
+			ve.constants.clear()
 		} else {
 			m.visit_stmt_fn(stmt)
 		}

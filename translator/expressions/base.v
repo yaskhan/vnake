@@ -365,11 +365,13 @@ pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
 		return 'Template{strings: [${eg.quote_string_content(content, is_raw)}], interpolations: []}'
 	}
 	if node.token.typ == .string_tok || node.token.typ == .fstring_tok {
-		if node.value.starts_with("'") || node.value.starts_with('"') || node.value.starts_with('t\'')
-			|| node.value.starts_with('t"') {
-			return node.value
+		if node.value.starts_with('t\'') || node.value.starts_with('t"') || node.value.starts_with('rt\'') || node.value.starts_with('rt"') {
+			return eg.visit_constant(node) // recursion handled by prefix check
 		}
-		return "'${node.value}'"
+		content := eg.extract_string_content(node.value)
+		is_raw := node.value.starts_with('r') || node.value.starts_with('R') || node.value.contains('r\'') || node.value.contains('r"') ||
+		          node.token.value.starts_with('r') || node.token.value.starts_with('R') || node.token.value.contains('r\'') || node.token.value.contains('r"')
+		return eg.quote_string_content(content, is_raw)
 	}
 	mut val := node.value
 	if node.token.typ == .number {

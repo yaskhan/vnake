@@ -1,6 +1,7 @@
 module control_flow
 
 import ast
+import base
 
 pub fn (mut m ControlFlowModule) visit_raise(node ast.Raise) {
 	if exc := node.exc {
@@ -109,6 +110,33 @@ pub fn (mut m ControlFlowModule) visit_try(node ast.Try) {
 	m.env.state.vexc_depth++
 	success_var := 'py_success_${m.env.state.unique_id_counter}'
 	m.env.state.unique_id_counter++
+
+	// Pre-declare variables defined in try block to avoid scope issues in orelse/after
+	mut try_vars := []string{}
+	for stmt in node.body {
+		if stmt is ast.Assign {
+			for target in stmt.targets {
+				if target is ast.Name {
+					name := m.sanitize_name(target.id, false)
+					if !m.is_declared_local(name) {
+						try_vars << name
+					}
+				}
+			}
+		} else if stmt is ast.AnnAssign {
+			if stmt.target is ast.Name {
+				name := m.sanitize_name(stmt.target.id, false)
+				if !m.is_declared_local(name) {
+					try_vars << name
+				}
+			}
+		}
+	}
+	for v in try_vars {
+		m.emit('mut ${v} := Any(NoneType{})')
+		m.declare_local(v)
+	}
+
 	if node.orelse.len > 0 {
 		m.emit('mut ${success_var} := false')
 	}

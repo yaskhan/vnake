@@ -6,8 +6,7 @@ import base
 import stdlib_map
 
 pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
-	func_name_str, _ := eg.extract_func_info(node)
-	loc_key := '${node.token.line}:${node.token.column}'
+	func_name_str, loc_key := eg.extract_func_info(node)
 	call_sig := eg.get_call_signature(func_name_str, loc_key)
 
 	mut args := eg.process_call_args(node, call_sig)
@@ -1110,6 +1109,23 @@ fn (eg &ExprGen) types_match(t1 string, t2 string) bool {
 pub fn (mut eg ExprGen) handle_fallback_call(node ast.Call, func_name_str string, args []string, keyword_args map[string]string, call_sig ?analyzer.CallSignature) string {
 	mut func_name := eg.visit(node.func)
 	if func_name.len == 0 { func_name = func_name_str }
+	
+	// If calling a variable that holds a variadic function (signature fn ([]Any)), 
+	// we must wrap arguments into a single []Any list in V.
+	if node.func is ast.Name {
+		id := node.func.id
+		if eg.state.is_declared_local(id) {
+			typ := eg.guess_type(node.func)
+			// Local function variables that take *args are translated to fn ([]Any) in V, 
+			// so we must wrap the call arguments.
+			if typ.contains('fn ([]Any)') || typ.contains('fn (...') {
+				mut any_args := []string{}
+				for a in args { any_args << "Any(${a})" }
+				return "${func_name}([${any_args.join(', ')}])"
+			}
+		}
+	}
+
 	if func_name in eg.state.renamed_functions { func_name = eg.state.renamed_functions[func_name] }
 
 	mut final_raw_args := args.clone()
@@ -1133,6 +1149,20 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	loc_key := '${receiver_token.line}:${receiver_token.column}'
 	
 	mut original_type_raw := obj_type_raw
+	
+	if attr == 'items' && obj_type_raw.starts_with('map[') {
+		return 'list(${obj}.keys())' // Simplified: items() treated as keys for now, or we need a Pair struct
+	}
+	if attr == 'values' && obj_type_raw.starts_with('map[') {
+		mut val_type := 'Any'
+		if obj_type_raw.contains(']') {
+			val_type = obj_type_raw.all_after(']')
+		}
+		return '${obj}.values()' // V 0.4+ has .values() on maps returning an array
+	}
+	if attr == 'keys' && obj_type_raw.starts_with('map[') {
+		return '${obj}.keys()'
+	}
 	if receiver_expr is ast.Attribute {
 		obj_base_type := eg.guess_type(receiver_expr.value).all_before('[')
 		field_key := '${obj_base_type}.${receiver_expr.attr}'

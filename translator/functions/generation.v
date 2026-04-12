@@ -668,7 +668,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		env.declare_local_fn(name_arg)
 	}
 	if is_nested {
-		env.state.scope_stack.last()[func_name] = true
+		// Register nested function in the parent scope so it can be found by is_declared_local
+		idx := env.state.scope_stack.len - 2
+		if idx >= 0 {
+			env.state.scope_stack[idx][func_name] = true
+		}
 	}
 
 	if is_generator {

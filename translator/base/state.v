@@ -337,6 +337,15 @@ pub fn (s &TranslatorState) is_exported(name string) bool {
 	return false
 }
 
+pub fn (s &TranslatorState) is_declared_local(name string) bool {
+	for scope in s.scope_stack {
+		if name in scope {
+			return true
+		}
+	}
+	return false
+}
+
 // collect_assigned_vars collects names of all assigned variables
 pub fn (s &TranslatorState) collect_assigned_nodes(nodes []voidptr) map[string]bool {
 	mut assigned := map[string]bool{}

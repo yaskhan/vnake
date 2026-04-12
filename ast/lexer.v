@@ -272,7 +272,7 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 			l.advance_char()
 			l.advance_char()
 		}
-		prefix_value := if prefix.to_lower().contains('b') { 'b' } else { '' }
+		prefix_value := prefix
 		q_str := quote.ascii_str()
 		return Token{
 			typ:      typ
@@ -303,7 +303,7 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 	if l.pos < l.source.len {
 		l.advance_char() // closing quote
 	}
-	prefix_value := if prefix.to_lower().contains('b') { 'b' } else { '' }
+	prefix_value := prefix
 	q_str := quote.ascii_str()
 	return Token{
 		typ:      typ

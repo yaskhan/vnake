@@ -10,10 +10,16 @@ pub fn (mut m ControlFlowModule) visit_break(_ ast.Break) {
 		}
 		target_depth := m.loop_depth_stack[m.loop_depth_stack.len - 1]
 		diff := m.env.state.vexc_depth - target_depth
+		if diff > 0 {
+			m.env.state.used_builtins['vexc'] = true
+		}
 		for _ in 0 .. diff {
 			m.emit('vexc.end_try()')
 		}
 	} else {
+		if m.env.state.vexc_depth > 0 {
+			m.env.state.used_builtins['vexc'] = true
+		}
 		for _ in 0 .. m.env.state.vexc_depth {
 			m.emit('vexc.end_try()')
 		}
@@ -28,10 +34,16 @@ pub fn (mut m ControlFlowModule) visit_continue(_ ast.Continue) {
 	if m.loop_depth_stack.len > 0 {
 		target_depth := m.loop_depth_stack[m.loop_depth_stack.len - 1]
 		diff := m.env.state.vexc_depth - target_depth
+		if diff > 0 {
+			m.env.state.used_builtins['vexc'] = true
+		}
 		for _ in 0 .. diff {
 			m.emit('vexc.end_try()')
 		}
 	} else {
+		if m.env.state.vexc_depth > 0 {
+			m.env.state.used_builtins['vexc'] = true
+		}
 		for _ in 0 .. m.env.state.vexc_depth {
 			m.emit('vexc.end_try()')
 		}
@@ -47,6 +59,14 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 				return
 			}
 		}
+	}
+	
+	// Ensure we end all active try blocks before returning
+	if m.env.state.vexc_depth > 0 {
+		m.env.state.used_builtins['vexc'] = true
+	}
+	for _ in 0 .. m.env.state.vexc_depth {
+		m.emit('vexc.end_try()')
 	}
 
 	if val := node.value {
