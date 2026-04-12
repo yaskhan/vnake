@@ -31,7 +31,7 @@ pub fn create_source_list(paths []string,
 
 	mut sources := []BuildSource{}
 	for path in paths {
-		mut clean_path := os.norm_path(path)
+		mut clean_path := os.abs_path(path)
 		if clean_path.ends_with('.py') || clean_path.ends_with('.pyi') {
 			name, base_dir := finder.crawl_up(clean_path)
 			sources << BuildSource{

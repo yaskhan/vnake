@@ -3,7 +3,7 @@ module mypy
 import os
 
 fn new_find_sources_test_dir() string {
-	root := os.join_path(os.temp_dir(), 'vnake_find_sources_' + random_string())
+	root := os.join_path(os.temp_dir(), 'mypy_find_sources_' + random_string())
 	os.mkdir_all(root) or { panic(err.msg()) }
 	return os.abs_path(root)
 }
