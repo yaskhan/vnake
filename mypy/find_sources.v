@@ -27,8 +27,7 @@ pub fn create_source_list(paths []string,
 	options Options,
 	fscache ?&FileSystemCache,
 	allow_empty_dir bool) ![]BuildSource {
-	_ = fscache
-	mut finder := new_source_finder(options)
+	mut finder := new_source_finder(options, fscache)
 
 	mut sources := []BuildSource{}
 	for path in paths {
