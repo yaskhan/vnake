@@ -3,13 +3,13 @@ module mypy
 import os
 import time
 
-fn new_find_sources_test_dir() string {
+fn create_test_temp_dir() string {
 	root := os.join_path(os.temp_dir(), 'mypy_find_sources_${time.now().unix_nano()}')
 	os.mkdir_all(root) or { panic(err.msg()) }
 	return os.abs_path(root)
 }
 
-fn write_find_sources_test_file(path string, contents string) {
+fn write_test_file(path string, contents string) {
 	os.mkdir_all(os.dir(path)) or { panic(err.msg()) }
 	os.write_file(path, contents) or { panic(err.msg()) }
 }
@@ -23,14 +23,14 @@ fn collect_sources_by_module(sources []BuildSource) map[string]BuildSource {
 }
 
 fn test_create_source_list_discovers_modules_in_directory_tree() {
-	root := new_find_sources_test_dir()
+	root := create_test_temp_dir()
 	defer {
 		os.rmdir_all(root) or {}
 	}
 
-	write_find_sources_test_file(os.join_path(root, 'top.py'), 'x = 1\n')
-	write_find_sources_test_file(os.join_path(root, 'pkg', '__init__.py'), '')
-	write_find_sources_test_file(os.join_path(root, 'pkg', 'mod.py'), 'y = 2\n')
+	write_test_file(os.join_path(root, 'top.py'), 'x = 1\n')
+	write_test_file(os.join_path(root, 'pkg', '__init__.py'), '')
+	write_test_file(os.join_path(root, 'pkg', 'mod.py'), 'y = 2\n')
 
 	options := Options.new()
 	sources := create_source_list([root], *options, none, false) or { panic(err.msg()) }
@@ -44,13 +44,13 @@ fn test_create_source_list_discovers_modules_in_directory_tree() {
 }
 
 fn test_find_sources_in_dir_prefers_stub_files_for_same_module_name() {
-	root := new_find_sources_test_dir()
+	root := create_test_temp_dir()
 	defer {
 		os.rmdir_all(root) or {}
 	}
 
-	write_find_sources_test_file(os.join_path(root, 'pkg.py'), 'x = 1\n')
-	write_find_sources_test_file(os.join_path(root, 'pkg.pyi'), 'x: int\n')
+	write_test_file(os.join_path(root, 'pkg.py'), 'x = 1\n')
+	write_test_file(os.join_path(root, 'pkg.pyi'), 'x: int\n')
 
 	options := Options.new()
 	sources := create_source_list([root], *options, none, false) or { panic(err.msg()) }
@@ -61,14 +61,14 @@ fn test_find_sources_in_dir_prefers_stub_files_for_same_module_name() {
 }
 
 fn test_create_source_list_respects_explicit_package_bases() {
-	root := new_find_sources_test_dir()
+	root := create_test_temp_dir()
 	defer {
 		os.rmdir_all(root) or {}
 	}
 
 	base_dir := os.join_path(root, 'src')
 	module_path := os.join_path(base_dir, 'pkg', 'mod.py')
-	write_find_sources_test_file(module_path, 'z = 3\n')
+	write_test_file(module_path, 'z = 3\n')
 
 	mut options := Options.new()
 	options.explicit_package_bases = true

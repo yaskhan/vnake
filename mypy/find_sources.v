@@ -10,6 +10,7 @@ import regex
 
 // PY_EXTENSIONS — Python file extensions
 pub const py_extensions = ['.pyi', '.py']
+pub const skipped_source_names = ['__pycache__', 'site-packages', 'node_modules']
 
 // InvalidSourceList — exception for source list problems
 pub struct InvalidSourceList {
@@ -97,6 +98,7 @@ pub struct SourceFinder {
 pub mut:
 	options                Options
 	explicit_package_bases ?[]string
+	exclude_patterns       []regex.RE
 	namespace_packages     bool
 	exclude                []string
 	exclude_gitignore      bool
@@ -108,6 +110,7 @@ pub fn new_source_finder(options Options) SourceFinder {
 	return SourceFinder{
 		options:                options
 		explicit_package_bases: get_explicit_package_bases(options)
+		exclude_patterns:       compile_exclude_patterns(options.exclude)
 		namespace_packages:     options.namespace_packages
 		exclude:                options.exclude
 		exclude_gitignore:      options.exclude_gitignore
@@ -165,7 +168,7 @@ pub fn (mut f SourceFinder) find_sources_in_dir(path string) []BuildSource {
 			continue
 		}
 		subpath := os.join_path(path, name)
-		if matches_source_exclude(subpath, f.exclude) {
+		if matches_source_exclude(subpath, f.exclude_patterns) {
 			continue
 		}
 		if os.is_dir(subpath) {
@@ -273,20 +276,28 @@ fn strip_py(path string) ?string {
 }
 
 fn should_skip_source_name(name string) bool {
-	return name in ['__pycache__', 'site-packages', 'node_modules'] || name.starts_with('.')
+	return name in skipped_source_names || name.starts_with('.')
 }
 
-fn matches_source_exclude(path string, patterns []string) bool {
+fn compile_exclude_patterns(patterns []string) []regex.RE {
+	mut compiled := []regex.RE{}
+	for pattern in patterns {
+		if pattern.len == 0 {
+			continue
+		}
+		re := regex.regex_opt(pattern) or { continue }
+		compiled << re
+	}
+	return compiled
+}
+
+fn matches_source_exclude(path string, patterns []regex.RE) bool {
 	if patterns.len == 0 {
 		return false
 	}
 	normalized := os.norm_path(path).replace('\\', '/')
 	with_leading_sep := if normalized.starts_with('/') { normalized } else { '/' + normalized }
-	for pattern in patterns {
-		if pattern.len == 0 {
-			continue
-		}
-		mut re := regex.regex_opt(pattern) or { continue }
+	for re in patterns {
 		if re.matches_string(normalized) || re.matches_string(with_leading_sep) {
 			return true
 		}
