@@ -992,7 +992,16 @@ pub fn (tc TypeChecker) named_generic_type(name string, args []MypyTypeNode) Ins
 
 // lookup_typeinfo looks up TypeInfo
 fn (tc TypeChecker) lookup_typeinfo(fullname string) TypeInfo {
-	_ = tc
+	if sym := lookup_fully_qualified(fullname, tc.modules) {
+		if node := sym.node {
+			match node {
+				TypeInfo {
+					return node
+				}
+				else {}
+			}
+		}
+	}
 	return TypeInfo{
 		fullname: fullname
 	}
@@ -1000,16 +1009,66 @@ fn (tc TypeChecker) lookup_typeinfo(fullname string) TypeInfo {
 
 // lookup looks up symbol
 pub fn (tc TypeChecker) lookup(name string) SymbolTableNode {
-	_ = tc
-	_ = name
+	if name.len == 0 {
+		return SymbolTableNode{}
+	}
+	if name.contains('.') {
+		return tc.lookup_qualified(name)
+	}
+	if active := tc.active_type {
+		if name in active.names.symbols {
+			return active.names.symbols[name]
+		}
+	}
+	if name in tc.globals.symbols {
+		return tc.globals.symbols[name]
+	}
+	if 'builtins' in tc.modules {
+		builtins := tc.modules['builtins'] or { return SymbolTableNode{} }
+		if name in builtins.names.symbols {
+			return builtins.names.symbols[name]
+		}
+	}
+	if name in tc.modules {
+		mod := tc.modules[name] or { return SymbolTableNode{} }
+		return SymbolTableNode{
+			kind: gdef
+			node: SymbolNodeRef(mod)
+		}
+	}
 	return SymbolTableNode{}
 }
 
 // lookup_qualified looks up qualified name
 pub fn (tc TypeChecker) lookup_qualified(name string) SymbolTableNode {
-	_ = tc
-	_ = name
-	return SymbolTableNode{}
+	if !name.contains('.') {
+		return tc.lookup(name)
+	}
+	if sym := lookup_fully_qualified(name, tc.modules) {
+		return sym
+	}
+	parts := name.split('.')
+	mut current := tc.lookup(parts[0])
+	for i in 1 .. parts.len {
+		part := parts[i]
+		current_node := current.node or { return SymbolTableNode{} }
+		match current_node {
+			TypeInfo {
+				current = lookup_symbol_table_member(current_node.names.symbols, part)
+			}
+			MypyFile {
+				current = lookup_symbol_table_member(current_node.names.symbols, part)
+			}
+			else {
+				return SymbolTableNode{}
+			}
+		}
+	}
+	return current
+}
+
+fn lookup_symbol_table_member(symbols map[string]SymbolTableNode, name string) SymbolTableNode {
+	return symbols[name] or { SymbolTableNode{} }
 }
 
 // type_type returns type 'type'
