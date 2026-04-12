@@ -31,8 +31,8 @@ fn test_create_source_list_discovers_modules_in_directory_tree() {
 	write_find_sources_test_file(os.join_path(root, 'pkg', '__init__.py'), '')
 	write_find_sources_test_file(os.join_path(root, 'pkg', 'mod.py'), 'y = 2\n')
 
-	options := Options{}
-	sources := create_source_list([root], options, none, false) or { panic(err.msg()) }
+	options := Options.new()
+	sources := create_source_list([root], *options, none, false) or { panic(err.msg()) }
 	by_module := collect_sources_by_module(sources)
 
 	assert sources.len == 3
@@ -51,8 +51,8 @@ fn test_find_sources_in_dir_prefers_stub_files_for_same_module_name() {
 	write_find_sources_test_file(os.join_path(root, 'pkg.py'), 'x = 1\n')
 	write_find_sources_test_file(os.join_path(root, 'pkg.pyi'), 'x: int\n')
 
-	options := Options{}
-	sources := create_source_list([root], options, none, false) or { panic(err.msg()) }
+	options := Options.new()
+	sources := create_source_list([root], *options, none, false) or { panic(err.msg()) }
 
 	assert sources.len == 1
 	assert sources[0].module == 'pkg'
@@ -69,11 +69,11 @@ fn test_create_source_list_respects_explicit_package_bases() {
 	module_path := os.join_path(base_dir, 'pkg', 'mod.py')
 	write_find_sources_test_file(module_path, 'z = 3\n')
 
-	mut options := Options{}
+	mut options := Options.new()
 	options.explicit_package_bases = true
 	options.mypy_path = [base_dir]
 
-	sources := create_source_list([module_path], options, none, false) or { panic(err.msg()) }
+	sources := create_source_list([module_path], *options, none, false) or { panic(err.msg()) }
 
 	assert sources.len == 1
 	assert sources[0].module == 'pkg.mod'
