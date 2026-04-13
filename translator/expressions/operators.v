@@ -68,7 +68,7 @@ fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
 	}
 	// Interface variables should use `== none`
 	pure := typ.trim_left('?&[]').all_before('[')
-	if pure in eg.state.known_interfaces || pure in eg.state.class_to_impl || eg.state.known_interfaces.keys().contains(pure) {
+	if pure in eg.state.known_interfaces || pure in eg.state.class_to_impl {
 		return false
 	}
 	return typ == 'Any' || typ.starts_with('SumType_') || typ.contains('|')

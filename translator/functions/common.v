@@ -171,7 +171,7 @@ pub fn extract_implicit_generics(
 	}
 
 	mut filtered := map[string]bool{}
-	for gen in implicit_generics.keys() {
+	for gen, _ in implicit_generics {
 		if gen !in constrained_typevars && gen !in paramspec_vars {
 			filtered[gen] = true
 		}
