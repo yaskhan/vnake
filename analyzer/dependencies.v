@@ -144,7 +144,7 @@ pub fn (mut d DependencyAnalyzer) analyze_project(root_path string, recursive bo
 
 	mut raw_graph := map[string][]string{}
 	mut count := 0
-	for rel_path in d.file_index.keys() {
+	for rel_path, _ in d.file_index {
 		if rel_path.ends_with('.py') || rel_path.ends_with('.pyi') {
 			count++
 			if count % 100 == 0 {

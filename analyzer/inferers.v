@@ -377,7 +377,7 @@ pub fn (mut a AliasInferer) analyze(tree ast.Module, mut utils TypeInferenceUtil
 	}
 
 	mut alias_usages := map[string][]string{}
-	for alias in aliases.keys() {
+	for alias, _ in aliases {
 		alias_usages[alias] = []string{}
 	}
 
@@ -606,7 +606,7 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 	mut explicit_abcs := map[string]bool{}
 	mut mixin_templates := map[string]bool{}
 
-	for cls_name in m.mixin_nodes.keys() {
+	for cls_name, _ in m.mixin_nodes {
 		bases := m.class_hierarchy[cls_name] or { []string{} }
 		mut has_abstract := false
 		mut has_concrete := false
@@ -644,7 +644,7 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 	mut changed := true
 	for changed {
 		changed = false
-		for cls_name in m.class_hierarchy.keys() {
+		for cls_name, _ in m.class_hierarchy {
 			if cls_name in explicit_abcs {
 				continue
 			}
@@ -683,18 +683,18 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 		}
 	}
 
-	for cls_name in m.class_hierarchy.keys() {
+	for cls_name, _ in m.class_hierarchy {
 		m.is_abc[cls_name] = cls_name in explicit_abcs
 	}
 
 	mut templates := map[string]bool{}
-	for name in explicit_abcs.keys() {
+	for name, _ in explicit_abcs {
 		templates[name] = true
 	}
-	for name in mixin_templates.keys() {
+	for name, _ in mixin_templates {
 		templates[name] = true
 	}
-	for cls_name in m.class_hierarchy.keys() {
+	for cls_name, _ in m.class_hierarchy {
 		if m.is_abc[cls_name] or { false } {
 			continue
 		}
