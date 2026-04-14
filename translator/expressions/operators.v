@@ -254,8 +254,13 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	mut left := eg.visit(node.left)
 	mut right := eg.visit(node.right)
 
+	// Bitwise and shift operators should always use numeric types
+	if op in ['&', '|', '^', '<<', '>>'] && op_type == 'void' {
+		op_type = 'int'
+	}
+
 	// Type-Directed Operator Overloading
-	if op_type in ['int', 'f64', 'i64'] {
+	if op_type in ['int', 'f64', 'i64', 'u8', 'byte', 'u16', 'u32', 'u64'] {
 		l_base := eg.guess_type_no_loc(node.left)
 		r_base := eg.guess_type_no_loc(node.right)
 		if l_base == 'Any' || l_base.starts_with('SumType_') {
@@ -282,6 +287,12 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	}
 
 	match op {
+		'|' {
+			if left_type.starts_with('map[') && right_type.starts_with('map[') {
+				eg.state.used_dict_merge = true
+				return "py_dict_merge(${left}, ${right})"
+			}
+		}
 		'@' { return "${left}.matmul(${right})" }
 		'**' {
 			eg.state.used_builtins['math.pow'] = true
@@ -468,8 +479,48 @@ pub fn (mut eg ExprGen) visit_unary_op(node ast.UnaryOp) string {
 	if node.op.value == 'not' {
 		return eg.wrap_bool(node.operand, true)
 	}
-	operand := eg.visit(node.operand)
-	return "${node.op.value}${operand}"
+
+	mut operand := eg.visit(node.operand)
+	op := node.op.value
+
+	// Type-Directed Operator Overloading for Unary Ops
+	token := node.get_token()
+	loc_key := "${token.line}:${token.column}"
+	mut op_type := 'void'
+	if loc_key in eg.analyzer.location_map {
+		mut raw_op_type := eg.analyzer.location_map[loc_key]
+		if raw_op_type.contains(' | ') {
+			mut parts := raw_op_type.split(' | ').map(it.trim_space())
+			parts.sort()
+			mut unique_parts := []string{}
+			for p in parts {
+				if p !in unique_parts {
+					unique_parts << p
+				}
+			}
+			if unique_parts.len == 1 {
+				op_type = unique_parts[0]
+			} else {
+				op_type = raw_op_type
+			}
+		} else {
+			op_type = raw_op_type
+		}
+	}
+
+	if op_type in ['int', 'f64', 'i64'] {
+		operand_type := eg.guess_type(node.operand)
+		operand_base := eg.guess_type_no_loc(node.operand)
+		if operand_base == 'Any' || operand_base.starts_with('SumType_') {
+			if !operand.contains(' as ') {
+				operand = "(${operand} as ${op_type})"
+			}
+		} else if operand_type != op_type && operand_type != 'unknown' {
+			operand = "${op_type}(${operand})"
+		}
+	}
+
+	return "${op}${operand}"
 }
 
 pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
@@ -590,6 +641,11 @@ fn (mut eg ExprGen) translate_single_comparison(left string, op string, right st
 			if right_type.starts_with('map[') { return "${prefix}(none in ${right})" }
 			return "${prefix}${right}.any(it == none)"
 		}
+
+		if right_type == 'string' || right_type == 'LiteralString' {
+			return "${prefix}${right}.contains(${left})"
+		}
+
 		if op == 'not in' { return '!(${left} in ${right})' }
 		return "${left} ${op} ${right}"
 	}
