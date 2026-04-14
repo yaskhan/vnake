@@ -858,6 +858,18 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		return 'datatypes.Set[${item_type}]{}'
 	}
 
+
+	if func_name_str == 'set' {
+		if args.len == 0 {
+			eg.state.used_builtins['datatypes'] = true
+			return 'datatypes.Set[string]{}'
+		}
+		if args.len == 1 {
+			eg.state.used_builtins['datatypes'] = true
+			eg.state.used_builtins['py_set_from_array'] = true
+			return 'py_set_from_array(${args[0]})'
+		}
+	}
 	if func_name_str == 'dict' {
 		if args.len == 0 && keyword_args.len == 0 {
 			expected := eg.state.current_assignment_type
