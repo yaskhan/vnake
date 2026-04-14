@@ -724,6 +724,11 @@ pub fn (mut sa SemanticAnalyzer) visit_star_expr(mut o StarExpr) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_yield_from_expr(mut o YieldFromExpr) !AnyNode {
+	if sa.is_async_context() {
+		sa.msg.fail("'yield from' inside async function", o.get_context(), false,
+			false, none)
+	}
+	o.expr.accept(mut sa)!
 	return ''
 }
 
@@ -801,6 +806,18 @@ pub fn (mut sa SemanticAnalyzer) visit_dictionary_comprehension(mut o Dictionary
 	o.key.accept(mut sa)!
 	o.value.accept(mut sa)!
 	for i in 0 .. o.indices.len {
+		if o.is_async[i] {
+			if !sa.is_async_context() {
+				sa.msg.fail("asynchronous comprehension outside of an asynchronous function", o.get_context(), false,
+					false, none)
+			}
+		}
+		if o.is_async[i] {
+			if !sa.is_async_context() {
+				sa.msg.fail("asynchronous comprehension outside of an asynchronous function", o.get_context(), false,
+					false, none)
+			}
+		}
 		if mut lval := o.indices[i].as_lvalue() {
 			sa.analyze_lvalue(mut lval, false, false)!
 		}
@@ -815,6 +832,18 @@ pub fn (mut sa SemanticAnalyzer) visit_dictionary_comprehension(mut o Dictionary
 pub fn (mut sa SemanticAnalyzer) visit_generator_expr(mut o GeneratorExpr) !AnyNode {
 	o.left_expr.accept(mut sa)!
 	for i in 0 .. o.indices.len {
+		if o.is_async[i] {
+			if !sa.is_async_context() {
+				sa.msg.fail("asynchronous comprehension outside of an asynchronous function", o.get_context(), false,
+					false, none)
+			}
+		}
+		if o.is_async[i] {
+			if !sa.is_async_context() {
+				sa.msg.fail("asynchronous comprehension outside of an asynchronous function", o.get_context(), false,
+					false, none)
+			}
+		}
 		if mut lval := o.indices[i].as_lvalue() {
 			sa.analyze_lvalue(mut lval, false, false)!
 		}
@@ -913,10 +942,32 @@ pub fn (mut sa SemanticAnalyzer) visit_temp_node(mut o TempNode) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_await_expr(mut o AwaitExpr) !AnyNode {
+	if !sa.is_async_context() {
+		sa.msg.fail("'await' outside function", o.get_context(), false,
+			false, none)
+	}
+	o.expr.accept(mut sa)!
 	return ''
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_with_stmt(mut o WithStmt) !AnyNode {
+	if o.is_async {
+		if !sa.is_async_context() {
+			sa.msg.fail("'async with' outside async function", o.get_context(), false,
+				false, none)
+		}
+	}
+	for mut e in o.expr {
+		e.accept(mut sa)!
+	}
+	for mut t in o.target {
+		if mut it_t := t {
+			if mut lval := it_t.as_lvalue() {
+				sa.analyze_lvalue(mut lval, false, false)!
+			}
+		}
+	}
+	sa.visit_block(mut o.body)!
 	return ''
 }
 
