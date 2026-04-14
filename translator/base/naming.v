@@ -92,6 +92,27 @@ pub fn to_snake_case(name string) string {
 	return res.join('')
 }
 
+// to_camel_case converts snake_case to camelCase (e.g., run_task -> runTask)
+pub fn to_camel_case(name string) string {
+	if name.len == 0 { return name }
+	mut res := ''
+	mut next_upper := false
+	for i := 0; i < name.len; i++ {
+		ch := name[i]
+		if ch == `_` {
+			next_upper = true
+		} else {
+			if next_upper {
+				res += ch.ascii_str().to_upper()
+				next_upper = false
+			} else {
+				res += ch.ascii_str()
+			}
+		}
+	}
+	return res
+}
+
 // get_factory_name returns snake_case factory name for the given struct name
 pub fn get_factory_name(struct_name string, hierarchy map[string][]string) string {
 	base_name := struct_name.split('[')[0]
@@ -209,6 +230,14 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 	}
 
 	return sanitized
+}
+ 
+// is_simple_mut_target checks if the Expression is a simple identifier or attribute access that can be marked as mut in V.
+pub fn is_simple_mut_target(expr string) bool {
+	if expr.contains('(') || expr.contains(' ') || expr.contains('{') {
+		return false
+	}
+	return true
 }
 
 // sanitize_name_helper - simple proxy for sanitize_name

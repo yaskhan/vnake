@@ -30,10 +30,11 @@ pub fn get_tuple_struct_name(types_str string) string {
 }
 
 // map_python_type_to_v maps Python type to V type
-pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
+pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	if py_type.len == 0 {
 		return 'void'
 	}
+	eprintln('DEBUG: map_python_type_to_v ${py_type}')
 	if py_type.starts_with('[]') || py_type.starts_with('map[') || py_type.starts_with('datatypes.') {
 		return py_type
 	}
@@ -88,7 +89,7 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		'float' { return 'f64' }
 		'str' { return 'string' }
 		'bool' { return 'bool' }
-		'None' { return 'none' }
+		'None' { return 'NoneType' }
 		'Any' { return 'Any' }
 		'object' { return 'Any' }
 		'builtins.int' { return 'int' }
@@ -114,14 +115,14 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		if 'Any' in unique_v_parts { return 'Any' }
 		
 		mut non_none := []string{}
-		for t in unique_v_parts { if t != 'none' { non_none << t } }
+		for t in unique_v_parts { if t != 'none' && t != 'NoneType' { non_none << t } }
 		if non_none.len == 1 && unique_v_parts.len > 1 {
 			return '?${non_none[0]}'
 		}
 		
 		union_str := unique_v_parts.join(' | ')
 		if !allow_union {
-			reg_res := sum_type_registrar(union_str)
+			reg_res := sum_type_registrar('', union_str)
 			if reg_res.len > 0 { return reg_res }
 		}
 		return union_str
@@ -138,15 +139,16 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Sum type registration as fallback
-	reg_res := sum_type_registrar(clean_type)
+	reg_res := sum_type_registrar('', clean_type)
 	if reg_res.len > 0 { return reg_res }
 
-	// Basic type mapping fallback
-	return map_basic_type(clean_type)
+	res := map_basic_type(clean_type)
+	eprintln('DEBUG: map_python_type_to_v RESULT ${py_type} -> ${res}')
+	return res
 }
 
 // map_complex_type handles complex types like List[int], Dict[str, Any]
-fn map_complex_type(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
+fn map_complex_type(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	 // eprintln('DEBUG MAP_COMPLEX: ${py_type}')
 	bracket_idx := py_type.index('[') or { return map_basic_type(py_type) }
 	base_type := py_type[..bracket_idx].trim_space()
@@ -160,7 +162,9 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			} else {
 				'Any'
 			}
-			return '[]${inner_type}'
+			res := '[]${inner_type}'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
 		}
 		'Dict', 'dict', 'typing.Dict', 'typing.Mapping', 'Mapping' {
 			mut key_type := 'string'
@@ -180,7 +184,9 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			if key_type == 'Any' {
 				key_type = 'string'
 			}
-			return 'map[${key_type}]${val_type}'
+			res := 'map[${key_type}]${val_type}'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
 		}
 		'Set', 'set', 'typing.Set' {
 			inner_type := if args_str.len > 0 {
@@ -189,7 +195,9 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			} else {
 				'Any'
 			}
-			return 'datatypes.Set[${inner_type}]'
+			res := 'datatypes.Set[${inner_type}]'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
 		}
 		'Tuple', 'tuple', 'typing.Tuple' {
 			if args_str.len == 0 {
@@ -207,7 +215,9 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 					return tuple_res
 				}
 			}
-			return '[]Any'
+			res := '[]Any'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
 		}
 		'Optional', 'typing.Optional' {
 			inner_type := if args_str.len > 0 {
@@ -217,9 +227,12 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 				'Any'
 			}
 			if inner_type.starts_with('?') {
+				eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${inner_type}')
 				return inner_type
 			}
-			return '?${inner_type}'
+			res := '?${inner_type}'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
 		}
 		'Union', 'typing.Union' {
 			if args_str.len == 0 {
@@ -252,15 +265,9 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			if non_none.len == 1 && unique.len > 1 {
 				return '?${non_none[0]}'
 			}
-
-			union_str := unique.join(' | ')
-			if !allow_union {
-				reg_res := sum_type_registrar(union_str)
-				if reg_res.len > 0 {
-					return reg_res
-				}
-			}
-			return union_str
+			res := unique.join(' | ')
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
 		}
 		'Literal', 'typing.Literal' {
 			parts := split_generic_args(args_str)
@@ -305,8 +312,8 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 		'TypeForm', 'typing.TypeForm', 'typing_extensions.TypeForm' {
 			return 'string'
 		}
-		'Final', 'ClassVar', 'Annotated', 'Required', 'NotRequired', 'ReadOnly',
-		'typing.Final', 'typing.ClassVar', 'typing.Annotated', 'typing.Required', 'typing.NotRequired',
+		'Final', 'ClassVar', 'InitVar', 'Annotated', 'Required', 'NotRequired', 'ReadOnly',
+		'typing.Final', 'typing.ClassVar', 'typing.InitVar', 'typing.Annotated', 'typing.Required', 'typing.NotRequired',
 		'typing.ReadOnly' {
 			if args_str.len > 0 {
 				parts := split_generic_args(args_str)

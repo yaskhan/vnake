@@ -3,7 +3,7 @@ module mypy
 
 // Simple type inference for decorated functions during semantic analysis.
 
-pub fn infer_decorator_signature_if_simple(mut dec Decorator, analyzer SemanticAnalyzerInterface) {
+pub fn infer_decorator_signature_if_simple(mut dec Decorator, mut analyzer SemanticAnalyzerInterface) {
 	if dec.var_.is_property {
 		if dec.func.type_ == none {
 			fallback := analyzer.named_type('builtins.function', []MypyTypeNode{})
@@ -40,7 +40,7 @@ pub fn infer_decorator_signature_if_simple(mut dec Decorator, analyzer SemanticA
 		}
 	}
 	if mut sig := find_fixed_callable_return(dec.decorators[0]) {
-		if orig := function_type_of_func(dec.func, analyzer) {
+		if orig := function_type_of_func(dec.func, mut analyzer) {
 			sig.name = orig.name
 		}
 		dec.var_.type_ = sig
@@ -151,7 +151,7 @@ pub fn find_fixed_callable_return(expr Expression) ?CallableType {
 	return none
 }
 
-fn function_type_of_func(f FuncDef, analyzer SemanticAnalyzerInterface) ?CallableType {
+fn function_type_of_func(f FuncDef, mut analyzer SemanticAnalyzerInterface) ?CallableType {
 	if fn_typ := f.type_ {
 		if fn_typ is CallableType {
 			return fn_typ

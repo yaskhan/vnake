@@ -46,25 +46,50 @@ pub fn (a Analyzer) get_type(name string) ?string {
 	if name in a.type_map {
 		return a.type_map[name]
 	}
+	
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := a.get_class_bases(cls)
+		for b in bases {
+			if res := a.get_type('${b}.${attr}') {
+				return res
+			}
+		}
+	}
+
+	if !name.contains('.') && a.scope_names.len > 0 {
+		for i := a.scope_names.len - 1; i >= 0; i-- {
+			qual := a.scope_names[..i + 1].join('.') + '.' + name
+			if qual in a.type_map {
+				return a.type_map[qual]
+			}
+		}
+	}
 	return none
 }
 
 // get_mypy_type returns type from mypy store
 pub fn (a Analyzer) get_mypy_type(name string, loc string) ?string {
+	eprintln('DEBUG: get_mypy_type name=${name} loc=${loc}')
 	if name.len > 0 && loc.len > 0 {
 		if res := a.mypy_store.collected_types[name] {
 			if typ := res[loc] {
+				eprintln('DEBUG: get_mypy_type name=${name} loc=${loc} RESULT=${typ}')
 				return typ
 			}
+			eprintln('DEBUG: get_mypy_type name=${name} loc=${loc} NOT FOUND in keys=${res.keys()}')
 		}
 	}
 	if loc.len > 0 {
 		if res := a.mypy_store.collected_types['@'] {
 			if typ := res[loc] {
+				eprintln('DEBUG: get_mypy_type name=@ loc=${loc} RESULT=${typ}')
 				return typ
 			}
 		}
 	}
+	eprintln('DEBUG: get_mypy_type name=${name} loc=${loc} RESULT=none')
 	return none
 }
 
@@ -87,11 +112,22 @@ pub fn (mut a Analyzer) set_raw_type(name string, typ string) {
 }
 
 // get_mutability returns mutability information
-pub fn (a Analyzer) get_mutability(name string) ?MutabilityInfo {
-	if name in a.mutability_map {
+pub fn (a Analyzer) get_mutability(name string) MutabilityInfo {
+	mut lookup := name
+	if lookup.contains('_Impl.') {
+		lookup = lookup.replace('_Impl.', '.')
+	}
+	if lookup in a.mutability_map {
+		eprintln('DEBUG: get_mutability name=${name} lookup=${lookup} -> FOUND')
+		return a.mutability_map[lookup]
+	}
+	if name !in [lookup] && name in a.mutability_map {
+		eprintln('DEBUG: get_mutability name=${name} ORIGINAL -> FOUND')
 		return a.mutability_map[name]
 	}
-	return none
+	
+	// Delegate to mixin for hierarchical lookup
+	return a.TypeInferenceVisitorMixin.TypeInferenceUtilsMixin.TypeInferenceBase.get_mutability(name)
 }
 
 // set_mutability sets mutability information
@@ -101,6 +137,7 @@ pub fn (mut a Analyzer) set_mutability(name string, info MutabilityInfo) {
 
 // add_class_to_hierarchy adds class to hierarchy
 pub fn (mut a Analyzer) add_class_to_hierarchy(class_name string, bases []string) {
+	eprintln('DEBUG: add_class_to_hierarchy name=${class_name}')
 	a.class_hierarchy[class_name] = bases
 	a.defined_classes_cache[class_name] = map[string]bool{}
 }
@@ -110,11 +147,37 @@ pub fn (a Analyzer) get_class_bases(class_name string) []string {
 	if class_name in a.class_hierarchy {
 		return a.class_hierarchy[class_name]
 	}
+	// Also check with _Impl suffix if needed
+	if class_name.ends_with('_Impl') {
+		base_name := class_name.all_before_last('_Impl')
+		if base_name in a.class_hierarchy {
+			return a.class_hierarchy[base_name]
+		}
+	}
 	return []
+}
+
+pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
+	if sig := a.call_signatures[name] {
+		return sig
+	}
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := a.get_class_bases(cls)
+		for b in bases {
+			if res := a.get_call_signature('${b}.${attr}') {
+				return res
+			}
+		}
+	}
+	return none
 }
 // load_mypy_data loads data from MypyPluginStore
 pub fn (mut a Analyzer) load_mypy_data(store MypyPluginStore) {
+	eprintln('DEBUG: load_mypy_data entries=${store.collected_types.len}')
 	for k, v in store.collected_types {
+		if k == 'taskWorkArea' { eprintln('DEBUG: load_mypy_data FOUND taskWorkArea') }
 		if k !in a.mypy_store.collected_types {
 			a.mypy_store.collected_types[k] = map[string]string{}
 		}

@@ -11,6 +11,7 @@ pub const allow_incompatible_override = ['__slots__', '__deletable__', '__match_
 pub const priority_fallbacks = 1
 
 pub interface SemanticAnalyzerCoreInterface {
+	mut:
 	lookup_qualified(name string, ctx Context, suppress_errors bool) ?&SymbolTableNode
 	lookup_fully_qualified(fullname string) &SymbolTableNode
 	lookup_fully_qualified_or_none(fullname string) ?&SymbolTableNode
@@ -28,6 +29,7 @@ pub interface SemanticAnalyzerCoreInterface {
 }
 
 pub interface SemanticAnalyzerInterface {
+	mut:
 	// Inherit (manually) CoreInterface methods
 	lookup_qualified(name string, ctx Context, suppress_errors bool) ?&SymbolTableNode
 	lookup_fully_qualified(fullname string) &SymbolTableNode
@@ -68,7 +70,7 @@ pub interface SemanticAnalyzerInterface {
 }
 
 pub fn set_callable_name(sig MypyTypeNode, fdef &FuncDef) MypyTypeNode {
-	mut p_sig := sig
+	p_sig := sig
 	if p_sig is CallableType {
 		mut class_name := ''
 		if info := fdef.info {
@@ -85,31 +87,32 @@ pub fn set_callable_name(sig MypyTypeNode, fdef &FuncDef) MypyTypeNode {
 }
 
 pub fn calculate_tuple_fallback(mut typ TupleType) {
-	mut fallback := typ.partial_fallback or { return }
-	if info := fallback.typ {
-		assert info.fullname == 'builtins.tuple'
-	}
-	mut items := []MypyTypeNode{}
-	flat_items := flatten_nested_tuples(typ.items)
-	for item in flat_items {
-		if item is UnpackType {
-			mut unpacked_type_node := get_proper_type(item.@type)
-			unpacked_type := get_proper_type(MypyTypeNode(unpacked_type_node))
-			if unpacked_type is TypeVarTupleType {
-				//
-			}
-			if unpacked_type is Instance {
-				if inst_info := unpacked_type.typ {
-					if inst_info.fullname == 'builtins.tuple' {
-						items << unpacked_type.args[0]
+	if mut fallback := typ.partial_fallback {
+		if info := fallback.typ {
+			assert info.fullname == 'builtins.tuple'
+		}
+		mut items := []MypyTypeNode{}
+		flat_items := flatten_nested_tuples(typ.items)
+		for item in flat_items {
+			if item is UnpackType {
+				unpacked_type_node := get_proper_type(item.@type)
+				unpacked_type := get_proper_type(MypyTypeNode(unpacked_type_node))
+				if unpacked_type is TypeVarTupleType {
+					//
+				}
+				if unpacked_type is Instance {
+					if inst_info := unpacked_type.typ {
+						if inst_info.fullname == 'builtins.tuple' {
+							items << unpacked_type.args[0]
+						}
 					}
 				}
+			} else {
+				items << item
 			}
-		} else {
-			items << item
 		}
+		fallback.args = [make_simplified_union(items, false)]
 	}
-	fallback.args = [make_simplified_union(items, false)]
 }
 
 fn flatten_nested_tuples(items []MypyTypeNode) []MypyTypeNode {
@@ -198,7 +201,7 @@ fn find_dataclass_transform_spec_from_info(info &TypeInfo) ?&DataclassTransformS
 	return none
 }
 
-pub fn require_bool_literal_argument(api SemanticAnalyzerInterface, expr Expression, name string, default ?bool) ?bool {
+pub fn require_bool_literal_argument(mut api SemanticAnalyzerInterface, expr Expression, name string, default ?bool) ?bool {
 	val := api.parse_bool(expr)
 	if val == none {
 		api.fail('"${name}" argument must be a True or False literal', expr.get_context(), false, false,

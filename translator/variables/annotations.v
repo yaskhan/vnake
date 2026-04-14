@@ -171,7 +171,7 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 			}
 			if v_type_for_global == 'unknown' { v_type_for_global = 'Any' }
 			
-			m.emit('__global ${target_expr} ${v_type_for_global}')
+			m.emitter.add_global('__global ${target_expr} ${v_type_for_global}')
 			m.emit('${target_expr} = ${rhs}')
 			m.local_vars_in_scope[target_expr] = true
 			return

@@ -1,6 +1,7 @@
 module expressions
 
 import ast
+import strings
 import base
 
 // Local wrappers for base module functions
@@ -14,7 +15,7 @@ fn is_numeric_type(v_type string) bool {
 
 fn is_none_expr(node ast.Expression) bool {
 	return (node is ast.Constant && node.value == 'None')
-		|| (node is ast.Name && node.id in ['None', 'none'])
+		|| (node is ast.Name && node.id in ['None', 'none', 'NoneType'])
 		|| node is ast.NoneExpr
 }
 
@@ -32,15 +33,113 @@ fn (eg &ExprGen) is_explicit_any(node ast.Expression, typ string) bool {
 }
 
 fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
-	if typ.starts_with('?') { return false }
-	if typ.starts_with('SumType_') { return true }
-	if typ.starts_with('map[') && typ.ends_with(']Any') { return true }
-	// For Any type (sum type containing NoneType), always use `is NoneType` check
-	// because Any is a sum type and `== none` doesn't work with sum types
-	if typ == 'Any' {
-		return true
+	if typ.starts_with('?') {
+		return false
 	}
-	return false
+	// Interface variables should use `== none`
+	pure := typ.trim_left('?&[]').all_before('[')
+	if pure in eg.state.known_interfaces || pure in eg.state.class_to_impl {
+		return false
+	}
+	return true
+}
+
+
+
+
+fn (mut eg ExprGen) map_python_percent_to_v_interpolation(fmt_str string, right ast.Expression) ?string {
+	mut args := []ast.Expression{}
+	if right is ast.Tuple {
+		args = right.elements.clone()
+	} else {
+		args << right
+	}
+
+	mut res := strings.new_builder(fmt_str.len * 2)
+	res.write_byte(`"`)
+	mut i := 0
+	mut arg_idx := 0
+	for i < fmt_str.len {
+		if fmt_str[i] == `%` {
+			if i + 1 < fmt_str.len && fmt_str[i+1] == `%` {
+				res.write_u8(`%`)
+				i += 2
+				continue
+			}
+
+			// Parse format specifier
+			mut j := i + 1
+			// Skip flags (only 0 is commonly supported in V interpolation)
+			mut flag_zero := false
+			for j < fmt_str.len && (fmt_str[j] == `0` || fmt_str[j] == `-` || fmt_str[j] == `+` || fmt_str[j] == ` `) {
+				if fmt_str[j] == `0` { flag_zero = true }
+				j++
+			}
+
+			// Width
+			mut width_start := j
+			for j < fmt_str.len && fmt_str[j].is_digit() { j++ }
+			width_str := fmt_str[width_start..j]
+
+			// Precision
+			mut precision_str := ""
+			if j < fmt_str.len && fmt_str[j] == `.` {
+				j++
+				mut prec_start := j
+				for j < fmt_str.len && fmt_str[j].is_digit() { j++ }
+				precision_str = "." + fmt_str[prec_start..j]
+			}
+
+			if j < fmt_str.len {
+				spec := fmt_str[j]
+				if arg_idx < args.len {
+					arg_expr := args[arg_idx]
+					arg_idx++
+					arg_v := eg.visit(arg_expr)
+
+					res.write_byte(`$`)
+					res.write_byte(`{`)
+					if spec == `r` {
+						eg.state.used_builtins['py_repr'] = true
+						res.write_string("py_repr(${arg_v})")
+					} else {
+						res.write_string(arg_v)
+						if width_str.len > 0 || precision_str.len > 0 || spec in [`f`, `x`, `X`] {
+							res.write_byte(`:`)
+							if flag_zero && width_str.len > 0 {
+								res.write_byte(`0`)
+							}
+							res.write_string(width_str)
+							res.write_string(precision_str)
+							if spec in [`f`, `x`, `X`] {
+								res.write_byte(spec)
+							}
+						}
+					}
+					res.write_byte(`}`)
+					i = j + 1
+					continue
+				} else {
+					return none
+				}
+			}
+		}
+		if fmt_str[i] == `$` {
+			res.write_string("\\$")
+		} else if fmt_str[i] == `"` {
+			res.write_string("\\\"")
+		} else {
+			res.write_u8(fmt_str[i])
+		}
+		i++
+	}
+	res.write_byte(`"`)
+
+	if arg_idx != args.len {
+		return none
+	}
+
+	return res.str()
 }
 
 fn (mut eg ExprGen) format_percent_call(left string, right ast.Expression) string {
@@ -75,7 +174,21 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	token := node.get_token()
 	loc_key := '${token.line}:${token.column}'
 	if loc_key in eg.analyzer.location_map {
-		op_type = eg.analyzer.location_map[loc_key]
+		mut raw_op_type := eg.analyzer.location_map[loc_key]
+		// Sanitize union types like 'int | int' to 'int'
+		if raw_op_type.contains(' | ') {
+			mut parts := raw_op_type.split(' | ').map(it.trim_space())
+			parts.sort()
+			mut unique_parts := []string{}
+			for p in parts { if p !in unique_parts { unique_parts << p } }
+			if unique_parts.len == 1 {
+				op_type = unique_parts[0]
+			} else {
+				op_type = raw_op_type
+			}
+		} else {
+			op_type = raw_op_type
+		}
 	}
 
 	// Support for string and array repetition
@@ -111,8 +224,13 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	mut left := eg.visit(node.left)
 	mut right := eg.visit(node.right)
 
+	// Bitwise and shift operators should always use numeric types
+	if op in ['&', '|', '^', '<<', '>>'] && op_type == 'void' {
+		op_type = 'int'
+	}
+
 	// Type-Directed Operator Overloading
-	if op_type in ['int', 'f64', 'i64'] {
+	if op_type in ['int', 'f64', 'i64', 'u8', 'byte', 'u16', 'u32', 'u64'] {
 		l_base := eg.guess_type_no_loc(node.left)
 		r_base := eg.guess_type_no_loc(node.right)
 		if l_base == 'Any' || l_base.starts_with('SumType_') {
@@ -139,6 +257,12 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	}
 
 	match op {
+		'|' {
+			if left_type.starts_with('map[') && right_type.starts_with('map[') {
+				eg.state.used_dict_merge = true
+				return "py_dict_merge(${left}, ${right})"
+			}
+		}
 		'@' { return "${left}.matmul(${right})" }
 		'**' {
 			eg.state.used_builtins['math.pow'] = true
@@ -159,6 +283,7 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 		}
 		'//' {
 			eg.state.used_builtins['math.floor'] = true
+			eg.state.used_builtins['math'] = true
 			if left_type in ['int', 'i64'] || right_type in ['int', 'i64'] {
 				return "i64(math.floor(f64(${left}) / f64(${right})))"
 			}
@@ -176,8 +301,9 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 				if node.left is ast.Constant {
 					fmt_str := node.left.value.trim('\'"')
 					if !fmt_str.contains('%%') && !fmt_str.contains('%(') && fmt_str.count('%') > 0 {
-						// Simple positional format
-						// TODO: full mapping
+						if mapped := eg.map_python_percent_to_v_interpolation(fmt_str, node.right) {
+							return mapped
+						}
 					}
 				}
 				return eg.format_percent_call(left, node.right)
@@ -240,7 +366,6 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) string {
 	v_type := eg.guess_type(node)
 	expr := eg.visit(node)
-	eprintln('DEBUG: build_truthiness_for_or expr=${expr} type=${v_type} is_or=${is_or}')
 	
 	// For Any type (sum type), use is NoneType check for proper none detection
 	if v_type == 'Any' {
@@ -262,9 +387,14 @@ fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) str
 		return "${expr} != none"
 	}
 	
-	// For simple identifiers in `or` context, conservatively add none check
+	// For simple identifiers in `or` context, use proper check based on type
 	if node is ast.Name {
-		return "(${expr} !is NoneType && ${expr} != 0)"
+		if v_type == 'Any' || v_type.starts_with('SumType_') {
+			return "(${expr} !is NoneType && ${expr} != 0)"
+		}
+		if v_type.starts_with('?') {
+			return "${expr} != none"
+		}
 	}
 	
 	// For strings and collections
@@ -320,8 +450,48 @@ pub fn (mut eg ExprGen) visit_unary_op(node ast.UnaryOp) string {
 	if node.op.value == 'not' {
 		return eg.wrap_bool(node.operand, true)
 	}
-	operand := eg.visit(node.operand)
-	return "${node.op.value}${operand}"
+
+	mut operand := eg.visit(node.operand)
+	op := node.op.value
+
+	// Type-Directed Operator Overloading for Unary Ops
+	token := node.get_token()
+	loc_key := "${token.line}:${token.column}"
+	mut op_type := 'void'
+	if loc_key in eg.analyzer.location_map {
+		mut raw_op_type := eg.analyzer.location_map[loc_key]
+		if raw_op_type.contains(' | ') {
+			mut parts := raw_op_type.split(' | ').map(it.trim_space())
+			parts.sort()
+			mut unique_parts := []string{}
+			for p in parts {
+				if p !in unique_parts {
+					unique_parts << p
+				}
+			}
+			if unique_parts.len == 1 {
+				op_type = unique_parts[0]
+			} else {
+				op_type = raw_op_type
+			}
+		} else {
+			op_type = raw_op_type
+		}
+	}
+
+	if op_type in ['int', 'f64', 'i64'] {
+		operand_type := eg.guess_type(node.operand)
+		operand_base := eg.guess_type_no_loc(node.operand)
+		if operand_base == 'Any' || operand_base.starts_with('SumType_') {
+			if !operand.contains(' as ') {
+				operand = "(${operand} as ${op_type})"
+			}
+		} else if operand_type != op_type && operand_type != 'unknown' {
+			operand = "${op_type}(${operand})"
+		}
+	}
+
+	return "${op}${operand}"
 }
 
 pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
@@ -343,7 +513,7 @@ pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
 		right_type := eg.guess_type(node.values[1])
 		
 		if left_type == 'bool' && right_type == 'bool' {
-			return if is_and { "(${left}) && (${right})" } else { "(${left}) || (${right})" }
+			return if is_and { "${left} && ${right}" } else { "${left} || ${right}" }
 		}
 		
 		// Use build_truthiness_for_or for proper none handling
@@ -442,6 +612,11 @@ fn (mut eg ExprGen) translate_single_comparison(left string, op string, right st
 			if right_type.starts_with('map[') { return "${prefix}(none in ${right})" }
 			return "${prefix}${right}.any(it == none)"
 		}
+
+		if right_type == 'string' || right_type == 'LiteralString' {
+			return "${prefix}${right}.contains(${left})"
+		}
+
 		if op == 'not in' { return '!(${left} in ${right})' }
 		return "${left} ${op} ${right}"
 	}

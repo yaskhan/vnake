@@ -29,6 +29,7 @@ pub mut:
 	mapper              voidptr
 	include_all_symbols bool
 	strict_exports      bool
+	omit_builtins       bool
 
 	output                       []string
 	tail                         []string
@@ -62,6 +63,7 @@ pub mut:
 	generated_tuple_structs      map[string]string
 	literal_enum_values          map[string]map[voidptr]string
 	global_vars                  map[string]bool
+	global_var_types             map[string]string
 	renamed_functions            map[string]string
 	name_remap                   map[string]string
 	walrus_assignments           []string
@@ -116,6 +118,8 @@ pub mut:
 	dataclass_init_vars          map[string]map[string]string
 	dataclass_defaults           map[string]map[string]string
 	in_loop_count                int
+	in_generator                 bool
+	has_yield                    bool
 }
 
 pub const cached_indents = [
@@ -182,6 +186,7 @@ pub fn new_translator_state() &TranslatorState {
 		generated_tuple_structs:      map[string]string{}
 		literal_enum_values:          map[string]map[voidptr]string{}
 		global_vars:                  map[string]bool{}
+		global_var_types:             map[string]string{}
 		renamed_functions:            {
 			'main': 'py_main'
 		}
@@ -232,6 +237,8 @@ pub fn new_translator_state() &TranslatorState {
 		is_full_module:               false
 		dataclass_init_vars:          map[string]map[string]string{}
 		dataclass_defaults:           map[string]map[string]string{}
+		in_generator:                 false
+		has_yield:                    false
 	}
 }
 
@@ -333,6 +340,15 @@ pub fn (s &TranslatorState) is_exported(name string) bool {
 	return false
 }
 
+pub fn (s &TranslatorState) is_declared_local(name string) bool {
+	for scope in s.scope_stack {
+		if name in scope {
+			return true
+		}
+	}
+	return false
+}
+
 // collect_assigned_vars collects names of all assigned variables
 pub fn (s &TranslatorState) collect_assigned_nodes(nodes []voidptr) map[string]bool {
 	mut assigned := map[string]bool{}
@@ -346,6 +362,36 @@ pub fn (s &TranslatorState) collect_assigned_nodes(nodes []voidptr) map[string]b
 		}
 	}
 	return assigned
+}
+
+// is_v_class_type checks if v_type is a class type that should be passed by reference.
+// It correctly handles generic types by checking the current state.
+pub fn (s &TranslatorState) is_v_class_type(v_type string) bool {
+	clean := v_type.trim_left('?&')
+	if clean.len == 0 {
+		return false
+	}
+	if !clean[0].is_capital() {
+		return false
+	}
+	if clean in ['Any', 'LiteralString', 'Self', 'NoneType', 'TaskState'] {
+		return false
+	}
+	if clean.starts_with('SumType_') || clean.starts_with('LiteralEnum_') || clean.starts_with('TupleStruct_') {
+		return false
+	}
+	if clean.ends_with('Protocol') {
+		return false
+	}
+	if clean in s.type_vars {
+		return false
+	}
+	for g in s.current_class_generics {
+		if clean == g {
+			return false
+		}
+	}
+	return true
 }
 
 

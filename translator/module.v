@@ -13,6 +13,10 @@ pub mut:
 	init_statements  []string
 	main_statements  []string
 	constants        []string
+	globals          []string
+	defined_classes  map[string]bool
+	omit_builtins    bool
+	used_builtins    map[string]bool
 }
 
 pub fn new_module_emitter() ModuleEmitter {
@@ -24,23 +28,67 @@ pub fn new_module_emitter() ModuleEmitter {
 		init_statements:  []string{}
 		main_statements:  []string{}
 		constants:        []string{}
+		globals:          []string{}
+		defined_classes:  map[string]bool{}
 	}
+}
+
+fn extract_symbol_name(code string, keywords []string) string {
+	mut s := code.trim_space()
+	// Skip attributes like @[heap]
+	for s.starts_with('@') {
+		if s.contains(']') {
+			s = s.all_after(']').trim_space()
+		} else {
+			break
+		}
+	}
+	
+	for kw in keywords {
+		if s.starts_with(kw + ' ') {
+			s = s[kw.len..].trim_space()
+		}
+	}
+
+	if s.contains(' ') { s = s.all_before(' ') }
+	if s.contains('{') { s = s.all_before('{') }
+	if s.contains('(') { s = s.all_before('(') }
+	if s.contains('[') { s = s.all_before('[') }
+	return s.trim_space()
 }
 
 pub fn (mut e ModuleEmitter) add_helper_struct(code string) {
-	if code !in e.helper_structs {
+	name := extract_symbol_name(code, ['pub', 'struct', 'interface', 'type'])
+	if name == '' {
 		e.helper_structs << code
+		return
 	}
+
+	for existing in e.helper_structs {
+		ex_name := extract_symbol_name(existing, ['pub', 'struct', 'interface', 'type'])
+		if name == ex_name { return }
+	}
+	e.helper_structs << code
 }
 
 pub fn (mut e ModuleEmitter) add_helper_function(code string) {
-	if code !in e.helper_functions {
+	name := extract_symbol_name(code, ['pub', 'fn'])
+	if name == '' {
 		e.helper_functions << code
+		return
 	}
+
+	for existing in e.helper_functions {
+		ex_name := extract_symbol_name(existing, ['pub', 'fn'])
+		if name == ex_name { return }
+	}
+	e.helper_functions << code
 }
 
 pub fn (mut e ModuleEmitter) add_import(name string) {
-	e.imports[name] = true
+	if name !in e.imports {
+		e.imports[name] = true
+	}
 }
 
 pub fn (mut e ModuleEmitter) add_init_statement(code string) {
@@ -52,7 +100,55 @@ pub fn (mut e ModuleEmitter) add_main_statement(code string) {
 }
 
 pub fn (mut e ModuleEmitter) add_constant(code string) {
+	mut name := code.trim_space()
+	if name.starts_with('pub const ') {
+		name = name['pub const '.len..].trim_space()
+	} else if name.starts_with('const ') {
+		name = name['const '.len..].trim_space()
+	}
+	if name.contains('=') {
+		name = name.all_before('=').trim_space()
+	}
+
+	for existing in e.constants {
+		mut ex_name := existing.trim_space()
+		if ex_name.starts_with('pub const ') {
+			ex_name = ex_name['pub const '.len..].trim_space()
+		} else if ex_name.starts_with('const ') {
+			ex_name = ex_name['const '.len..].trim_space()
+		}
+		if ex_name.contains('=') {
+			ex_name = ex_name.all_before('=').trim_space()
+		}
+		if name == ex_name {
+			return
+		}
+	}
 	e.constants << code
+}
+
+pub fn (mut e ModuleEmitter) add_global(code string) {
+	mut name := code.trim_space()
+	if name.starts_with('__global ') {
+		name = name['__global '.len..].trim_space()
+	}
+	if name.contains(' ') {
+		name = name.all_before(' ')
+	}
+
+	for existing in e.globals {
+		mut ex_name := existing.trim_space()
+		if ex_name.starts_with('__global ') {
+			ex_name = ex_name['__global '.len..].trim_space()
+		}
+		if ex_name.contains(' ') {
+			ex_name = ex_name.all_before(' ')
+		}
+		if name == ex_name {
+			return
+		}
+	}
+	e.globals << code
 }
 pub fn (mut e ModuleEmitter) add_helper_import(name string) {
 	e.imports[name] = true
@@ -73,8 +169,32 @@ pub fn (e &ModuleEmitter) emit() string {
 		}
 	}
 
+	if !e.omit_builtins {
+		parts << 'pub struct NoneType {}'
+		parts << 'pub struct PyVersionInfo { pub: major int minor int micro int }'
+		parts << 'pub const sys_version_info = PyVersionInfo{major: 3, minor: 11, micro: 0}'
+		parts << "pub fn (n NoneType) str() string { return 'None' }"
+		
+		mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any', 'map[string]Any']
+		if e.used_builtins['Template'] {
+			if 'Interpolation' !in any_variants { any_variants << 'Interpolation' }
+			if 'Template' !in any_variants { any_variants << 'Template' }
+		}
+		for cls_name, _ in e.defined_classes {
+			v_cls := cls_name.trim_left('&')
+			if v_cls !in any_variants {
+				any_variants << v_cls
+			}
+		}
+		parts << 'pub type Any = ${any_variants.join(" | ")}'
+	}
+
 	if e.constants.len > 0 {
 		parts << e.constants.join('\n')
+	}
+
+	if e.globals.len > 0 {
+		parts << '// To compile with globals, use: v -enable-globals .\n' + e.globals.join('\n')
 	}
 
 	if e.helper_structs.len > 0 {
@@ -109,12 +229,14 @@ fn clean_string_constant(value string) string {
 	return value
 }
 
+@[heap]
 pub struct ModuleTranslator {
 pub mut:
 	state         &base.TranslatorState
 	emitter       ModuleEmitter
 	coroutine_handler analyzer.CoroutineHandler
-	visit_stmt_fn fn (ast.Statement) = noop_visit_stmt
+	analyzer          &analyzer.Analyzer
+	visit_stmt_fn     fn (ast.Statement) = noop_visit_stmt
 	source_mapping bool
 	strict_exports bool
 	has_module_all bool
@@ -122,26 +244,31 @@ pub mut:
 
 pub fn new_module_translator(
 	mut state &base.TranslatorState,
+	type_analyzer &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
-) ModuleTranslator {
-	mut m := ModuleTranslator{
+) &ModuleTranslator {
+	mut m := &ModuleTranslator{
 		state:             state
 		emitter:           new_module_emitter()
 		coroutine_handler: analyzer.new_coroutine_handler()
+		analyzer:          type_analyzer
 		visit_stmt_fn:     visit_stmt_fn
 		has_module_all:    false
 	}
-	m.state.coroutine_handler = &m.coroutine_handler
+	if m.state.coroutine_handler == unsafe { nil } {
+		m.state.coroutine_handler = &m.coroutine_handler
+	}
 	return m
 }
 
 pub fn new_module_translator_with_flags(
 	mut state &base.TranslatorState,
+	type_analyzer &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 	source_mapping bool,
 	strict_exports bool,
-) ModuleTranslator {
-	mut mt := new_module_translator(mut state, visit_stmt_fn)
+) &ModuleTranslator {
+	mut mt := new_module_translator(mut state, type_analyzer, visit_stmt_fn)
 	mt.source_mapping = source_mapping
 	mt.strict_exports = strict_exports
 	return mt
@@ -161,8 +288,8 @@ fn (m &ModuleTranslator) is_name_main(node ast.If) bool {
 		if compare.ops.len == 1 && compare.comparators.len == 1 {
 			if compare.left is ast.Name && compare.left.id == '__name__' {
 				if compare.comparators[0] is ast.Constant {
-					comparator := compare.comparators[0] as ast.Constant
-					return comparator.value == '__main__'
+					val := clean_string_constant((compare.comparators[0] as ast.Constant).value)
+					return val == '__main__'
 				}
 			}
 		}
@@ -313,7 +440,6 @@ fn (m &ModuleTranslator) collect_names_from_expr(expr ast.Expression, mut names 
 fn (m &ModuleTranslator) collect_global_refs(node ast.ASTNode, top_level map[string]bool, mut assigned_locally map[string]bool, mut globals map[string]bool) {
 	if node is ast.Module {
 		for s in node.body {
-			eprintln('DEBUG: collect_global_refs STMT: ${s.str()}')
 			if s is ast.FunctionDef || s is ast.ClassDef {
 				m.walk_stmt_refs(s, top_level, mut assigned_locally, mut globals)
 			}
@@ -502,8 +628,42 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 	m.collect_global_refs(node, top_level_names, mut assigned_locally, mut globals)
 
 	for name, _ in globals {
-		eprintln('DEBUG: scan_module_symbols FOUND GLOBAL: ${name}')
 		m.state.global_vars[name] = true
+	}
+
+	// Mark top-level assignments as globals IF they are mutated OR not evaluable
+	for stmt in node.body {
+		if stmt is ast.Assign {
+			for target in stmt.targets {
+				mut names := map[string]bool{}
+				m.collect_names_from_expr(target, mut names)
+				for name, _ in names {
+					if name == '__all__' { continue }
+					mut is_mutated := false
+					m_info := m.analyzer.get_mutability(name)
+					if m_info.is_mutated {
+						is_mutated = true
+					}
+					if is_mutated || !base.is_compile_time_evaluable(stmt.value) {
+						m.state.global_vars[name] = true
+					}
+				}
+			}
+		} else if stmt is ast.AnnAssign {
+			mut names := map[string]bool{}
+			m.collect_names_from_expr(stmt.target, mut names)
+			for name, _ in names {
+				mut is_mutated := false
+				m_info := m.analyzer.get_mutability(name)
+				if m_info.is_mutated {
+					is_mutated = true
+				}
+				// Annotated assignments are often intended to be globals
+				if is_mutated || (stmt.value != none && !base.is_compile_time_evaluable(stmt.value or { panic('unreachable') })) || stmt.value == none {
+					m.state.global_vars[name] = true
+				}
+			}
+		}
 	}
 }
 
@@ -528,6 +688,9 @@ fn (mut m ModuleTranslator) extract_docstring(body []ast.Statement) ([]ast.State
 }
 
 fn (mut m ModuleTranslator) append_runtime_helpers() {
+	if m.emitter.omit_builtins {
+		return
+	}
 	mut imported := map[string]bool{}
 	for _, mod in m.state.imported_modules {
 		imported[mod] = true
@@ -700,7 +863,6 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 	}
 
 	if m.state.used_string_format || m.state.used_builtins['py_bytes_format'] {
-		m.emitter.add_helper_import('strconv')
 		m.emitter.add_helper_import('strings')
 		
 				m.emitter.add_helper_function('fn py_string_format(fmt string, args ...Any) string {
@@ -816,7 +978,6 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 	}
 
 	if m.state.used_builtins['py_bytes_format'] {
-		m.emitter.add_helper_import('strconv')
 		m.emitter.add_helper_import('strings')
 		m.emitter.add_helper_function("fn py_bytes_format_arg(arg Any) string {
     if arg is []u8 { return arg.bytestr() }
@@ -868,6 +1029,29 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }")
 	}
 
+	if 'py_subscript' in m.state.used_builtins {
+		m.emitter.add_helper_function('fn py_subscript(val Any, idx Any) Any {
+	if val is []Any {
+		if idx is int { return val[idx] }
+		if idx is i64 { return val[int(idx)] }
+	}
+	if val is map[string]Any {
+		if idx is string { return val[idx] }
+	}
+	return NoneType{}
+}')
+	}
+
+	if 'py_repeat_list' in m.state.used_builtins || m.state.used_builtins['py_repeat_list'] {
+		m.emitter.add_helper_function('fn py_repeat_list[T](arr []T, n int) []T {
+	mut res := []T{cap: arr.len * n}
+	for _ in 0 .. n {
+		res << arr
+	}
+	return res
+}')
+	}
+
 	if m.state.used_builtins['py_subscript_int'] {
 		m.emitter.add_helper_function('fn py_subscript_int[T](a []T, idx int) T {
     if idx < 0 { return a[a.len + idx] }
@@ -900,19 +1084,6 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.state.used_builtins['py_bool'] = true
 	}
 
-	if 'py_is_identical' in m.state.used_builtins {
-		m.emitter.add_helper_function('fn py_is_identical[T, U](a T, b U) bool {
-    return voidptr(&a) == voidptr(&b)
-}')
-	}
-
-	if 'py_repeat_list' in m.state.used_builtins {
-		m.emitter.add_helper_function('fn py_repeat_list[T](a []T, n int) []T {
-    mut res := []T{cap: a.len * n}
-    for _ in 0 .. n { res << a }
-    return res
-}')
-	}
 
 	if 'py_round' in m.state.used_builtins || 'round' in m.state.used_builtins {
 		m.emitter.add_helper_import('math')
@@ -1112,6 +1283,52 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
+	if 'py_sum' in m.state.used_builtins || m.state.used_builtins['py_sum'] {
+		m.emitter.add_helper_function('fn py_sum[T](a []T) T {
+    mut res := T(0)
+    for x in a { res += x }
+    return res
+}')
+	}
+	if 'py_abs' in m.state.used_builtins || m.state.used_builtins['py_abs'] {
+		m.emitter.add_helper_import('math')
+		m.emitter.add_helper_function('fn py_abs(val Any) Any {
+    if val is int { return if val < 0 { -val } else { val } }
+    if val is i64 { return if val < 0 { -val } else { val } }
+    if val is f64 { return math.abs(val) }
+    return val
+}')
+	}
+	if 'py_pow' in m.state.used_builtins || m.state.used_builtins['py_pow'] {
+		m.emitter.add_helper_import('math')
+		m.emitter.add_helper_function('fn py_pow(base Any, exp Any) Any {
+    if base is int && exp is int { return int(math.powi(f64(base), exp)) }
+    return math.pow(f64(base), f64(exp))
+}')
+	}
+	if 'py_divmod' in m.state.used_builtins || m.state.used_builtins['py_divmod'] {
+		m.emitter.add_helper_function('fn py_divmod(a int, b int) []int { return [a / b, a % b] }')
+	}
+	if 'py_random_choice' in m.state.used_builtins || m.state.used_builtins['py_random_choice'] {
+		m.emitter.add_helper_import('rand')
+		m.emitter.add_helper_function('fn py_random_choice[T](a []T) T {
+    if a.len == 0 { panic("choice from empty sequence") }
+    return a[rand.intn(0, a.len) or { 0 }]
+}')
+	}
+	if 'py_random_sample' in m.state.used_builtins || m.state.used_builtins['py_random_sample'] {
+		m.emitter.add_helper_import('rand')
+		m.emitter.add_helper_function('fn py_random_sample[T](a []T, k int) []T {
+    if k > a.len { panic("sample larger than population") }
+    mut res := []T{}
+    mut indices := []int{len: a.len}
+    for i in 0..a.len { indices[i] = i }
+    rand.shuffle(mut indices) or { panic(err) }
+    for i in 0..k { res << a[indices[i]] }
+    return res
+}')
+	}
+
 	if 'py_zip' in m.state.used_builtins {
 		m.emitter.add_helper_struct('struct PyZipItem[T, U] { pub: a T b U }')
 		m.emitter.add_helper_function('fn py_zip[T, U](a []T, b []U) []PyZipItem[T, U] {
@@ -1259,6 +1476,9 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_cycle[T](items []T) PyCycleIterator[T] { return PyCycleIterator[T]{items: items, idx: 0} }')
 	}
 
+	if m.state.used_builtins['vexc'] {
+		m.emitter.add_import('div72.vexc')
+	}
 	if 'pathlib' in imported || m.state.used_builtins['py_path_new'] {
 		m.emitter.add_helper_import('os')
 		m.emitter.add_helper_struct('struct PyPath { path string }')
@@ -1541,6 +1761,19 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 	m.coroutine_handler.scan_module(node)
 	m.scan_module_symbols(node)
 	m.emitter.module_name = m.state.current_module_name
+	mut ve := unsafe { &VCodeEmitter(m.state.emitter) }
+	for imp in ve.imports {
+		m.emitter.add_import(imp)
+	}
+	for imp in ve.helper_imports {
+		m.emitter.add_helper_import(imp)
+	}
+	for k, _ in m.state.defined_classes {
+		v_cls := m.state.class_to_impl[k] or { k }
+		m.emitter.defined_classes[v_cls] = true
+	}
+	m.emitter.omit_builtins = m.state.omit_builtins
+	m.emitter.used_builtins = m.state.used_builtins.clone()
 
 	mut body := node.body.clone()
 	mut doc_comments := []string{}
@@ -1572,20 +1805,27 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 			m.state.in_main = false
 			m.visit_stmt_fn(stmt)
 			m.state.in_main = true
-			
-			// Extract handled functions/structs from VCodeEmitter
-			mut ve := unsafe { &VCodeEmitter(m.state.emitter) }
-			for f in ve.functions {
-				m.emitter.add_helper_function(f)
-			}
-			ve.functions.clear()
-			for s in ve.structs {
-				m.emitter.add_helper_struct(s)
-			}
-			ve.structs.clear()
 		} else {
 			m.visit_stmt_fn(stmt)
 		}
+
+		// Extract handled functions/structs from VCodeEmitter after every statement
+		for f in ve.functions {
+			m.emitter.add_helper_function(f)
+		}
+		ve.functions.clear()
+		for s in ve.structs {
+			m.emitter.add_helper_struct(s)
+		}
+		ve.structs.clear()
+		for g in ve.globals {
+			m.emitter.add_global(g)
+		}
+		ve.globals.clear()
+		for c in ve.constants {
+			m.emitter.add_constant(c)
+		}
+		ve.constants.clear()
 
 		for line in m.state.output {
 			if stmt is ast.If && m.is_name_main(stmt) {
@@ -1596,13 +1836,17 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 				m.emitter.add_helper_function(line)
 			} else if stmt is ast.ClassDef {
 				m.emitter.add_helper_struct(line) // For now, handle as block
-			} else if line.trim_space().starts_with('const ') || line.trim_space().starts_with('pub const ') || line.trim_space().starts_with('__global ') {
+			} else if line.trim_space().starts_with('const ') || line.trim_space().starts_with('pub const ') {
 				m.emitter.add_constant(line.trim_space())
+			} else if line.trim_space().contains('__global ') {
+				m.emitter.add_global(line.trim_space())
 			} else {
 				m.emitter.add_init_statement(line.trim_space())
 			}
 		}
 	}
+	
+	m.emitter.used_builtins = m.state.used_builtins.clone()
 
 	if m.has_module_all {
 		for name in m.state.module_all {
@@ -1621,6 +1865,21 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 				}
 			}
 		}
+	}
+
+	if m.state.used_builtins['math'] {
+		m.emitter.add_import('math')
+	}
+
+	if m.state.used_builtins['vexc'] {
+		m.emitter.add_import('div72.vexc')
+	}
+
+	for imp in ve.helper_imports {
+		m.emitter.add_helper_import(imp)
+	}
+	for imp in ve.imports {
+		m.emitter.add_import(imp)
 	}
 
 	m.append_runtime_helpers()

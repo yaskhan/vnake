@@ -1,0 +1,5 @@
+@@in# "interface Drawable {"
+@@in# "draw() string"
+@@in# "fn (mut self Circle) draw() string {"
+@@in# "println('drawing')"
+@@in# "return ''"

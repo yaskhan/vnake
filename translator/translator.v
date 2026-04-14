@@ -95,13 +95,15 @@ fn (mut t Translator) emit_tail(line string) {
 	t.state.tail << line
 }
 
-fn (mut t Translator) push_scope() {
+fn (mut t Translator) push_scope(name string) {
 	t.state.scope_stack << map[string]bool{}
+	t.analyzer.push_scope(name)
 }
 
 fn (mut t Translator) pop_scope() {
 	if t.state.scope_stack.len > 0 {
 		t.state.scope_stack.delete_last()
+		t.analyzer.pop_scope()
 	}
 }
 
@@ -109,18 +111,15 @@ fn (mut t Translator) declare_local(name string) {
 	if t.state.scope_stack.len == 0 {
 		return
 	}
+	if name == 'dest' {
+	}
 	mut scope := t.state.scope_stack.pop()
 	scope[name] = true
 	t.state.scope_stack << scope
 }
 
 fn (t &Translator) is_declared_local(name string) bool {
-	for i := t.state.scope_stack.len - 1; i >= 0; i-- {
-		if name in t.state.scope_stack[i] {
-			return true
-		}
-	}
-	return false
+	return t.state.is_declared_local(name)
 }
 
 fn (mut t Translator) visit_expr(node ast.Expression) string {
@@ -134,7 +133,17 @@ fn (mut t Translator) guess_type(node ast.Expression) string {
 	return eg.guess_type(node)
 }
 
-fn (mut t Translator) map_annotation(node ast.Expression) string {
+pub fn (mut t Translator) map_annotation(node ?ast.Expression) string {
+	res := if n := node {
+		rendered := t.analyzer.render_expr(n)
+		t.map_annotation_str(rendered, t.state.current_class, false, true, true)
+	} else {
+		'Any'
+	}
+	return res
+}
+
+fn (mut t Translator) map_annotation_internal(node ast.Expression) string {
 	match node {
 		ast.Name {
 			res := match node.id {
@@ -384,15 +393,15 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: t.state.imported_symbols
 		defined_classes:  t.state.defined_classes
-		scc_files:        t.state.scc_files.keys()
+		scc_files:        t.state.scc_files
 		used_builtins:    t.state.used_builtins
 		warnings:         t.state.warnings
 		include_all_symbols: t.state.include_all_symbols
 		strict_exports:      t.state.strict_exports
 	}
 	mut st := t.state
-	res := base.map_type(type_str, opts, mut ctx, fn [mut t, actual_struct] (name string) string {
-		if name == 'Self' || name == 'typing.Self' {
+	res := base.map_type(type_str, opts, mut ctx, fn [mut t, actual_struct] (name string, def string) string {
+		if name == 'Self' || name == 'typing.Self' || def == 'Self' || def == 'typing.Self' {
 			mut v_gens := []string{}
 			for gn in t.state.current_class_generics {
 				v_gens << t.state.current_class_generic_map[gn] or { gn }
@@ -400,49 +409,49 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 			gen_s := if v_gens.len > 0 { "[${v_gens.join(', ')}]" } else { "" }
 			return "&" + actual_struct + gen_s
 		}
-		if name.contains("|") {
-			t.state.generated_sum_types[name] = ''
-			return name
+		mut final_name := name
+		if final_name == '' && def.contains('|') {
+			final_name = base.get_sum_type_name(def)
+		}
+		if final_name.len > 0 {
+			t.state.generated_sum_types[final_name] = def
+			return final_name
 		}
 		return ""
-	}, fn (_ []string) string { return '' }, fn [mut t] (types_str string) string {
+	}, fn [mut t] (vals []string) string {
+		enum_name := base.get_literal_enum_name(vals)
+		t.state.generated_literal_enums[enum_name] = vals.join(' | ')
+		return enum_name
+	}, fn [mut t] (types_str string) string {
 		struct_name_tuple := models.get_tuple_struct_name(types_str)
 		t.state.generated_tuple_structs[struct_name_tuple] = types_str
 		return struct_name_tuple
 	})
 
-	if !allow_union && res.contains('|') {
-		// Convert "A | B" to "SumType_AB"
-		mut parts := res.split('|').map(it.trim_space())
-		parts.sort()
-		mut name_parts := []string{}
-		for p in parts {
-			mut part_name := p.capitalize()
-			if part_name == 'Str' { part_name = 'String' }
-			name_parts << part_name
-		}
-		st_name := 'SumType_${name_parts.join("")}'
-		st.generated_sum_types[st_name] = res
-		return st_name
+	pure_res := res.trim_left('?&')
+	if pure_res in t.state.known_interfaces || pure_res in t.state.class_to_impl {
+		return res.replace('&', '')
 	}
-	if res == 'TaskState' || res == '&TaskState' { return 'TaskState' }
+
 	if res.len == 0 {
 		return type_str
 	}
 	
 	mut final_res := res
 	pure_v := final_res.trim_left('?&')
-	if is_v_class_type(pure_v) && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') {
-		if pure_v in t.state.known_interfaces || pure_v == 'TaskState' {
+	is_type_var := pure_v in t.state.type_vars || pure_v in t.state.current_class_generics
+	
+	if t.state.is_v_class_type(pure_v) && !pure_v.starts_with('[]') && !pure_v.starts_with('datatypes.') && !is_type_var {
+		is_interface := pure_v in t.state.known_interfaces || pure_v in t.state.class_to_impl || pure_v.ends_with('Protocol')
+		if is_interface {
 			return if final_res.starts_with('?') { '?' + pure_v } else { pure_v }
 		}
 		if final_res.starts_with('?') {
-			if !final_res.starts_with('?&') { final_res = '?&' + pure_v }
+			final_res = '?&' + pure_v
 		} else {
-			if !final_res.starts_with('&') { final_res = '&' + pure_v }
+			final_res = '&' + pure_v
 		}
 	}
-	if final_res.contains('TaskState') { return final_res.replace('&', '') }
 	return final_res
 }
 
@@ -474,6 +483,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	old_strict_exports := t.state.strict_exports
 	old_sccs := t.state.scc_files.clone()
 	old_current_module := t.state.current_module_name
+	old_omit_builtins := t.state.omit_builtins
 	
 	t.state = base.new_translator_state()
 	t.state.mapper = old_mapper
@@ -482,6 +492,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.state.strict_exports = old_strict_exports
 	t.state.scc_files = old_sccs.clone()
 	t.state.current_module_name = old_current_module
+	t.state.omit_builtins = old_omit_builtins
 	
 	mut e := &VCodeEmitter{
 		module_name:     'main'
@@ -501,7 +512,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.coroutine_handler = analyzer.new_coroutine_handler()
 	t.state.coroutine_handler = &t.coroutine_handler
 	t.state.current_file_name = filename
+	old_mypy_store := t.analyzer.mypy_store
 	t.analyzer = analyzer.new_analyzer(map[string]string{})
+	t.analyzer.mypy_store = old_mypy_store
 	t.state.output = []string{}
 	t.state.tail = []string{}
 	t.model = .unknown
@@ -565,7 +578,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	mut assigned_locally := map[string]bool{}
 	// Reuse logic from ModuleTranslator if possible? No, Translator is in same module but ModuleTranslator is local to its file.
 	// Actually, ModuleTranslator is in same module as Translator!
-	mut mt_for_scan := new_module_translator(mut t.state, fn [mut t] (stmt ast.Statement) { t.visit_stmt(stmt) })
+	mut mt_for_scan := new_module_translator(mut t.state, t.analyzer, fn [mut t] (stmt ast.Statement) { t.visit_stmt(stmt) })
 	mt_for_scan.collect_global_refs(module_node, top_level_names, mut assigned_locally, mut globals)
 	for name, _ in globals {
 		t.state.global_vars[name] = true
@@ -573,11 +586,60 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 
 	for k, v in t.analyzer.class_hierarchy {
 		t.state.class_hierarchy[k] = v.clone()
+		t.state.defined_classes[k] = map[string]bool{}
 		for base_name in v {
-			t.state.known_interfaces[base_name] = true
+			if !base_name.ends_with('Mixin') {
+				t.state.known_interfaces[base_name] = true
+			}
 		}
 	}
-	
+	t.state.update_class_hierarchy()
+
+	// Capture concrete types for globals if they are assigned later
+	for stmt in module_node.body {
+		if stmt is ast.Assign {
+			for target in stmt.targets {
+				if target is ast.Name {
+					id := target.id
+					loc_key := '${target.get_token().line}:${target.get_token().column}'
+					mut v_type := ''
+					if mypy_t := t.analyzer.get_mypy_type(id, loc_key) {
+						v_type = analyzer.map_python_type_to_v(mypy_t)
+					} else {
+					}
+					if v_type == '' || v_type == 'Any' {
+						v_type = t.guess_type(stmt.value)
+					}
+					v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
+					if v_type != 'unknown' && v_type != 'Any' && v_type != 'none' {
+						t.state.global_var_types[v_id] = v_type
+					}
+				}
+			}
+		} else if stmt is ast.AnnAssign {
+			if stmt.target is ast.Name {
+				id := stmt.target.id
+				loc_key := '${stmt.target.get_token().line}:${stmt.target.get_token().column}'
+				mut v_type := ''
+				if mypy_t := t.analyzer.get_mypy_type(id, loc_key) {
+					v_type = analyzer.map_python_type_to_v(mypy_t)
+				}
+				if v_type == '' || v_type == 'Any' {
+					v_type = t.map_annotation(stmt.annotation)
+					if v_type == '' || v_type == 'Any' {
+						if val := stmt.value {
+							v_type = t.guess_type(val)
+						}
+					}
+				}
+				v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
+				if v_type != 'unknown' && v_type != 'Any' && v_type != 'none' {
+					t.state.global_var_types[v_id] = v_type
+				}
+			}
+		}
+	}
+
 	for k, v in t.analyzer.main_to_mixins {
 		t.state.main_to_mixins[k] = v.clone()
 	}
@@ -602,13 +664,16 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	
 	for name, info in t.analyzer.mutability_map {
 		if info.is_reassigned || info.is_mutated {
+			if name == 'dest' {
+			}
 			t.mutable_locals[name] = true
 		}
 	}
 
 	// Use structured output if requested
 	if t.state.is_full_module {
-		mut mt := new_module_translator(mut t.state, fn [mut t] (stmt ast.Statement) {
+		t.append_helpers() // Ensure helpers are added to t.state.emitter
+		mut mt := new_module_translator(mut t.state, t.analyzer, fn [mut t] (stmt ast.Statement) {
 			t.visit_stmt(stmt)
 		})
 		mt.coroutine_handler = t.coroutine_handler
@@ -645,6 +710,15 @@ fn main() { richards() }
 	}
 	if t.state.used_builtins['compress.zlib'] {
 		e.add_import('compress.zlib')
+	}
+	if t.state.used_builtins['compress.gzip'] {
+		e.add_import('compress.gzip')
+	}
+	if t.state.used_builtins['net.urllib'] {
+		e.add_import('net.urllib')
+	}
+	if t.state.used_builtins['csv'] {
+		e.add_import('encoding.csv')
 	}
 	if t.state.used_builtins['datatypes'] {
 		e.add_import('datatypes')
@@ -686,8 +760,9 @@ fn main() { richards() }
 			}
 			// Also check if the module name appears in output code
 			if !is_used {
+				short_name := if imp_name.contains('.') { imp_name.all_after_last('.') } else { imp_name }
 				for code_line in t.state.output {
-					if code_line.contains('${imp_name}.') && !code_line.trim_space().starts_with('import ') {
+					if (code_line.contains('${imp_name}.') || code_line.contains('${short_name}.')) && !code_line.trim_space().starts_with('import ') {
 						is_used = true
 						break
 					}
@@ -714,7 +789,3 @@ fn main() { richards() }
 	return res
 }
 
-fn is_v_class_type(v_type string) bool {
-	clean := v_type.trim_left('?&')
-	return clean.len > 0 && clean[0].is_capital() && clean !in ['Any', 'LiteralString', 'Self']
-}

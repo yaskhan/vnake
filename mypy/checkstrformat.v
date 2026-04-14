@@ -129,6 +129,10 @@ pub fn new_string_formatter_checker(chk ?&TypeChecker, msg ?&MessageBuilder) Str
 	}
 }
 
+fn (sfc StringFormatterChecker) require_type_checker() &TypeChecker {
+	return sfc.chk or { panic('StringFormatterChecker requires an initialized TypeChecker; this usually means string formatter checking started before sfc.chk was set') }
+}
+
 pub fn (mut sfc StringFormatterChecker) check_str_format_call(call CallExpr, format_value string) {
 	mut specs := parse_format_value(format_value) or { return }
 	if !sfc.auto_generate_keys(mut specs, call.base.ctx) {
@@ -173,11 +177,13 @@ pub fn (mut sfc StringFormatterChecker) check_str_interpolation(expr StringOrByt
 	expr_ctx := format_string_expr_context(expr)
 	expr_val := match expr {
 		StrExpr {
-			(sfc.chk or { panic('chk') }).expr_checker.accept(expr)
+			mut tc := sfc.require_type_checker()
+			tc.expr_checker.accept(expr)
 			expr.value
 		}
 		BytesExpr {
-			(sfc.chk or { panic('chk') }).expr_checker.accept(expr)
+			mut tc := sfc.require_type_checker()
+			tc.expr_checker.accept(expr)
 			expr.value
 		}
 	}
@@ -251,11 +257,12 @@ pub fn (mut sfc StringFormatterChecker) conversion_type(p string, context Contex
 }
 
 fn (sfc StringFormatterChecker) named_type(name string) MypyTypeNode {
-	return (sfc.chk or { panic('chk') }).named_type(name)
+	return sfc.require_type_checker().named_type(name)
 }
 
 fn (mut sfc StringFormatterChecker) accept(expr Expression) MypyTypeNode {
-	return (sfc.chk or { panic('chk') }).expr_checker.accept(expr)
+	mut tc := sfc.require_type_checker()
+	return tc.expr_checker.accept(expr)
 }
 
 fn format_string_expr_context(expr StringOrBytesExpr) Context {
@@ -317,12 +324,13 @@ fn (mut sfc StringFormatterChecker) check_specs_in_format_call(call CallExpr, sp
 			}
 			last_char := fmt_spec[fmt_spec.len - 1]
 			arg := call.args[i]
-			arg_type_node := (sfc.chk or { panic('chk') }).expr_checker.accept(arg)
+			mut tc := sfc.require_type_checker()
+			arg_type_node := tc.expr_checker.accept(arg)
 			if last_char in [`d`, `i`, `o`, `x`, `X`] {
-				_ = (sfc.chk or { panic('chk') }).check_subtype(arg_type_node, sfc.named_type('builtins.int'), arg.get_context(),
+				_ = tc.check_subtype(arg_type_node, sfc.named_type('builtins.int'), arg.get_context(),
 					'Argument must be int for format specifier')
 			} else if last_char in [`f`, `F`, `e`, `E`, `g`, `G`] {
-				_ = (sfc.chk or { panic('chk') }).check_subtype(arg_type_node, sfc.named_type('builtins.float'),
+				_ = tc.check_subtype(arg_type_node, sfc.named_type('builtins.float'),
 					arg.get_context(), 'Argument must be float for format specifier')
 			}
 		}
@@ -341,17 +349,18 @@ fn (mut sfc StringFormatterChecker) check_simple_str_interpolation(specifiers []
 				continue
 			}
 			repl := replacements.items[i]
-			repl_type := (sfc.chk or { panic('chk') }).expr_checker.accept(repl)
+			mut tc := sfc.require_type_checker()
+			repl_type := tc.expr_checker.accept(repl)
 			if spec.conv_type in ['d', 'i', 'o', 'u', 'x', 'X'] {
-				_ = (sfc.chk or { panic('chk') }).check_subtype(repl_type, sfc.named_type('builtins.int'), repl.get_context(),
+				_ = tc.check_subtype(repl_type, sfc.named_type('builtins.int'), repl.get_context(),
 					'Argument must be int for format specifier')
 			} else if spec.conv_type in ['e', 'E', 'f', 'F', 'g', 'G'] {
-				_ = (sfc.chk or { panic('chk') }).check_subtype(repl_type, sfc.named_type('builtins.float'),
+				_ = tc.check_subtype(repl_type, sfc.named_type('builtins.float'),
 					repl.get_context(), 'Argument must be float for format specifier')
 			}
 		}
 	} else if specifiers.filter(it.conv_type != '%').len > 1 {
-		(sfc.msg or { panic('msg') }).fail('Wrong number of arguments for format string', expr_ctx, false, false,
+		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Wrong number of arguments for format string', expr_ctx, false, false,
 			none)
 	}
 }
@@ -373,16 +382,17 @@ fn (mut sfc StringFormatterChecker) check_mapping_str_interpolation(specifiers [
 					}
 				}
 				if !found {
-					(sfc.msg or { panic('msg') }).fail('Key "${key}" not found in format arguments', expr_ctx,
+					(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Key "${key}" not found in format arguments', expr_ctx,
 						false, false, none)
 				}
 			}
 		}
 		return
 	}
-	repl_type := (sfc.chk or { panic('chk') }).expr_checker.accept(replacements)
+	mut tc := sfc.require_type_checker()
+	repl_type := tc.expr_checker.accept(replacements)
 	if !has_type_component(repl_type, 'builtins.dict') {
-		(sfc.msg or { panic('msg') }).fail('Expected mapping for format string with keys', replacements.get_context(),
+		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Expected mapping for format string with keys', replacements.get_context(),
 			false, false, none)
 	}
 }

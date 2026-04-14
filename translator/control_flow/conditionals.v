@@ -57,9 +57,14 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 			is_none := (right is ast.Constant && right.value == 'None') || (right is ast.Name && right.id in ['None', 'none']) || (right is ast.NoneExpr)
 			if is_none {
 				if (op == 'is not' && positive) || (op == '!=' && positive) || (op == 'is' && !positive) || (op == '==' && !positive) {
-					orig_type := m.guess_type(left)
+					mut orig_type := m.guess_type(left)
+					if !orig_type.starts_with('?') && orig_type != 'Any' {
+						orig_type = '?' + orig_type
+					}
 					if orig_type.starts_with('?') {
-						res[var_name] = orig_type[1..]
+						res[var_name] = orig_type.trim_left('?')
+					} else if orig_type == 'Any' {
+						res[var_name] = 'Any' // Trust Any
 					}
 				} else if (op == 'is' && positive) || (op == '==' && positive) || (op == 'is not' && !positive) || (op == '!=' && !positive) {
 					res[var_name] = 'none'
@@ -90,27 +95,45 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		base_type := m.guess_type(ast.Name{id: var_name})
 
 		mut is_auto := false
-		if base_type.starts_with('?') && (narrowed_type == base_type[1..] || '&' + narrowed_type == base_type[1..] || narrowed_type == '&' + base_type[1..]) {
-			is_auto = true
-		} else if (base_type.contains('|') || base_type.starts_with('SumType_')) && !narrowed_type.contains('|') {
-			is_auto = false // SumTypes need explicit 'as'
+		if branch_suffix != '_while' {
+			if base_type.starts_with('?') && (narrowed_type == base_type[1..] || '&' + narrowed_type == base_type[1..] || narrowed_type == '&' + base_type[1..]) {
+				is_auto = true
+			} else if (base_type.contains('|') || base_type.starts_with('SumType_')) && !narrowed_type.contains('|') {
+				is_auto = false // SumTypes need explicit 'as'
+			}
 		}
 
 		if is_auto {
 			// Mark variable as narrowed so that later accesses don't add redundant 'or' blocks
 			m.env.state.narrowed_vars[sanitized] = true
+			if var_name in m.env.state.name_remap {
+				original_remaps[var_name] = m.env.state.name_remap[var_name]
+			} else {
+				original_remaps[var_name] = '__NONE__'
+			}
 			continue
 		}
 
 		if narrowed_type !in ['Any', 'void', 'none'] {
 			mut narrowed_expr := ''
 			if base_type.starts_with('?') {
-				// For Options, if V doesn't auto-narrow (e.g. shared or field), we'd need another approach,
-				// but for locals, we just skip it as V does it.
-				// If we MUST force it:
-				narrowed_expr = '(${sanitized} or { panic("narrowing failed") })'
+				if branch_suffix == '_while' {
+					narrowed_var := 'narrowed${branch_suffix}_${sanitized}'
+					m.emit('mut ${narrowed_var} := ${sanitized} or { break }')
+					narrowed_expr = narrowed_var
+				} else {
+					narrowed_expr = '(${sanitized} or { panic("narrowing failed") })'
+				}
 			} else {
-				narrowed_expr = '(${sanitized} as ${narrowed_type})'
+				mut expr_to_cast := sanitized
+				if base_type.starts_with('?') || base_type == 'Any' {
+					// We must unwrap before 'as'
+					expr_to_cast = '(${sanitized} or { panic("narrowing failed for ${sanitized}") })'
+				}
+				as_expr := '(${expr_to_cast} as ${narrowed_type})'
+				narrowed_var := 'narrowed${branch_suffix}_${sanitized}'
+				m.emit('${narrowed_var} := ${as_expr}')
+				narrowed_expr = narrowed_var
 			}
 
 			if var_name in m.env.state.name_remap {
@@ -265,8 +288,8 @@ fn (m &ControlFlowModule) is_name_main(node ast.If) bool {
 		if comp.left is ast.Name && comp.left.id == '__name__' {
 			if comp.comparators.len > 0 && comp.comparators[0] is ast.Constant {
 				c := comp.comparators[0] as ast.Constant
-				val := c.value
-				return val == "'__main__'" || val == '"__main__"'
+				val := c.value.trim('\'"')
+				return val == '__main__'
 			}
 		}
 	}

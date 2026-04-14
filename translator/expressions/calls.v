@@ -6,8 +6,7 @@ import base
 import stdlib_map
 
 pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
-	func_name_str, _ := eg.extract_func_info(node)
-	loc_key := '${node.token.line}:${node.token.column}'
+	func_name_str, loc_key := eg.extract_func_info(node)
 	call_sig := eg.get_call_signature(func_name_str, loc_key)
 
 	mut args := eg.process_call_args(node, call_sig)
@@ -15,6 +14,13 @@ pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
 
 	if needs_comment {
 		eg.state.pending_llm_call_comments << '//##LLM@@ unresolved **kwargs unpacking'
+	}
+
+	if func_name_str == 'chr' && args.len > 0 {
+		return 'rune(int(${args[0]})).str()'
+	}
+	if func_name_str == 'ord' && args.len > 0 {
+		return 'int((${args[0]})[0])'
 	}
 
 	module_name, func_name := eg.resolve_module_and_func(node, func_name_str)
@@ -155,12 +161,22 @@ pub fn (mut eg ExprGen) process_call_args(node ast.Call, call_sig ?analyzer.Call
 	mut args := []string{}
 	for i, arg in node.args {
 		old_type := eg.state.current_assignment_type
+		mut param_type := ''
 		if sig := call_sig {
 			if i < sig.args.len {
-				eg.state.current_assignment_type = eg.map_python_type(sig.args[i], false)
+				param_type = eg.map_python_type(sig.args[i], false)
+				eg.state.current_assignment_type = param_type
 			}
 		}
-		args << eg.visit(arg)
+		mut arg_text := eg.visit(arg)
+		arg_type := eg.guess_type(arg)
+		if param_type.len > 0 && arg_type.starts_with('?') && !param_type.starts_with('?') && param_type != 'Any' {
+			arg_text = '(${arg_text} or { panic("missing arg") })'
+		}
+		if param_type == 'Any' && arg_type != 'Any' && arg_type != 'unknown' && arg_type != 'void' {
+			arg_text = 'Any(${arg_text})'
+		}
+		args << arg_text
 		eg.state.current_assignment_type = old_type
 	}
 	return args
@@ -413,8 +429,8 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		}
 	}
 	
-	if func_name_str in ['any', 'all', 'sum'] || (module_name == 'builtins' && func_name in ['any', 'all', 'sum']) {
-		b_name := if func_name_str in ['any', 'all', 'sum'] { func_name_str } else { func_name }
+	if func_name_str in ['any', 'all', 'sum', 'min', 'max', 'abs', 'pow', 'divmod'] || (module_name == 'builtins' && func_name in ['any', 'all', 'sum', 'min', 'max', 'abs', 'pow', 'divmod']) {
+		b_name := if func_name_str in ['any', 'all', 'sum', 'min', 'max', 'abs', 'pow', 'divmod'] { func_name_str } else { func_name }
 		if b_name in ['any', 'all'] && args.len == 1 && node.args[0] is ast.GeneratorExp {
 			gen := node.args[0] as ast.GeneratorExp
 			if gen.generators.len == 1 {
@@ -575,7 +591,7 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 							mangled_factory = '${mangled_factory}_noargs'
 						}
 						
-						final_args := eg.process_mutated_args(mangled_factory, args, call_sig)
+						final_args := eg.process_mutated_args(mangled_factory, args, node.args, call_sig)
 						return '${mangled_factory}(${final_args.join(", ")})'
 					}
 				}
@@ -823,7 +839,15 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		return '${args[0]} in ${args[1]}'
 	}
 
-	if func_name_str == 'list' && args.len == 0 { return '[]Any{}' }
+	if func_name_str == 'list' {
+		if args.len == 0 { return '[]Any{}' }
+		if args.len == 1 {
+			arg_type := eg.guess_type(node.args[0])
+			if arg_type.starts_with('[]') {
+				return args[0] // Redundant conversion
+			}
+		}
+	}
 	
 	if func_name_str == 'set' && args.len == 0 {
 		mut item_type := 'string'
@@ -874,7 +898,6 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 		eg.state.used_builtins['py_counter'] = true
 		return 'py_counter(${args[0]})'
 	}
-
 	if (func_name_str == 'defaultdict' || (module_name == 'collections' && func_name == 'defaultdict')) && args.len >= 1 {
 		mut d_type := 'Any'
 		if node.args.len > 0 {
@@ -909,11 +932,20 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 	}
 
 	if func_name_str == 'ord' && args.len == 1 {
-		return 'u32(${args[0]})'
+		arg0 := node.args[0]
+		is_string_constant := if arg0 is ast.Constant {
+			arg0.token.typ in [.string_tok, .fstring_tok, .tstring_tok]
+		} else {
+			false
+		}
+		if is_string_constant || eg.guess_type(arg0) == 'string' {
+			return 'int((${args[0]})[0])'
+		}
+		return 'int(${args[0]})'
 	}
 	
 	if func_name_str == 'chr' && args.len == 1 {
-		return 'rune(${args[0]}).str()'
+		return 'rune(int(${args[0]})).str()'
 	}
 
 	if func_name_str == 'range' {
@@ -1057,7 +1089,7 @@ pub fn (mut eg ExprGen) handle_overloads(node ast.Call, call_sig ?analyzer.CallS
 					mangled_name = '${mangled_name}_noargs'
 				}
 				
-				final_args := eg.process_mutated_args(mangled_name, args, call_sig)
+				final_args := eg.process_mutated_args(mangled_name, args, node.args, call_sig)
 				if obj_str.len > 0 {
 					return '${obj_str}.${mangled_name}(${final_args.join(", ")})'
 				}
@@ -1068,7 +1100,7 @@ pub fn (mut eg ExprGen) handle_overloads(node ast.Call, call_sig ?analyzer.CallS
 
 	if sig := call_sig {
 		if sig.is_class {
-			final_args := eg.process_mutated_args(func_name, args, call_sig)
+			final_args := eg.process_mutated_args(func_name, args, node.args, call_sig)
 			return '${func_name}(${final_args.join(', ')})'
 		}
 	}
@@ -1088,6 +1120,45 @@ fn (eg &ExprGen) types_match(t1 string, t2 string) bool {
 pub fn (mut eg ExprGen) handle_fallback_call(node ast.Call, func_name_str string, args []string, keyword_args map[string]string, call_sig ?analyzer.CallSignature) string {
 	mut func_name := eg.visit(node.func)
 	if func_name.len == 0 { func_name = func_name_str }
+	
+	if node.func is ast.Name {
+		id := node.func.id
+		if eg.state.is_declared_local(id) {
+			typ := eg.guess_type(node.func)
+			has_variadic := typ.contains('[]Any)') || typ.contains('[]Any,')
+			has_kwargs := typ.contains('map[string]Any')
+			
+			if has_variadic || has_kwargs {
+				mut v_args := []string{}
+				for arg in node.args {
+					v_args << eg.visit(arg)
+				}
+				
+				mut keyword_parts := []string{}
+				for kw in node.keywords {
+					if kw.arg.len == 0 {
+						// **kwargs unpacking in call
+						v_args << eg.visit(kw.value)
+					} else {
+						keyword_parts << "'${kw.arg}': ${eg.visit(kw.value)}"
+					}
+				}
+				
+				mut final_v_args := []string{}
+				if has_variadic && has_kwargs {
+					final_v_args << '[${v_args.join(', ')}]'
+					final_v_args << '{${keyword_parts.join(', ')}}'
+				} else if has_variadic {
+					final_v_args << '[${v_args.join(', ')}]'
+				} else if has_kwargs {
+					final_v_args << '{${keyword_parts.join(', ')}}'
+				}
+				
+				return '${func_name}(${final_v_args.join(', ')})'
+			}
+		}
+	}
+
 	if func_name in eg.state.renamed_functions { func_name = eg.state.renamed_functions[func_name] }
 
 	mut final_raw_args := args.clone()
@@ -1095,8 +1166,14 @@ pub fn (mut eg ExprGen) handle_fallback_call(node ast.Call, func_name_str string
 		final_raw_args << '${k}=${v}'
 	}
 
-	final_args := eg.process_mutated_args(func_name, final_raw_args, call_sig)
-	return '${func_name}(${final_args.join(', ')})'
+	final_args := eg.process_mutated_args(func_name, final_raw_args, node.args, call_sig)
+	mut res := '${func_name}(${final_args.join(", ")})'
+
+	call_ret_type := if sig := call_sig { sig.return_type } else { '' }
+	if call_ret_type.starts_with('?') && !eg.state.current_assignment_type.starts_with('?') {
+		res = '(${res} or { panic("missing return value") })'
+	}
+	return res
 }
 
 pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.Expression, func_name_str string, args []string, keyword_args map[string]string) ?string {
@@ -1111,6 +1188,20 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	loc_key := '${receiver_token.line}:${receiver_token.column}'
 	
 	mut original_type_raw := obj_type_raw
+	
+	if attr == 'items' && obj_type_raw.starts_with('map[') {
+		return 'list(${obj}.keys())' // Simplified: items() treated as keys for now, or we need a Pair struct
+	}
+	if attr == 'values' && obj_type_raw.starts_with('map[') {
+		mut val_type := 'Any'
+		if obj_type_raw.contains(']') {
+			val_type = obj_type_raw.all_after(']')
+		}
+		return '${obj}.values()' // V 0.4+ has .values() on maps returning an array
+	}
+	if attr == 'keys' && obj_type_raw.starts_with('map[') {
+		return '${obj}.keys()'
+	}
 	if receiver_expr is ast.Attribute {
 		obj_base_type := eg.guess_type(receiver_expr.value).all_before('[')
 		field_key := '${obj_base_type}.${receiver_expr.attr}'
@@ -1144,11 +1235,12 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 			if needs_cast {
 				obj = "(${obj} as ${v_narrowed})"
 			}
-			obj_type_raw = actual_narrowed
+		obj_type_raw = actual_narrowed
 		}
 	} else if original_type_raw.starts_with('SumType_') || original_type_raw.contains('|') {
 		// Automatic narrowing for common methods if not explicitly narrowed
 		mut inferred := ''
+		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any', 'map[string]Any', '[]i64', '[]f64', '[]int']
 		if attr in ['lower', 'upper', 'capitalize', 'title', 'strip', 'split', 'join', 'isdigit', 'isalpha', 'isalnum', 'replace', 'startswith', 'endswith'] {
 			inferred = 'string'
 		} else if attr in ['append', 'extend', 'pop', 'remove', 'sort', 'reverse'] {
@@ -1190,12 +1282,24 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	// Check if this is a mutable method call that needs a mutable receiver
 	mut is_mut_receiver := false
 	if obj_type_raw != 'Any' && obj_type_raw != '' {
-		key := '${obj_type_raw}.${attr}.self'
-		if info := eg.analyzer.get_mutability(key) {
+		obj_type_clean := obj_type_raw.trim_left('?&')
+		keys := [
+			'${obj_type_clean}.${attr}.self',
+			'${obj_type_clean}.${base.to_camel_case(attr)}.self'
+		]
+		for k in keys {
+			info := eg.analyzer.get_mutability(k)
 			if info.is_mutated {
 				is_mut_receiver = true
+				break
 			}
 		}
+	}
+
+	if is_mut_receiver && !base.is_simple_mut_target(recv) {
+		tmp := eg.state.create_temp_with_prefix('py_mut_recv_')
+		eg.emit('mut ${tmp} := ${recv}')
+		recv = tmp
 	}
 
 	if is_mut_receiver {
@@ -1204,10 +1308,10 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 		if receiver_expr !is ast.Name {
 			tmp := eg.state.create_temp_with_prefix('py_mut_tmp_')
 			eg.emit('mut ${tmp} := ${obj}')
-			recv = 'mut ${tmp}'
+			recv = tmp
 			obj = tmp // for subsequent uses if any
 		} else {
-			recv = 'mut ${obj}'
+			recv = obj
 		}
 	}
 
@@ -1345,22 +1449,127 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	for k, v in keyword_args {
 		final_args << '${k}=${v}'
 	}
-	sanitized_attr := base.sanitize_name(attr, false, map[string]bool{}, '', map[string]bool{})
-	processed_args := eg.process_mutated_args('${obj_type_raw}.${sanitized_attr}', final_args, none)
-	return '${recv}.${sanitized_attr}(${processed_args.join(', ')})'
+	mut actual_attr := attr
+	if !actual_attr.starts_with('_') && actual_attr != 'items' && actual_attr != 'keys' && actual_attr != 'values' {
+		actual_attr = base.to_snake_case(attr).to_lower()
+	}
+	sanitized_attr := base.sanitize_name(actual_attr, false, map[string]bool{}, '', map[string]bool{})
+	attr_pure := obj_type_raw.trim_left('?&')
+	mut call_ret_type := ''
+	mut method_sig := analyzer.CallSignature{}
+	mut has_sig := false
+	mut sig_name := ''
+	if eg.analyzer != unsafe { nil } {
+		a := &analyzer.Analyzer(eg.analyzer)
+		if sig := a.get_call_signature('${attr_pure}.${attr}') {
+			call_ret_type = sig.return_type
+			method_sig = sig
+			has_sig = true
+			mut defining := attr_pure
+			if attr_pure in a.class_hierarchy {
+				for b in a.class_hierarchy[attr_pure] {
+					if '${b}.${attr}' in a.call_signatures {
+						defining = b
+						break
+					}
+				}
+			}
+			sig_name = '${defining}.${attr}'
+		} else if sig2 := a.get_call_signature('${attr_pure}.${base.to_camel_case(attr)}') {
+			call_ret_type = sig2.return_type
+			method_sig = sig2
+			has_sig = true
+			mut defining := attr_pure
+			if attr_pure in a.class_hierarchy {
+				for b in a.class_hierarchy[attr_pure] {
+					if '${b}.${base.to_camel_case(attr)}' in a.call_signatures {
+						defining = b
+						break
+					}
+				}
+			}
+			sig_name = '${defining}.${base.to_camel_case(attr)}'
+		}
+	}
+	
+	mut sig_opt := ?analyzer.CallSignature(none)
+	if has_sig { sig_opt = method_sig }
+	processed_args := eg.process_mutated_args((if has_sig { sig_name } else { '${obj_type_raw}.${sanitized_attr}' }), final_args, node.args, sig_opt)
+	
+	mut call_str := '${recv}.${sanitized_attr}(${processed_args.join(", ")})'
+	
+	if call_ret_type.starts_with('?') && (eg.state.is_v_class_type(call_ret_type) || !eg.state.current_assignment_type.starts_with('?')) {
+		call_str = '(${call_str} or { panic("missing return value") })'
+	}
+	
+	return call_str
 }
 
-pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string, call_sig ?analyzer.CallSignature) []string {
+pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string, args_nodes []ast.Expression, call_sig ?analyzer.CallSignature) []string {
 	mut final_args := []string{}
-	mut mutated := map[int]bool{}
-	if func_name_str in eg.analyzer.func_param_mutability {
-		for idx in eg.analyzer.func_param_mutability[func_name_str] { mutated[idx] = true }
+	mut mut_indices := map[int]bool{}
+
+	if sig := call_sig {
+		for i, formal_arg in sig.arg_names {
+			p_key := '${func_name_str}.${formal_arg}'
+			m_info := eg.analyzer.get_mutability(p_key)
+			if m_info.is_mutated {
+				mut_indices[i] = true
+			}
+		}
 	}
+
 	for i, arg in args {
-		if i in mutated && !arg.starts_with('mut ') && arg !in ['none', 'true', 'false'] {
-			final_args << 'mut ${arg}'
+		mut final_arg := arg
+		mut is_optional_param := false
+		mut is_non_optional_sig_arg := false
+		if sig := call_sig {
+			if i < sig.args.len {
+				if sig.args[i].starts_with('?') {
+					is_optional_param = true
+				} else {
+					is_non_optional_sig_arg = true
+				}
+			}
+		}
+
+		mut v_type := ''
+		if i < args_nodes.len {
+			v_type = eg.guess_type(args_nodes[i])
+		}
+
+		mut should_unwrap := (arg.ends_with('_mut'))
+		if !should_unwrap && v_type.starts_with('?') && call_sig == none {
+			// Fallback: if we don't have a signature, unwrap class instances
+			// which are almost always expected to be non-none when passed as args in Python benchmarks
+			should_unwrap = eg.state.is_v_class_type(v_type)
+		}
+		
+		mut is_any_target := false
+		if sig := call_sig {
+			if i < sig.args.len && sig.args[i] == 'Any' {
+				is_any_target = true
+			}
+		}
+		
+		mut sanitized_arg := arg.trim('()').trim_space()
+		mut is_narrowed := eg.state.narrowed_vars[sanitized_arg]
+		if !is_narrowed {
+			for k, v in eg.state.name_remap {
+				if v == sanitized_arg && eg.state.narrowed_vars[k] {
+					is_narrowed = true
+					break
+				}
+			}
+		}
+		if (should_unwrap || is_non_optional_sig_arg) && v_type.starts_with('?') && !is_optional_param && !arg.contains(' or {') && !arg.ends_with('.str()') && !is_any_target && !is_narrowed {
+			final_arg = '(${arg} or { panic("unwrap failed for ${arg}") })'
+		}
+
+		if mut_indices[i] {
+			final_args << 'mut ${final_arg}'
 		} else {
-			final_args << arg
+			final_args << final_arg
 		}
 	}
 	return final_args

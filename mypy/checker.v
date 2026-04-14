@@ -19,14 +19,14 @@ pub type FineGrainedDeferredNodeType = FuncDef | MypyFile | OverloadedFuncDef
 pub struct DeferredNode {
 pub:
 	node            DeferredNodeType
-	active_typeinfo ?TypeInfo
+	active_type ?&TypeInfo
 }
 
 // FineGrainedDeferredNode — node for fine-grained mode
 pub struct FineGrainedDeferredNode {
 pub:
 	node            FineGrainedDeferredNodeType
-	active_typeinfo ?TypeInfo
+	active_type ?&TypeInfo
 }
 
 // TypeMap — mapping of Expressions to types
@@ -40,7 +40,7 @@ pub:
 	is_local    bool
 }
 
-// TypeChecker — mypy type checker
+@[heap]
 pub struct TypeChecker {
 pub mut:
 	is_stub                  bool
@@ -54,7 +54,7 @@ pub mut:
 	pattern_checker          PatternChecker
 	tscope                   Scope
 	scope                    CheckerScope
-	active_type               ?&TypeInfo
+	active_type              ?&TypeInfo
 	return_types             []MypyTypeNode
 	dynamic_funcs            []bool
 	partial_types            []PartialTypeScope
@@ -85,15 +85,12 @@ pub mut:
 
 // new_type_checker creates a new TypeChecker
 pub fn new_type_checker(errors Errors, modules map[string]&MypyFile, options Options, tree &MypyFile, path string, plugin Plugin) &TypeChecker {
-	msg := MessageBuilder{
-		errors:  &errors
-		options: &options
-		modules: map[string]&MypyFile{}
-	}
 	mut tc := &TypeChecker{
 		is_stub:                  tree.is_stub
 		errors:                   errors
-		msg:                      msg
+		msg:                      MessageBuilder{
+			modules: map[string]&MypyFile{}
+		}
 		type_maps:                [TypeMap{}]
 		all_type_maps:            []TypeMap{}
 		persistent_type_map:      TypeMap{}
@@ -128,8 +125,10 @@ pub fn new_type_checker(errors Errors, modules map[string]&MypyFile, options Opt
 		allow_abstract_call:      false
 		recurse_into_functions:   true
 	}
+	tc.msg.errors = &tc.errors
+	tc.msg.options = &tc.options
 
-	tc.expr_checker = new_expression_checker(tc, msg, plugin)
+	tc.expr_checker = new_expression_checker(tc, tc.msg, plugin)
 	tc.pattern_checker = PatternChecker{
 		chk:          tc
 		type_context: []MypyTypeNode{}
@@ -195,7 +194,7 @@ pub fn (mut tc TypeChecker) check_top_level(node &MypyFile) {
 // accept accepts a node for checking
 pub fn (mut tc TypeChecker) accept(stmt Statement) {
 	mut stmt_mut := stmt
-	stmt_mut.accept(mut tc) or { eprintln("### TC ACCEPT ERR: ${err}") }
+	stmt_mut.accept(mut tc) or { eprintln('### TC ACCEPT ERR: ${err}') }
 }
 
 // visit_func_def checks function definition
@@ -208,11 +207,13 @@ pub fn (mut tc TypeChecker) visit_func_def(mut defn FuncDef) !AnyNode {
 
 // visit_class_def checks class definition
 pub fn (mut tc TypeChecker) visit_class_def(mut defn ClassDef) !AnyNode {
-	typ := defn.info or { return '' }
+	typ := defn.info or {
+		return ''
+	}
 
 	old_active := tc.active_type
 	tc.active_type = typ
-	tc.scope.push_class(*typ)
+	tc.scope.push_class(typ)
 	for mut stmt in defn.defs.body {
 		stmt.accept(mut tc)!
 	}
@@ -236,14 +237,13 @@ pub fn (mut tc TypeChecker) check_func_item(defn FuncItem, name string) {
 
 // check_func_def checks function definition
 fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
-	_ = name
 	tc.type_maps << TypeMap{}
-	
+
 	// Manually add parameters to the current type map
 	for i, arg in defn.arguments {
 		arg_name := arg.variable.name
 		mut typ := ?MypyTypeNode(none)
-		
+
 		if t := arg.variable.type_ {
 			typ = t
 		} else if arg_name == 'self' || i == 0 {
@@ -254,10 +254,10 @@ fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 				})
 			}
 		}
-		
+
 		if t := typ {
 			tc.type_maps.last()[arg_name] = t
-			
+
 			// Store with correct location for persistent lookup
 			ctx := arg.variable.get_context()
 			pkey := '${ctx.line}:${ctx.column}:${arg_name}'
@@ -280,12 +280,10 @@ fn (mut tc TypeChecker) check_func_def(mut defn FuncDef, name string) {
 	tc.all_type_maps << tc.type_maps.pop()
 }
 
-
-
 // visit_assignment_stmt checks assignment
 pub fn (mut tc TypeChecker) visit_assignment_stmt(mut s AssignmentStmt) !AnyNode {
 	mut rvalue_type := tc.expr_checker.accept(s.rvalue)
-	
+
 	if ann := s.type_annotation {
 		rvalue_type = ann
 	}
@@ -301,11 +299,116 @@ pub fn (mut tc TypeChecker) visit_assignment_stmt(mut s AssignmentStmt) !AnyNode
 
 // check_assignment checks assignment
 fn (mut tc TypeChecker) check_assignment(mut lvalue Lvalue, rvalue Expression, rvalue_type MypyTypeNode) {
-	if lvalue is TupleExpr || lvalue is ListExpr {
-		// TODO: multiple assignment implementation (unpacking)
-		tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
-	} else {
-		tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
+	// check_assignment logic moved to check_simple_assignment to avoid duplication
+	tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
+}
+
+
+// check_unpacking_assignment handles multiple assignment unpacking
+fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Expression, rvalue Expression, rvalue_type MypyTypeNode) {
+	tc.store_type(lvalue.as_expression(), rvalue_type)
+	proper_rvalue := get_proper_type(rvalue_type)
+
+	mut star_index := -1
+	for i, item in items {
+		if item is StarExpr {
+			if star_index != -1 {
+				tc.msg.fail('Two starred expressions in assignment', rvalue.get_context(), false, false, none)
+			}
+			star_index = i
+		}
+	}
+
+	match proper_rvalue {
+		TupleType {
+			if star_index == -1 {
+				if items.len != proper_rvalue.items.len {
+					tc.msg.fail('Incompatible number of values to unpack (expected ${items.len}, got ${proper_rvalue.items.len})', rvalue.get_context(), false, false, none)
+				}
+				for i in 0 .. items.len {
+					mut item := items[i]
+					mut item_lval := item.as_lvalue() or { continue }
+					item_type := if i < proper_rvalue.items.len {
+						proper_rvalue.items[i]
+					} else {
+						MypyTypeNode(AnyType{ type_of_any: .from_untyped_call })
+					}
+					tc.check_assignment(mut item_lval, item, item_type)
+				}
+			} else {
+				if proper_rvalue.items.len < items.len - 1 {
+					tc.msg.fail('Not enough values to unpack (expected at least ${items.len - 1}, got ${proper_rvalue.items.len})', rvalue.get_context(), false, false, none)
+				}
+				// Before star
+				for i in 0 .. star_index {
+					mut item := items[i]
+					mut item_lval := item.as_lvalue() or { continue }
+					tc.check_assignment(mut item_lval, item, proper_rvalue.items[i])
+				}
+				// The star itself
+				star_len := proper_rvalue.items.len - (items.len - 1)
+				mut starred_items := []MypyTypeNode{}
+				for i in 0 .. star_len {
+					starred_items << proper_rvalue.items[star_index + i]
+				}
+
+				mut star_expr_node := items[star_index]
+				if star_expr_node is StarExpr {
+					mut star_expr := star_expr_node as StarExpr
+					mut star_lval := Expression(star_expr).as_lvalue() or { panic('unreachable') }
+					// For now, starred assignment gets a List or Tuple of the items
+					// Mypy typically uses a List for the starred part
+					tc.check_assignment(mut star_lval, Expression(star_expr), MypyTypeNode(Instance{
+						type_name: 'builtins.list'
+						args: [join_type_list(starred_items)]
+					}))
+				}
+
+				// After star
+				for i in star_index + 1 .. items.len {
+					mut item := items[i]
+					mut item_lval := item.as_lvalue() or { continue }
+					tc.check_assignment(mut item_lval, item, proper_rvalue.items[proper_rvalue.items.len - (items.len - i)])
+				}
+			}
+		}
+		Instance {
+			item_type := tc.expr_checker.get_iterable_item_type(proper_rvalue)
+			if item_type is AnyType && (item_type as AnyType).type_of_any == .from_another_any {
+				tc.msg.fail('"' + proper_rvalue.type_name + '" object is not iterable', rvalue.get_context(), false, false, none)
+			} else {
+				for item_ in items {
+					mut item := item_
+					if item is StarExpr {
+						mut star_expr := item as StarExpr
+						mut star_lval := Expression(star_expr).as_lvalue() or { continue }
+						// For iterables, starred version is a list of the same element type
+						mut list_type := MypyTypeNode(Instance{
+							type_name: 'builtins.list'
+							args: [item_type]
+						})
+						tc.check_assignment(mut star_lval, Expression(star_expr), list_type)
+					} else if mut item_lval := item.as_lvalue() {
+						tc.check_assignment(mut item_lval, item, item_type)
+					}
+				}
+			}
+		}
+		AnyType {
+			for item_ in items {
+				mut item := item_
+				if item is StarExpr {
+					mut star_expr := item as StarExpr
+					mut star_lval := Expression(star_expr).as_lvalue() or { continue }
+					tc.check_assignment(mut star_lval, Expression(star_expr), proper_rvalue)
+				} else if mut item_lval := item.as_lvalue() {
+					tc.check_assignment(mut item_lval, item, proper_rvalue)
+				}
+			}
+		}
+		else {
+			tc.msg.fail('object is not iterable', rvalue.get_context(), false, false, none)
+		}
 	}
 }
 
@@ -318,7 +421,8 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			if mut node := lvalue.node {
 				if mut node is Var {
 					if target_type := node.type_ {
-						tc.check_subtype(rvalue_type, target_type, rvalue.get_context(), 'Incompatible types in assignment')
+						tc.check_subtype(rvalue_type, target_type, rvalue.get_context(),
+							'Incompatible types in assignment')
 					} else {
 						node.type_ = rvalue_type
 					}
@@ -327,17 +431,15 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		}
 		MemberExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
-			tc.expr_checker.accept(lvalue.expr)
-			
 			// If assigning to self.name, register it in the class TypeInfo
 			if mut active := tc.active_type {
 				if lvalue.expr is NameExpr {
 					base_name := (lvalue.expr as NameExpr).name
-					if base_name.trim_space() == 'self' {
+					if base_name.trim_space() == "self" {
 						if lvalue.name !in active.names.symbols {
 							mut v := Var{
 								name:     lvalue.name
-								fullname: active.fullname + '.' + lvalue.name
+								fullname: active.fullname + "." + lvalue.name
 								type_:    rvalue_type
 							}
 							active.names.symbols[lvalue.name] = SymbolTableNode{
@@ -348,67 +450,76 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 					}
 				}
 			}
-		}
-		TupleExpr {
-			tc.store_type(Expression(lvalue), rvalue_type)
-			proper_rvalue := get_proper_type(rvalue_type)
-			for i in 0 .. lvalue.items.len {
-				mut item := lvalue.items[i]
-				mut item_lval := item.as_lvalue() or { continue }
-				mut item_type := MypyTypeNode(AnyType{
-					type_of_any: .from_untyped_call
-				})
 
-				match proper_rvalue {
-					TupleType {
-						if i < proper_rvalue.items.len {
-							item_type = proper_rvalue.items[i]
-						}
-					}
-					Instance {
-						if (proper_rvalue.type_name == 'builtins.list'
-							|| proper_rvalue.type_name == 'builtins.tuple')
-							&& proper_rvalue.args.len > 0 {
-							item_type = proper_rvalue.args[0]
-						}
-					}
-					AnyType {
-						item_type = proper_rvalue
-					}
-					else {}
+			member_type := tc.expr_checker.visit_member_expr(lvalue, true)
+			if member_type is AnyType {
+				if member_type.type_of_any != .from_error {
+					tc.check_subtype(rvalue_type, member_type, rvalue.get_context(), 'Incompatible types in assignment')
 				}
-				tc.check_assignment(mut item_lval, item, item_type)
+			} else {
+				tc.check_subtype(rvalue_type, member_type, rvalue.get_context(), 'Incompatible types in assignment')
 			}
 		}
+		TupleExpr {
+			tc.check_unpacking_assignment(mut lvalue, lvalue.items, rvalue, rvalue_type)
+		}
 		ListExpr {
+			tc.check_unpacking_assignment(mut lvalue, lvalue.items, rvalue, rvalue_type)
+		}
+		StarExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
-			proper_rvalue := get_proper_type(rvalue_type)
-			for i in 0 .. lvalue.items.len {
-				mut item := lvalue.items[i]
-				mut item_lval := item.as_lvalue() or { continue }
-				mut item_type := MypyTypeNode(AnyType{
-					type_of_any: .from_untyped_call
+			if mut inner_lval := lvalue.expr.as_lvalue() {
+				// The rvalue_type should be an iterable.
+				// For *a = x, a gets a list containing elements of x if x is iterable.
+				item_type := tc.expr_checker.get_iterable_item_type(rvalue_type)
+				list_type := MypyTypeNode(Instance{
+					type_name: 'builtins.list'
+					args: [item_type]
 				})
-
-				match proper_rvalue {
-					TupleType {
-						if i < proper_rvalue.items.len {
-							item_type = proper_rvalue.items[i]
+				tc.check_assignment(mut inner_lval, lvalue.expr, list_type)
+			}
+		}
+		IndexExpr {
+			tc.store_type(Expression(lvalue), rvalue_type)
+			base_type := tc.expr_checker.accept(lvalue.base_)
+			proper_base := get_proper_type(base_type)
+			if proper_base is TypedDictType {
+				if lvalue.index is StrExpr {
+					key := (lvalue.index as StrExpr).value
+					if key in proper_base.items {
+						if key in proper_base.readonly_keys {
+							tc.msg.fail("Cannot assign to read-only TypedDict key '" + key + "'",
+								lvalue.get_context(), false, false, none)
 						}
-					}
-					Instance {
-						if (proper_rvalue.type_name == 'builtins.list'
-							|| proper_rvalue.type_name == 'builtins.tuple')
-							&& proper_rvalue.args.len > 0 {
-							item_type = proper_rvalue.args[0]
+						item_type := proper_base.items[key] or {
+							MypyTypeNode(AnyType{
+								type_of_any: .from_error
+							})
 						}
+						tc.check_subtype(rvalue_type, item_type, rvalue.get_context(),
+							'Incompatible types in assignment')
+					} else {
+						tc.msg.fail("TypedDict has no key '" + key + "'", lvalue.get_context(),
+							false, false, none)
 					}
-					AnyType {
-						item_type = proper_rvalue
-					}
-					else {}
+				} else {
+					tc.msg.fail('TypedDict index must be a string literal', lvalue.get_context(),
+						false, false, none)
 				}
-				tc.check_assignment(mut item_lval, item, item_type)
+			} else {
+				tc.expr_checker.check_method_call_by_name('__setitem__', base_type, [
+					lvalue.index,
+					Expression(TempNode{
+						base: NodeBase{
+							ctx: rvalue.get_context()
+						}
+						type_: rvalue_type
+						no_rhs: false
+					}),
+				], [
+					.arg_pos,
+					.arg_pos,
+				], lvalue.base)
 			}
 		}
 		StarExpr {
@@ -422,6 +533,7 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		}
 	}
 }
+
 
 // visit_return_stmt checks return
 pub fn (mut tc TypeChecker) visit_return_stmt(mut s ReturnStmt) !AnyNode {
@@ -466,21 +578,23 @@ pub fn (mut tc TypeChecker) visit_while_stmt(mut s WhileStmt) !AnyNode {
 // visit_for_stmt checks for
 pub fn (mut tc TypeChecker) visit_for_stmt(mut s ForStmt) !AnyNode {
 	iterable_type := tc.expr_checker.accept(s.expr)
-	
+
 	// Determine item type for loop variable
-	mut item_type := MypyTypeNode(AnyType{type_of_any: .from_untyped_call})
+	mut item_type := MypyTypeNode(AnyType{
+		type_of_any: .from_untyped_call
+	})
 	proper_iterable := get_proper_type(iterable_type)
 	if proper_iterable is Instance {
 		if proper_iterable.type_name == 'builtins.list' && proper_iterable.args.len > 0 {
 			item_type = proper_iterable.args[0]
 		}
 	}
-	
+
 	// Check loop variable (index)
 	if mut lval := s.index.as_lvalue() {
 		tc.check_assignment(mut lval, s.expr, item_type)
 	}
-	
+
 	s.body.accept(mut tc) or {}
 	if mut eb := s.else_body {
 		eb.accept(mut tc) or {}
@@ -513,7 +627,7 @@ pub fn (mut tc TypeChecker) visit_block(mut b Block) !AnyNode {
 		return ''
 	}
 	for mut s in b.body {
-		s.accept(mut tc) or { eprintln("### STMT ACCEPT ERR: ${err}") }
+		s.accept(mut tc) or { eprintln('### STMT ACCEPT ERR: ${err}') }
 	}
 	return ''
 }
@@ -550,8 +664,232 @@ pub fn (mut tc TypeChecker) visit_pass_stmt(mut s PassStmt) !AnyNode {
 
 // find_isinstance_check finds isinstance checks
 pub fn (tc TypeChecker) find_isinstance_check(node Expression) (TypeMap, TypeMap) {
-	// TODO: full implementation
+	match node {
+		CallExpr {
+			if !tc.is_isinstance_call(node) {
+				return TypeMap{}, TypeMap{}
+			}
+			if node.args.len != 2 {
+				return TypeMap{}, TypeMap{}
+			}
+
+			expr := node.args[0]
+			if literal(expr) == literal_no {
+				return TypeMap{}, TypeMap{}
+			}
+
+			declared := tc.lookup_narrowable_type(expr) or {
+				return TypeMap{}, TypeMap{}
+			}
+			narrowed := tc.resolve_isinstance_target_type(node.args[1]) or {
+				return TypeMap{}, TypeMap{}
+			}
+
+			key := expr.str()
+			mut if_map := TypeMap{}
+			if_map[key] = narrow_declared_type(declared, narrowed)
+			mut else_map := TypeMap{}
+			else_map[key] = remove_type_from_declared_type(declared, narrowed)
+			return if_map, else_map
+		}
+		UnaryExpr {
+			if node.op == 'not' {
+				if_map, else_map := tc.find_isinstance_check(node.expr)
+				return else_map, if_map
+			}
+		}
+		else {}
+	}
 	return TypeMap{}, TypeMap{}
+}
+
+// is_isinstance_call checks whether a call targets builtins.isinstance.
+fn (tc TypeChecker) is_isinstance_call(node CallExpr) bool {
+	return match node.callee {
+		NameExpr {
+			is_isinstance_name(node.callee.name, node.callee.fullname)
+		}
+		MemberExpr {
+			is_isinstance_name(node.callee.name, node.callee.fullname)
+		}
+		else {
+			false
+		}
+	}
+}
+
+// lookup_narrowable_type gets the current type of an expression that can be narrowed.
+fn (tc TypeChecker) lookup_narrowable_type(expr Expression) ?MypyTypeNode {
+	if typ := tc.lookup_type_or_none(expr) {
+		return typ
+	}
+
+	return match expr {
+		NameExpr {
+			lookup_symbol_declared_type(expr.node)
+		}
+		MemberExpr {
+			lookup_symbol_declared_type(expr.node)
+		}
+		else {
+			none
+		}
+	}
+}
+
+// resolve_isinstance_target_type resolves the target type in isinstance(expr, target).
+fn (tc TypeChecker) resolve_isinstance_target_type(expr Expression) ?MypyTypeNode {
+	match expr {
+		NameExpr {
+			return tc.resolve_isinstance_target_symbol(expr.node, Expression(expr))
+		}
+		MemberExpr {
+			return tc.resolve_isinstance_target_symbol(expr.node, Expression(expr))
+		}
+		TupleExpr {
+			mut items := []MypyTypeNode{}
+			for item in expr.items {
+				resolved := tc.resolve_isinstance_target_type(item) or {
+					return none
+				}
+				items << resolved
+			}
+			if items.len == 0 {
+				return none
+			}
+			if items.len == 1 {
+				return items[0]
+			}
+			return make_simplified_union(items, false)
+		}
+		else {}
+	}
+
+	if typ := tc.lookup_type_or_none(expr) {
+		proper := get_proper_type(typ)
+		if proper is TypeType {
+			return proper.item
+		}
+	}
+	return none
+}
+
+// is_isinstance_name checks whether a resolved callee name is isinstance.
+fn is_isinstance_name(name string, fullname string) bool {
+	return name == 'isinstance' || fullname == 'builtins.isinstance'
+}
+
+// lookup_symbol_declared_type gets a declared type directly from a symbol node.
+fn lookup_symbol_declared_type(sym ?MypyNode) ?MypyTypeNode {
+	if node := sym {
+		match node {
+			Var {
+				if typ := node.type_ {
+					return typ
+				}
+			}
+			else {}
+		}
+	}
+	return none
+}
+
+// resolve_isinstance_target_symbol resolves a narrowable type from a symbol reference.
+fn (tc TypeChecker) resolve_isinstance_target_symbol(sym ?MypyNode, expr Expression) ?MypyTypeNode {
+	if node := sym {
+		match node {
+			TypeInfo {
+				return MypyTypeNode(instance_from_type_info(node))
+			}
+			TypeAlias {
+				return node.target
+			}
+			Var {
+				if typ := node.type_ {
+					proper := get_proper_type(typ)
+					if proper is TypeType {
+						return proper.item
+					} else {
+						return typ
+					}
+				}
+			}
+			else {}
+		}
+	}
+
+	if typ := tc.lookup_type_or_none(expr) {
+		proper := get_proper_type(typ)
+		if proper is TypeType {
+			return proper.item
+		}
+	}
+	return none
+}
+
+// instance_from_type_info wraps a TypeInfo in an Instance for narrowing checks.
+fn instance_from_type_info(info TypeInfo) Instance {
+	info_ptr := &TypeInfo{
+		base:          info.base
+		name:          info.name
+		fullname:      info.fullname
+		module_name:   info.module_name
+		is_abstract:   info.is_abstract
+		is_protocol:   info.is_protocol
+		is_named_tuple: info.is_named_tuple
+		is_enum:       info.is_enum
+		is_newtype:    info.is_newtype
+		is_dataclass:  info.is_dataclass
+		names:         info.names
+		mro:           info.mro.clone()
+		type_vars:     info.type_vars.clone()
+		bases:         info.bases.clone()
+		promote_types: info.promote_types.clone()
+	}
+	return Instance{
+		typ:           info_ptr
+		type_:         info_ptr
+		type_name:     info.fullname
+		type_fullname: info.fullname
+	}
+}
+
+// remove_type_from_declared_type removes known subtypes from a declared type.
+fn remove_type_from_declared_type(declared MypyTypeNode, removed MypyTypeNode) MypyTypeNode {
+	declared_proper := get_proper_type(declared)
+	removed_proper := get_proper_type(removed)
+
+	if removed_proper is UnionType {
+		mut current := declared
+		for item in removed_proper.items {
+			current = remove_type_from_declared_type(current, item)
+			if get_proper_type(current) is UninhabitedType {
+				return current
+			}
+		}
+		return current
+	}
+
+	if declared_proper is UnionType {
+		mut remaining := []MypyTypeNode{}
+		for item in declared_proper.items {
+			if !is_subtype_simple(get_proper_type(item), removed_proper) {
+				remaining << item
+			}
+		}
+		if remaining.len == 0 {
+			return MypyTypeNode(UninhabitedType{})
+		}
+		if remaining.len == 1 {
+			return remaining[0]
+		}
+		return make_simplified_union(remaining, false)
+	}
+
+	if is_subtype_simple(declared_proper, removed_proper) {
+		return MypyTypeNode(UninhabitedType{})
+	}
+	return declared
 }
 
 // push_type_map adds type map
@@ -604,7 +942,7 @@ pub fn (mut tc TypeChecker) store_type(node Expression, typ MypyTypeNode) {
 	tc.persistent_type_map[pkey] = typ
 }
 
-pub fn (tc &TypeChecker) lookup_persistent_type(node Expression) ?MypyTypeNode {
+pub fn (tc TypeChecker) lookup_persistent_type(node Expression) ?MypyTypeNode {
 	ctx := node.get_context()
 	pkey := '${ctx.line}:${ctx.column}:${node.str()}'
 	return tc.persistent_type_map[pkey] or { none }
@@ -642,14 +980,14 @@ pub fn (tc TypeChecker) lookup_type_or_none(node Expression) ?MypyTypeNode {
 			return typ
 		}
 	}
-	
+
 	// Fallback for built-in constants if not in local maps
 	if key == 'True' || key == 'False' {
 		return MypyTypeNode(tc.named_type('bool'))
 	} else if key == 'None' {
 		return MypyTypeNode(tc.named_type('NoneType'))
 	}
-	
+
 	return none
 }
 
@@ -675,7 +1013,16 @@ pub fn (tc TypeChecker) named_generic_type(name string, args []MypyTypeNode) Ins
 
 // lookup_typeinfo looks up TypeInfo
 fn (tc TypeChecker) lookup_typeinfo(fullname string) TypeInfo {
-	_ = tc
+	if sym := lookup_fully_qualified(fullname, tc.modules) {
+		if node := sym.node {
+			match node {
+				TypeInfo {
+					return node
+				}
+				else {}
+			}
+		}
+	}
 	return TypeInfo{
 		fullname: fullname
 	}
@@ -683,16 +1030,66 @@ fn (tc TypeChecker) lookup_typeinfo(fullname string) TypeInfo {
 
 // lookup looks up symbol
 pub fn (tc TypeChecker) lookup(name string) SymbolTableNode {
-	_ = tc
-	_ = name
+	if name.len == 0 {
+		return SymbolTableNode{}
+	}
+	if name.contains('.') {
+		return tc.lookup_qualified(name)
+	}
+	if active := tc.active_type {
+		if name in active.names.symbols {
+			return active.names.symbols[name]
+		}
+	}
+	if name in tc.globals.symbols {
+		return tc.globals.symbols[name]
+	}
+	if 'builtins' in tc.modules {
+		builtins := tc.modules['builtins'] or { return SymbolTableNode{} }
+		if name in builtins.names.symbols {
+			return builtins.names.symbols[name]
+		}
+	}
+	if name in tc.modules {
+		mod := tc.modules[name] or { return SymbolTableNode{} }
+		return SymbolTableNode{
+			kind: gdef
+			node: SymbolNodeRef(mod)
+		}
+	}
 	return SymbolTableNode{}
 }
 
 // lookup_qualified looks up qualified name
 pub fn (tc TypeChecker) lookup_qualified(name string) SymbolTableNode {
-	_ = tc
-	_ = name
-	return SymbolTableNode{}
+	if !name.contains('.') {
+		return tc.lookup(name)
+	}
+	if sym := lookup_fully_qualified(name, tc.modules) {
+		return sym
+	}
+	parts := name.split('.')
+	mut current := tc.lookup(parts[0])
+	for i in 1 .. parts.len {
+		part := parts[i]
+		current_node := current.node or { return SymbolTableNode{} }
+		match current_node {
+			TypeInfo {
+				current = lookup_symbol_table_member(current_node.names.symbols, part)
+			}
+			MypyFile {
+				current = lookup_symbol_table_member(current_node.names.symbols, part)
+			}
+			else {
+				return SymbolTableNode{}
+			}
+		}
+	}
+	return current
+}
+
+fn lookup_symbol_table_member(symbols map[string]SymbolTableNode, name string) SymbolTableNode {
+	return symbols[name] or { SymbolTableNode{} }
 }
 
 // type_type returns type 'type'
@@ -949,7 +1346,31 @@ pub fn (mut tc TypeChecker) visit_operator_assignment_stmt(mut o OperatorAssignm
 }
 
 pub fn (mut tc TypeChecker) visit_assert_stmt(mut o AssertStmt) !AnyNode {
+	skip_expr_check := tc.is_assert_isinstance_expr(o.expr)
+	if !skip_expr_check {
+		tc.expr_checker.accept(o.expr)
+	}
+	type_map, _ := tc.find_isinstance_check(o.expr)
+	tc.push_type_map(type_map)
+	if msg := o.msg {
+		tc.expr_checker.accept(msg)
+	}
 	return ''
+}
+
+fn (tc TypeChecker) is_assert_isinstance_expr(expr Expression) bool {
+	return match expr {
+		CallExpr {
+			tc.is_isinstance_call(expr)
+		}
+		UnaryExpr {
+			expr.op == 'not' && expr.expr is CallExpr
+				&& tc.is_isinstance_call(expr.expr as CallExpr)
+		}
+		else {
+			false
+		}
+	}
 }
 
 pub fn (mut tc TypeChecker) visit_raise_stmt(mut o RaiseStmt) !AnyNode {
@@ -1026,17 +1447,12 @@ pub fn (mut tc TypeChecker) visit_type_info(mut o TypeInfo) !AnyNode {
 
 pub fn (mut tc TypeChecker) visit_lvalue(mut o Lvalue) !AnyNode {
 	match mut o {
-		ListExpr { tc.visit_list_expr(mut o)! }
 		MemberExpr { tc.visit_member_expr(mut o)! }
 		NameExpr { tc.visit_name_expr(mut o)! }
 		StarExpr { tc.visit_star_expr(mut o)! }
-		TupleExpr { tc.visit_tuple_expr(mut o)! }
 		IndexExpr { tc.visit_index_expr(mut o)! }
+		TupleExpr {}
+		ListExpr {}
 	}
 	return ''
 }
-
-
-
-
-

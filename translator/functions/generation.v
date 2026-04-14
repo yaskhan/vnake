@@ -6,19 +6,49 @@ import base
 
 pub struct FunctionsGenerationHandler {}
 
-pub fn (h FunctionsGenerationHandler) generate_function(
-	node &ast.FunctionDef,
+// find_inherited_method_return_type walks base classes and returns the first non-void method return type it finds.
+fn find_inherited_method_return_type(class_name string,
+	method_name string,
+	env &FunctionVisitEnv,
+	mut visited map[string]bool) ?string {
+	if class_name.len == 0 || class_name in visited {
+		return none
+	}
+	visited[class_name] = true
+	normalized_class := if class_name.ends_with('_Impl') {
+		class_name.all_before_last('_Impl')
+	} else {
+		class_name
+	}
+	bases := env.state.class_hierarchy[normalized_class] or { []string{} }
+	for base_name in bases {
+		sig_key := '${base_name}.${method_name}'
+		if sig := env.analyzer.call_signatures[sig_key] {
+			if sig.return_type.len > 0 && sig.return_type != 'void' {
+				return sig.return_type
+			}
+		}
+		if inherited := find_inherited_method_return_type(base_name, method_name, env, mut
+			visited)
+		{
+			return inherited
+		}
+	}
+	return none
+}
+
+pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	struct_name string,
 	mut env FunctionVisitEnv,
-	mut m FunctionsModule,
-) {
+	mut m FunctionsModule) {
 	ov_key := if struct_name.len > 0 { '${struct_name}.${node.name}' } else { node.name }
 	if ov_key in env.state.overloaded_signatures {
-		m.overload_handler.handle_overloads(node, struct_name, h.get_decorator_info(node, struct_name, env), mut env, mut m)
+		m.overload_handler.handle_overloads(node, struct_name, h.get_decorator_info(node,
+			struct_name, env), mut env, mut m)
 		return
 	}
 
-	is_method := struct_name.len > 0 && env.state.scope_stack.len == 0
+	is_method := struct_name.len > 0
 	mut is_abstract := false
 	for base_name in env.state.current_class_bases {
 		if node.name in env.state.abstract_methods[base_name] {
@@ -30,13 +60,17 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		return
 	}
 
-	mut is_nested := env.state.scope_stack.len > 0
+	mut is_nested := env.state.scope_stack.len > 0 && !is_method
 	mut annotations_data := map[string]string{}
-	
+
 	dec_info := h.get_decorator_info(node, struct_name, env)
 	mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
 	is_generator := dec_info.is_generator
-	
+	prev_in_generator := env.state.in_generator
+	env.state.in_generator = is_generator
+	prev_has_yield := env.state.has_yield
+	env.state.has_yield = false
+
 	mut output := []string{}
 	if env.state.include_all_symbols {
 		if env.source_mapping {
@@ -55,7 +89,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			for kw in decorator.keywords {
 				args_list << '${kw.arg}=${env.visit_expr_fn(kw.value)}'
 			}
-			dec_str = '${func_str}(${args_list.join(", ")})'
+			dec_str = '${func_str}(${args_list.join(', ')})'
 		} else {
 			dec_str = env.visit_expr_fn(decorator)
 		}
@@ -66,21 +100,60 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	mut args_names := []string{}
 	mut receiver_str := ''
 	mut receiver_name := 'self'
-	
+
 	mut args := node.args.posonlyargs.clone()
 	args << node.args.args
 	args << node.args.kwonlyargs
 
 	// Receiver handling
-	if is_method && node.name != '__new__' && args.len > 0 && args[0].arg in ['self', 'cls'] {
+	if is_method && node.name != '__new__' && args.len > 0 {
 		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
 			mut is_mutated := h.is_mutating_method(node, struct_name, &env)
+			mut func_keys := []string{}
+			if struct_name.len > 0 {
+				func_keys << '${struct_name}.${node.name}'
+			}
+			func_keys << node.name
+			for key in func_keys {
+				if key in env.analyzer.func_param_mutability && 0 in env.analyzer.func_param_mutability[key] {
+					is_mutated = true
+					break
+				}
+			}
 			p_key := '${struct_name}.${node.name}.self'
-			if m_info_self := env.analyzer.get_mutability(p_key) {
-				is_mutated = is_mutated || m_info_self.is_mutated
+			m_info_self := env.analyzer.get_mutability(p_key)
+			is_mutated = is_mutated || m_info_self.is_mutated
+			// Try without scope or with remapped scope
+			if !is_mutated && struct_name.len > 0 {
+				pure_struct := struct_name.all_before_last('_Impl')
+				mut py_func := node.name
+				if py_func.starts_with('py_') { py_func = py_func[3..] }
+				
+				// Try CamelCase too
+				keys := [
+					'${pure_struct}.${py_func}.self',
+					'${pure_struct}.${base.to_camel_case(py_func)}.self',
+					'${struct_name}.${node.name}.self'
+				]
+				for k in keys {
+					info := env.analyzer.get_mutability(k)
+					if info.is_mutated {
+						is_mutated = true
+						break
+					}
+				}
 			}
 
-			if dec_info.is_property { is_mutated = false }
+			if dec_info.is_property {
+				is_mutated = false
+			}
+
+			// In V 0.5, since we do not natively track intra-class method call mutability,
+			// always declare `self` as mutable to satisfy the V compiler for complex object updates.
+			// V will only emit warnings for unused mut declarations, avoiding fatal errors.
+			if !dec_info.is_property {
+				is_mutated = true
+			}
 
 			mut is_interface_impl := false
 			if struct_name.ends_with('_Impl') {
@@ -89,15 +162,18 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 					is_interface_impl = true
 				}
 			}
-			mut mut_pfx := if dec_info.is_setter || is_mutated || is_interface_impl { 'mut ' } else { '' }
 			gen_s := if env.state.current_class_generics.len > 0 {
 				mut v_gens := []string{}
 				for g in env.state.current_class_generics {
 					v_gens << env.state.current_class_generic_map[g] or { g }
 				}
-				'[${v_gens.join(", ")}]'
-			} else { '' }
-			receiver_str = '(${mut_pfx}${args[0].arg} ${struct_name}${gen_s}) '
+				'[${v_gens.join(', ')}]'
+			} else {
+				''
+			}
+			mut m_pfx := if is_mutated { 'mut ' } else { '' }
+			mut s_pfx := if is_mutated { '' } else { '&' }
+			receiver_str = '(${m_pfx}${args[0].arg} ${s_pfx}${struct_name}${gen_s}) '
 			receiver_name = args[0].arg
 		}
 		args = args[1..].clone()
@@ -106,38 +182,55 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	} else if env.state.current_class_is_unittest && args.len > 0 && args[0].arg == 'self' {
 		args = args[1..].clone()
 	}
-	
+
 	// Generics handling
 	mut py_func_generics := []string{}
-	
+
 	// Classmethod factories on generic classes MUST declare class generics
 	if dec_info.is_classmethod && struct_name.len > 0 && receiver_str == '' {
 		for g in env.state.current_class_generics {
-			if g !in py_func_generics { py_func_generics << g }
+			if g !in py_func_generics {
+				py_func_generics << g
+			}
 		}
 	}
 
 	if node.type_params.len > 0 {
 		for param in node.type_params {
 			mut clean_p := param.name
-			if clean_p.starts_with('**') { clean_p = clean_p[2..] }
-			else if clean_p.starts_with('*') { clean_p = clean_p[1..] }
-			
-			if clean_p !in py_func_generics { py_func_generics << clean_p }
+			if clean_p.starts_with('**') {
+				clean_p = clean_p[2..]
+			} else if clean_p.starts_with('*') {
+				clean_p = clean_p[1..]
+			}
+
+			if clean_p !in py_func_generics {
+				py_func_generics << clean_p
+			}
 			if def := param.default_ {
 				type_str := env.visit_expr_fn(def)
-				env.state.generic_defaults[param.name] = env.map_type_fn(type_str, struct_name, true, true, false)
+				env.state.generic_defaults[param.name] = env.map_type_fn(type_str, struct_name,
+					true, true, false)
 			}
 		}
-		full_func_name := if is_method && struct_name.len > 0 { '${struct_name}_${sanitize_name(node.name, false)}' } else { sanitize_name(node.name, false) }
+		full_func_name := if is_method && struct_name.len > 0 {
+			'${struct_name}_${sanitize_name(node.name, false)}'
+		} else {
+			sanitize_name(node.name, false)
+		}
 		env.state.type_params_map[full_func_name] = py_func_generics.clone()
 	}
 
 	if py_func_generics.len == 0 {
-		implicit_generics := extract_implicit_generics(node, env.state.type_vars, env.state.paramspec_vars, env.state.constrained_typevars, env.state.current_class_generics, base.sanitize_name_helper)
+		implicit_generics := extract_implicit_generics(node, env.state.type_vars, env.state.paramspec_vars,
+			env.state.constrained_typevars, env.state.current_class_generics, base.sanitize_name_helper)
 		if implicit_generics.len > 0 {
 			py_func_generics = implicit_generics.clone()
-			full_func_name := if is_method && struct_name.len > 0 { '${struct_name}_${sanitize_name(node.name, false)}' } else { sanitize_name(node.name, false) }
+			full_func_name := if is_method && struct_name.len > 0 {
+				'${struct_name}_${sanitize_name(node.name, false)}'
+			} else {
+				sanitize_name(node.name, false)
+			}
 			env.state.type_params_map[full_func_name] = py_func_generics.clone()
 		}
 	}
@@ -146,7 +239,6 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	if needs_lifting {
 		is_nested = false
 	}
-	
 
 	mut parent_scopes := [env.state.current_class_generic_map]
 	parent_scopes << env.state.generic_scopes
@@ -157,7 +249,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	all_active_scopes << env.state.generic_scopes
 	v_gens_to_declare := base.get_all_active_v_generics(all_active_scopes)
 	combined_map := base.get_combined_generic_map(all_active_scopes)
-	func_generics_str := base.get_generics_with_variance_str(v_gens_to_declare, combined_map, env.state.generic_variance, env.state.generic_defaults)
+	func_generics_str := base.get_generics_with_variance_str(v_gens_to_declare, combined_map,
+		env.state.generic_variance, env.state.generic_defaults)
 
 	if is_generator {
 		yield_type := coroutine_handler.get_yield_type(node)
@@ -165,7 +258,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		args_str_list << 'ch_in chan PyGeneratorInput'
 	}
 
-	mut func_name := if dec_info.implementation_name.len > 0 { dec_info.implementation_name } else { sanitize_name(node.name, false) }
+	mut func_name := if dec_info.implementation_name.len > 0 {
+		dec_info.implementation_name
+	} else {
+		sanitize_name(node.name, false)
+	}
 
 	// Default arguments map
 	mut defaults_map := map[string]ast.Expression{}
@@ -186,9 +283,13 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		if ann := arg.annotation {
 			arg_type = env.map_annotation_fn(ann)
 		} else {
-			p_key_arg := if struct_name.len > 0 { '${struct_name}.${node.name}.${arg.arg}' } else { '${node.name}.${arg.arg}' }
+			p_key_arg := if struct_name.len > 0 {
+				'${struct_name}.${node.name}.${arg.arg}'
+			} else {
+				'${node.name}.${arg.arg}'
+			}
 			loc := '${arg.token.line}:${arg.token.column}'
-			
+
 			// Check if parameter has None as default value - make type optional
 			if arg.arg in defaults_map {
 				default_expr := defaults_map[arg.arg]
@@ -198,7 +299,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 					has_none_default = true
 				}
 			}
-			
+
 			// Heuristic to match legacy test expectations:
 			// *args functions (vararg) expect 'Any' for untyped,
 			// **kwargs or regular functions expect 'int'.
@@ -206,8 +307,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			// If parameter has None default, use Any as fallback instead of int for better type safety
 			uses_default_type = true
 			default_type := if has_pos_vararg || has_none_default { 'Any' } else { 'int' }
-			
-			mut inf_t_arg := env.analyzer.get_mypy_type(arg.arg, loc) or { 
+
+			mut inf_t_arg := env.analyzer.get_mypy_type(arg.arg, loc) or {
 				env.analyzer.get_type(p_key_arg) or { default_type }
 			}
 			// Keep Any for parameters with None default (not converted to int)
@@ -225,21 +326,13 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 				has_none_default = true
 			}
 		}
-		
+
 		// If default is None and type is not already optional, make it optional
 		if has_none_default && !arg_type.starts_with('?') && arg_type != 'Any' {
 			arg_type = '?${arg_type}'
 		}
 
-		a_clean := arg_type.trim_left('?!')
-		if (a_clean.len > 0 && a_clean[0].is_capital() && a_clean !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !a_clean.starts_with('SumType_') && !a_clean.starts_with('TupleStruct_') && a_clean !in v_gens_to_declare) && !arg_type.starts_with('&') {
-			if arg_type.starts_with('?') {
-				arg_type = '?&' + arg_type[1..]
-			} else {
-				arg_type = '&' + arg_type
-			}
-		}
-		
+
 		// If after all checks still have None default, ensure type is ?Any (not ?int)
 		if has_none_default && uses_default_type && arg_type == 'int' {
 			arg_type = '?Any'
@@ -250,24 +343,54 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 		mut is_reassigned := false
 		mut is_mut := false
-		p_key_mut := if struct_name.len > 0 { '${struct_name}.${node.name}.${arg.arg}' } else { '${node.name}.${arg.arg}' }
-		if m_info := env.analyzer.get_mutability(p_key_mut) {
-			is_reassigned = m_info.is_reassigned
-			is_mut = m_info.is_reassigned || m_info.is_mutated
+		p_key_mut := if struct_name.len > 0 {
+			'${struct_name}.${node.name}.${arg.arg}'
+		} else {
+			'${node.name}.${arg.arg}'
+		}
+		m_info := env.analyzer.get_mutability(p_key_mut)
+		is_reassigned = m_info.is_reassigned
+		is_mut = m_info.is_reassigned || m_info.is_mutated
+
+		if !is_mut {
+			// Check other implementations IF we are in a class
+			if struct_name.len > 0 {
+				for other_cls, _ in env.analyzer.class_hierarchy {
+					other_key := '${other_cls}.${node.name}.${arg.arg}'
+					m_info_o := env.analyzer.get_mutability(other_key)
+					if m_info_o.is_reassigned || m_info_o.is_mutated {
+						is_mut = true
+						break
+					}
+				}
+			}
 		}
 
 		clean_type_arg := arg_type.trim_left('?')
-		is_primitive_arg := clean_type_arg in ['int', 'string', 'bool', 'f32', 'f64', 'i64', 'i16', 'i8', 'u8', 'u16', 'u32', 'u64', 'byte', 'rune', 'void', 'any']
-		
-		if (arg.arg in defaults_map && is_mut) || (is_primitive_arg && is_reassigned) {
-			local_mut_copies << [arg_name, arg_name]
-			is_mut = false
-		}
-		if is_mut && is_primitive_arg {
+		is_primitive_arg := clean_type_arg in ['int', 'string', 'bool', 'f32', 'f64', 'i64', 'i16',
+			'i8', 'u8', 'u16', 'u32', 'u64', 'byte', 'rune', 'void', 'any']
+
+		if (arg.arg in defaults_map && is_mut) || (is_primitive_arg && is_reassigned) || (!is_primitive_arg && is_mut) {
+			mut target_copy_name := arg_name
+			if !is_primitive_arg && is_mut && (arg_type.contains('&') || arg_type.starts_with('?') || arg_type in env.state.known_interfaces) {
+				target_copy_name = '${arg_name}_mut'
+				env.state.name_remap[arg_name] = target_copy_name
+			}
+			local_mut_copies << [arg_name, target_copy_name]
 			is_mut = false
 		}
 
-		args_str_list << '${if is_mut { "mut " } else { "" }}${arg_name} ${arg_type}'
+		if !is_mut {
+			if arg_name == 'self' || arg_name == 'cls' {
+				is_mut = true
+				if arg_type.contains('&') {
+					arg_type = arg_type.replace('&', '')
+				}
+			}
+		}
+
+		mut final_p_prefix := if is_mut { 'mut ' } else { '' }
+		args_str_list << '${final_p_prefix}${arg_name} ${arg_type}'
 	}
 
 	if node.args.vararg != none && node.args.kwarg != none {
@@ -281,10 +404,14 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			arg_type = env.map_annotation_fn(ann_var)
 		}
 		if is_nested {
-			if !arg_type.starts_with('[]') { arg_type = '[]' + arg_type }
+			if !arg_type.starts_with('[]') {
+				arg_type = '[]' + arg_type
+			}
 			args_str_list << '${arg_name_raw} ${arg_type}'
 		} else {
-			if arg_type.starts_with('[]') { arg_type = arg_type[2..] }
+			if arg_type.starts_with('[]') {
+				arg_type = arg_type[2..]
+			}
 			if arg_type.starts_with('...') {
 				args_str_list << '${arg_name_raw} ${arg_type}'
 			} else {
@@ -311,11 +438,24 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		if ann_ret := node.returns {
 			ret_type = env.map_annotation_fn(ann_ret)
 		} else {
-			p_key_ret := if struct_name.len > 0 { '${struct_name}.${node.name}@return' } else { '${node.name}@return' }
+			p_key_ret := if struct_name.len > 0 {
+				'${struct_name}.${node.name}@return'
+			} else {
+				'${node.name}@return'
+			}
 			inf_ret := env.analyzer.get_type(p_key_ret) or { 'void' }
 			ret_type = env.map_type_fn(inf_ret, struct_name, true, false, false)
+			if ret_type == 'void' && struct_name.len > 0 {
+				mut visited := map[string]bool{}
+				if inherited_ret := find_inherited_method_return_type(struct_name, node.name,
+					&env, mut visited)
+				{
+					ret_type = env.map_type_fn(inherited_ret, struct_name, true, false,
+						false)
+				}
+			}
 		}
-		
+
 		if node.returns == none && (ret_type == 'fn (...Any) Any' || ret_type.contains('|')) {
 			ret_type = 'Any'
 		}
@@ -325,8 +465,14 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		}
 
 		r_clean_ptr := ret_type.trim_left('?!')
-		is_v_native_method := node.name in ['__str__', '__repr__', 'str', 'repr', '__iter__', 'iter', '__next__', 'next', '__len__', 'len', '__getitem__', 'idx', '__setitem__', 'set', '__enter__', 'enter', '__exit__', 'exit']
-		if !is_v_native_method && r_clean_ptr.len > 0 && r_clean_ptr[0].is_capital() && r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'LiteralEnum_', 'NoneType'] && !r_clean_ptr.starts_with('SumType_') && !r_clean_ptr.starts_with('TupleStruct_') && r_clean_ptr !in v_gens_to_declare && !ret_type.starts_with('&') {
+		is_v_native_method := node.name in ['__str__', '__repr__', 'str', 'repr', '__iter__', 'iter',
+			'__next__', 'next', '__len__', 'len', '__getitem__', 'idx', '__setitem__', 'set',
+			'__enter__', 'enter', '__exit__', 'exit']
+		if !is_v_native_method && r_clean_ptr.len > 0 && r_clean_ptr[0].is_capital()
+			&& r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'NoneType']
+			&& !r_clean_ptr.starts_with('LiteralEnum_') && !r_clean_ptr.starts_with('SumType_')
+			&& !r_clean_ptr.starts_with('TupleStruct_')
+			&& r_clean_ptr !in v_gens_to_declare && r_clean_ptr !in env.state.known_interfaces && r_clean_ptr !in env.state.class_to_impl && !r_clean_ptr.ends_with('Protocol') && !ret_type.starts_with('&') {
 			if ret_type.starts_with('?') {
 				ret_type = '?&' + ret_type[1..]
 			} else {
@@ -335,7 +481,9 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		}
 	}
 
-	if dec_info.is_setter { ret_type = 'void' }
+	if dec_info.is_setter {
+		ret_type = 'void'
+	}
 
 	mut is_noreturn := false
 	if ret_type == 'noreturn' {
@@ -355,7 +503,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 				receiver_str = ''
 				ret_type = '&' + struct_name
 				if env.state.current_class_generics.len > 0 {
-					ret_type += '[${env.state.current_class_generics.join(", ")}]'
+					ret_type += '[${env.state.current_class_generics.join(', ')}]'
 				}
 				if env.state.defined_classes[struct_name]['is_pydantic'] {
 					ret_type = '!' + ret_type
@@ -375,20 +523,37 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 			func_name = if node.name in ['__str__', 'str'] { 'str' } else { 'repr' }
 			ret_type = 'string'
 		}
-		'__len__', 'len' { func_name = 'len' }
-		'__getitem__', 'idx' { func_name = 'idx' }
-		'__setitem__', '__set__', 'set' { func_name = 'set' }
+		'__len__', 'len' {
+			func_name = 'len'
+		}
+		'__getitem__', 'idx' {
+			func_name = 'idx'
+		}
+		'__setitem__', '__set__', 'set' {
+			func_name = 'set'
+		}
 		'__iter__', 'iter' {
 			func_name = 'iter'
 			if (ret_type == 'void' || ret_type == '') && struct_name.len > 0 {
-				ret_type = base.get_full_self_type(struct_name, env.state.current_class, env.state.current_class_generics)
+				ret_type = base.get_full_self_type(struct_name, env.state.current_class,
+					env.state.current_class_generics)
 			}
 		}
-		'__enter__', '__aenter__', 'enter' { func_name = 'enter' }
-		'__exit__', '__aexit__', 'exit' { func_name = 'exit' }
-		'__get__', 'get' { func_name = 'get' }
-		'__delete__', 'delete' { func_name = 'delete' }
-		'__post_init__', 'post_init' { func_name = 'post_init' }
+		'__enter__', '__aenter__', 'enter' {
+			func_name = 'enter'
+		}
+		'__exit__', '__aexit__', 'exit' {
+			func_name = 'exit'
+		}
+		'__get__', 'get' {
+			func_name = 'get'
+		}
+		'__delete__', 'delete' {
+			func_name = 'delete'
+		}
+		'__post_init__', 'post_init' {
+			func_name = 'post_init'
+		}
 		else {
 			if dec_info.is_classmethod || dec_info.is_staticmethod {
 				func_name = '${struct_name}_${func_name}'
@@ -410,42 +575,59 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		}
 	}
 
-	if ret_type != 'void' { annotations_data['return'] = ret_type }
+	if ret_type != 'void' {
+		annotations_data['return'] = ret_type
+	}
 
 	pub_pfx := if env.state.is_exported(node.name) { 'pub ' } else { '' }
 	mut dep_attr := if dec_info.is_deprecated {
-		if dec_info.deprecated_msg.len > 0 { '@[deprecated: \'${dec_info.deprecated_msg}\']\n' } else { '@[deprecated]\n' }
-	} else { '' }
+		if dec_info.deprecated_msg.len > 0 {
+			'@[deprecated: \'${dec_info.deprecated_msg}\']\n'
+		} else {
+			'@[deprecated]\n'
+		}
+	} else {
+		''
+	}
 	nor_attr := if is_noreturn { '@[noreturn]\n' } else { '' }
 
 	mut decl := ''
 	if node.name in base.op_methods_to_symbols && is_method {
 		op := base.op_methods_to_symbols[node.name]
 		ret_s_op := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
-		decl = '${dep_attr}fn ${receiver_str}${op} (${args_str_list.join(", ")})${ret_s_op} {'
+		decl = '${dep_attr}fn ${receiver_str}${op} (${args_str_list.join(', ')})${ret_s_op} {'
 	} else if is_nested {
 		mut any_args := []string{}
 		for arg in args_str_list {
 			any_args << replace_generics_with_any(arg, env.state.generic_scopes)
 		}
 		any_ret := replace_generics_with_any(ret_type, env.state.generic_scopes)
-		
+
 		captures := find_captured_vars(node, env.state.scope_stack, base.sanitize_name_helper)
-		c_str := if captures.len > 0 { '[${captures.join(", ")}] ' } else { '' }
+		c_str := if captures.len > 0 { '[${captures.join(', ')}] ' } else { '' }
 		ret_s_nested := if any_ret != 'void' && any_ret != '' { ' ${any_ret}' } else { '' }
-		decl = 'mut ${func_name} := fn ${c_str}(${any_args.join(", ")})${ret_s_nested} {'
+		decl = 'mut ${func_name} := fn ${c_str}(${any_args.join(', ')})${ret_s_nested} {'
+		
+		// Register the function type for correct call handling (like wrapping *args)
+		// Use known_v_types which is accessible to guess_type
+		v_type := 'fn (${any_args.join(', ')}) ${if any_ret.len > 0 { any_ret } else { 'void' }}'
+		env.state.known_v_types[func_name] = v_type
 	} else {
 		ret_s_def := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
-		decl = '${nor_attr}${dep_attr}${pub_pfx}fn ${receiver_str}${func_name}${func_generics_str}(${args_str_list.join(", ")})${ret_s_def} {'
+		decl = '${nor_attr}${dep_attr}${pub_pfx}fn ${receiver_str}${func_name}${func_generics_str}(${args_str_list.join(', ')})${ret_s_def} {'
 	}
 
 	output << decl
 	env.emit_fn(output.join('\n'))
-	
+
 	env.state.indent_level++
-	
+
 	if dec_info.cache_wrapper_needed {
-		mut base_cache_name := if struct_name.len > 0 { '${struct_name}_${node.name}_cache' } else { '${node.name}_cache' }
+		mut base_cache_name := if struct_name.len > 0 {
+			'${struct_name}_${node.name}_cache'
+		} else {
+			'${node.name}_cache'
+		}
 		cache_name := base.to_snake_case(base_cache_name).trim_left('_')
 		if ret_type.len > 0 && !ret_type.contains('|') {
 			env.emit_constant_fn('__global ${cache_name} = map[string]${ret_type}{}')
@@ -454,23 +636,54 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 		}
 	}
 
-	for line in dec_info.injected_start { env.emit_fn(env.state.indent() + line) }
-	
+	for line in dec_info.injected_start {
+		env.emit_fn(env.state.indent() + line)
+	}
+
 	prev_in_init := env.state.in_init
 	if is_init {
 		env.state.in_init = true
-		env.emit_fn(env.state.indent() + 'mut self := ${ret_type}{}')
+		mut init_fields := []string{}
+		for stmt in node.body {
+			if stmt is ast.Assign {
+				for target in stmt.targets {
+					if target is ast.Attribute && target.value is ast.Name && (target.value as ast.Name).id == receiver_name {
+						attr := base.sanitize_name(target.attr, false, map[string]bool{}, "", map[string]bool{})
+						val := env.visit_expr_fn(stmt.value)
+						init_fields << '${attr}: ${val}'
+					}
+				}
+			} else if stmt is ast.AnnAssign {
+				if stmt.target is ast.Attribute && stmt.target.value is ast.Name && (stmt.target.value as ast.Name).id == receiver_name {
+					attr := base.sanitize_name(stmt.target.attr, false, map[string]bool{}, "", map[string]bool{})
+					if dv := stmt.value {
+						val := env.visit_expr_fn(dv)
+						init_fields << '${attr}: ${val}'
+					}
+				}
+			}
+		}
+		mut struct_init := if init_fields.len > 0 { '{${init_fields.join(", ")}}' } else { '{}' }
+		env.emit_fn(env.state.indent() + 'mut self := ${ret_type}${struct_init}')
 	}
 
 	prev_ret_type_state := env.state.current_function_return_type
 	env.state.current_function_return_type = ret_type
-	
-	env.push_scope_fn()
+
+	env.push_scope_fn(node.name)
 	if is_method && receiver_name.len > 0 {
 		env.analyzer.type_map[receiver_name] = struct_name
 	}
-	for name_arg in args_names { env.declare_local_fn(name_arg) }
-	if is_nested { env.state.scope_stack.last()[func_name] = true }
+	for name_arg in args_names {
+		env.declare_local_fn(name_arg)
+	}
+	if is_nested {
+		// Register nested function in the parent scope so it can be found by is_declared_local
+		idx := env.state.scope_stack.len - 2
+		if idx >= 0 {
+			env.state.scope_stack[idx][func_name] = true
+		}
+	}
 
 	if is_generator {
 		env.emit_fn(env.state.indent() + '_ = <-ch_in')
@@ -479,16 +692,27 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 
 	for copy in local_mut_copies {
 		env.emit_fn(env.state.indent() + 'mut ${copy[1]} := ${copy[0]}')
+		env.declare_local_fn(copy[1])
+	}
+	for stmt in node.body {
+		env.visit_stmt_fn(stmt)
 	}
 
-	is_empty := if node.body.len == 0 { true } else if node.body.len == 1 && node.body[0] is ast.Pass { true } else { false }
+	if env.state.in_generator && !env.state.has_yield {
+		// This is just a normal function returning an iterator
+	}
 
-	if is_empty && ret_type != 'void' && ret_type != '' && !is_init {
-		env.emit_fn(env.state.indent() + 'return // TODO: default value for ${ret_type}')
-	} else {
-		for stmt in node.body {
-			env.visit_stmt_fn(stmt)
+	// Clean up name remaps for parameters
+	for copy in local_mut_copies {
+		if copy[0] != copy[1] {
+			env.state.name_remap.delete(copy[0])
 		}
+	}
+
+	if ret_type != 'void' && ret_type != '' && !is_init && !ends_with_return(node.body) {
+		// V requires explicit return
+		default_val := base.get_v_default_value(ret_type, v_gens_to_declare)
+		env.emit_fn(env.state.indent() + 'return ${default_val} // TODO: default value for ${ret_type}')
 	}
 
 	if is_generator {
@@ -506,202 +730,203 @@ pub fn (h FunctionsGenerationHandler) generate_function(
 	env.pop_scope_fn()
 	env.state.in_init = prev_in_init
 	env.state.current_function_return_type = prev_ret_type_state
-	for line in dec_info.injected_end { env.emit_fn(env.state.indent() + line) }
-	
+	env.state.has_yield = prev_has_yield
+	env.state.in_generator = prev_in_generator
+	for line in dec_info.injected_end {
+		env.emit_fn(env.state.indent() + line)
+	}
+
 	env.state.indent_level--
 	env.emit_fn(env.state.indent() + '}')
 
 	if dec_info.cache_wrapper_needed && dec_info.implementation_name.len > 0 {
 		wrapper_name := node.name
 		impl_name := dec_info.implementation_name
-		mut base_cache_var := if struct_name.len > 0 { '${struct_name}_${wrapper_name}_cache' } else { '${wrapper_name}_cache' }
+		mut base_cache_var := if struct_name.len > 0 {
+			'${struct_name}_${wrapper_name}_cache'
+		} else {
+			'${wrapper_name}_cache'
+		}
 		cache_var := base.to_snake_case(base_cache_var).trim_left('_')
-		
+
 		mut wrapper_lines := []string{}
-		mut wrapper_decl := '${pub_pfx}fn ${receiver_str}${wrapper_name}(${args_str_list.join(", ")}) ${ret_type} {'
+		mut wrapper_decl := '${pub_pfx}fn ${receiver_str}${wrapper_name}(${args_str_list.join(', ')}) ${ret_type} {'
 		wrapper_lines << wrapper_decl
-		
+
 		// Generate key: '${self}_${arg1}_${arg2}'
 		mut key_parts := []string{}
-		if struct_name.len > 0 { key_parts << '${receiver_name}' }
-		for arg in args_names { key_parts << '${arg}' }
-		key_expr := if key_parts.len > 0 { "'\${" + key_parts.join("}_\${") + "}'" } else { "''" }
-		
+		if struct_name.len > 0 {
+			key_parts << '${receiver_name}'
+		}
+		for arg in args_names {
+			key_parts << '${arg}'
+		}
+		key_expr := if key_parts.len > 0 { "'\${" + key_parts.join('}_\${') + "}'" } else { "''" }
+
 		wrapper_lines << '    key := ${key_expr}'
 		wrapper_lines << '    if key in ${cache_var} { return ${cache_var}[key] as ${ret_type} }'
-		
+
 		call_prefix := if struct_name.len > 0 { '${receiver_name}.' } else { '' }
-		wrapper_lines << '    res := ${call_prefix}${impl_name}(${args_names.join(", ")})'
+		wrapper_lines << '    res := ${call_prefix}${impl_name}(${args_names.join(', ')})'
 		wrapper_lines << '    ${cache_var}[key] = res'
 		wrapper_lines << '    return res'
 		wrapper_lines << '}'
-		
+
 		env.emit_function_fn(wrapper_lines.join('\n'))
 	}
 
 	if annotations_data.len > 0 {
 		mut anno_list := []string{}
 		for k, v in annotations_data {
-			anno_list << "${double_quote(k)}: ${double_quote(v)}"
+			anno_list << '${double_quote(k)}: ${double_quote(v)}'
 		}
-		mut base_const_name := if struct_name.len > 0 { '${struct_name}_${func_name}_annotations' } else { '${func_name}_annotations' }
+		mut base_const_name := if struct_name.len > 0 {
+			'${struct_name}_${func_name}_annotations'
+		} else {
+			'${func_name}_annotations'
+		}
 		const_name := base.to_snake_case(base_const_name).trim_left('_')
-		env.emit_constant_fn('${if pub_pfx.len > 0 { "pub " } else { "" }}const ${const_name} = { ${anno_list.join(", ")} }')
+		env.emit_constant_fn('${if pub_pfx.len > 0 { 'pub ' } else { '' }}const ${const_name} = { ${anno_list.join(', ')} }')
 	}
-	
+
 	if py_func_generics.len > 0 {
 		mut gen_list := []string{}
-		for g in py_func_generics { gen_list << double_quote(g) }
-		mut base_const_name := if struct_name.len > 0 { '${struct_name}_${func_name}_type_params' } else { '${func_name}_type_params' }
+		for g in py_func_generics {
+			gen_list << double_quote(g)
+		}
+		mut base_const_name := if struct_name.len > 0 {
+			'${struct_name}_${func_name}_type_params'
+		} else {
+			'${func_name}_type_params'
+		}
 		const_name := base.to_snake_case(base_const_name).trim_left('_')
-		env.emit_constant_fn('${if pub_pfx.len > 0 { "pub " } else { "" }}const ${const_name} = [ ${gen_list.join(", ")} ]')
+		env.emit_constant_fn('${if pub_pfx.len > 0 { 'pub ' } else { '' }}const ${const_name} = [ ${gen_list.join(', ')} ]')
 	}
 }
 
 fn (h FunctionsGenerationHandler) is_static_or_classmethod(node &ast.FunctionDef, env &FunctionVisitEnv) bool {
 	for dec in node.decorator_list {
 		name := env.visit_expr_fn(dec)
-		if name in ['staticmethod', 'classmethod'] { return true }
+		if name in ['staticmethod', 'classmethod'] {
+			return true
+		}
 	}
 	return false
 }
 
 fn (h FunctionsGenerationHandler) is_mutating_method(node &ast.FunctionDef, class_name string, env &FunctionVisitEnv) bool {
-
 	if node.decorator_list.len > 0 {
-
 		for dec in node.decorator_list {
-
 			name := env.visit_expr_fn(dec)
 
-			if name.ends_with('staticmethod') || name.ends_with('classmethod') { return false }
-
+			if name.ends_with('staticmethod') || name.ends_with('classmethod') {
+				return false
+			}
 		}
-
 	}
 
-	
-
-	if h.scan_body_for_self_assign(node.body) { return true }
-
-	
+	if h.scan_body_for_self_assign(node.body) {
+		return true
+	}
 
 	return node.name == '__init__'
-
 }
 
-
-
 fn (h FunctionsGenerationHandler) scan_body_for_self_assign(body []ast.Statement) bool {
-
 	for stmt in body {
-
 		match stmt {
-
 			ast.Assign {
-
 				for tgt in stmt.targets {
-
 					if tgt is ast.Attribute {
-
 						val := tgt.value
 
-						if val is ast.Name && val.id == 'self' { return true }
-
+						if val is ast.Name && val.id == 'self' {
+							return true
+						}
 					}
-
 				}
-
 			}
-
 			ast.AnnAssign {
-
 				tgt := stmt.target
 
 				if tgt is ast.Attribute {
-
 					val := tgt.value
 
-					if val is ast.Name && val.id == 'self' { return true }
-
+					if val is ast.Name && val.id == 'self' {
+						return true
+					}
 				}
-
 			}
-
 			ast.AugAssign {
-
 				tgt := stmt.target
 
 				if tgt is ast.Attribute {
-
 					val := tgt.value
 
-					if val is ast.Name && val.id == 'self' { return true }
-
+					if val is ast.Name && val.id == 'self' {
+						return true
+					}
+				}
+			}
+			ast.If {
+				if h.scan_body_for_self_assign(stmt.body) {
+					return true
 				}
 
+				if h.scan_body_for_self_assign(stmt.orelse) {
+					return true
+				}
 			}
-
-			ast.If {
-
-				if h.scan_body_for_self_assign(stmt.body) { return true }
-
-				if h.scan_body_for_self_assign(stmt.orelse) { return true }
-
-			}
-
 			ast.For {
+				if h.scan_body_for_self_assign(stmt.body) {
+					return true
+				}
 
-				if h.scan_body_for_self_assign(stmt.body) { return true }
-
-				if h.scan_body_for_self_assign(stmt.orelse) { return true }
-
+				if h.scan_body_for_self_assign(stmt.orelse) {
+					return true
+				}
 			}
-
 			ast.While {
+				if h.scan_body_for_self_assign(stmt.body) {
+					return true
+				}
 
-				if h.scan_body_for_self_assign(stmt.body) { return true }
-
-				if h.scan_body_for_self_assign(stmt.orelse) { return true }
-
+				if h.scan_body_for_self_assign(stmt.orelse) {
+					return true
+				}
 			}
-
 			ast.Try {
-
-				if h.scan_body_for_self_assign(stmt.body) { return true }
+				if h.scan_body_for_self_assign(stmt.body) {
+					return true
+				}
 
 				for handler in stmt.handlers {
-
-					if h.scan_body_for_self_assign(handler.body) { return true }
-
+					if h.scan_body_for_self_assign(handler.body) {
+						return true
+					}
 				}
 
-				if h.scan_body_for_self_assign(stmt.orelse) { return true }
+				if h.scan_body_for_self_assign(stmt.orelse) {
+					return true
+				}
 
-				if h.scan_body_for_self_assign(stmt.finalbody) { return true }
-
+				if h.scan_body_for_self_assign(stmt.finalbody) {
+					return true
+				}
 			}
-
 			ast.With {
-
-				if h.scan_body_for_self_assign(stmt.body) { return true }
-
+				if h.scan_body_for_self_assign(stmt.body) {
+					return true
+				}
 			}
-
 			ast.FunctionDef {
-
 				// Don't scan nested functions
-
 			}
-
 			else {}
-
 		}
-
 	}
 
 	return false
-
 }
 
 fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, struct_name string, env FunctionVisitEnv) DecoratorInfo {
@@ -738,7 +963,7 @@ fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, stru
 		} else if dec_name.ends_with('deprecated') {
 			info.is_deprecated = true
 			if dec is ast.Call && dec.args.len > 0 {
-				info.deprecated_msg = env.visit_expr_fn(dec.args[0]).trim("'\"")
+				info.deprecated_msg = env.visit_expr_fn(dec.args[0]).trim('\'"')
 			}
 		}
 	}
@@ -756,12 +981,19 @@ fn replace_generics_with_any(type_str string, generic_scopes []map[string]string
 	for scope in generic_scopes {
 		for _, v_name in scope {
 			// Basic word boundary replacement for the mapped generic name
-			if res == v_name { return 'Any' }
-			if res.contains('[${v_name}]') { res = res.replace('[${v_name}]', '[Any]') }
-			if res.contains('[]${v_name}') { res = res.replace('[]${v_name}', '[]Any') }
-			if res.ends_with(' ${v_name}') { res = res.replace(' ${v_name}', ' Any') }
+			if res == v_name {
+				return 'Any'
+			}
+			if res.contains('[${v_name}]') {
+				res = res.replace('[${v_name}]', '[Any]')
+			}
+			if res.contains('[]${v_name}') {
+				res = res.replace('[]${v_name}', '[]Any')
+			}
+			if res.ends_with(' ${v_name}') {
+				res = res.replace(' ${v_name}', ' Any')
+			}
 		}
 	}
 	return res
 }
-

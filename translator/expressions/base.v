@@ -49,9 +49,7 @@ pub fn (eg &ExprGen) guess_type_no_loc(node ast.Expression) string {
 pub fn (mut eg ExprGen) wrap_bool(node ast.Expression, invert bool) string {
 	v_type := eg.guess_type(node)
 	expr := eg.visit(node)
-	eprintln('DEBUG: ExprGen.wrap_bool expr=${expr} type=${v_type} invert=${invert}')
 	if v_type == 'Any' || v_type.starts_with('?') {
-		eprintln('DEBUG: wrap_bool marking py_bool used for expr=${expr} type=${v_type}')
 		eg.state.used_builtins['py_bool'] = true
 	}
 	return base.wrap_bool(node, expr, v_type, invert)
@@ -88,7 +86,6 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 		ast.DictComp { return eg.visit_dict_comp(node, '') or { '{}' } }
 		ast.SetComp { return eg.visit_set_comp(node, '') or { '{}' } }
 		ast.IfExp {
-			eprintln('DEBUG: ExprGen.visit IfExp node=${node.str()}')
 			return eg.visit_if_exp(node)
 		}
 		ast.Starred { return eg.visit_starred(node) }
@@ -104,16 +101,39 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 }
 
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
-	name := eg.state.name_remap[node.id] or { node.id }
+	if node.id == '__name__' {
+		return '__name__'
+	}
+	mut name := eg.state.name_remap[node.id] or { node.id }
+	if name != node.id {
+	}
 	
+	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
+	// don't use it for assignment LHS, as we must assign to the base variable.
+	if eg.state.in_assignment_lhs && (name.contains('(') || name.contains(' ') || name.contains(' as ') || name.starts_with('narrowed_')) {
+		name = node.id
+	}
+
+	sanitized := base.sanitize_name(name, false, map[string]bool{}, '', map[string]bool{})
+	
+	v_type := eg.guess_type(node)
+	if v_type.starts_with('?') && !eg.state.in_assignment_lhs {
+		// If explicitly narrowed in this scope, or it's a _mut shadow variable, V 0.5 already considers it non-optional
+		if eg.state.narrowed_vars[sanitized] || sanitized.ends_with('_mut') {
+			return sanitized
+		}
+		// Unwrap if the target context requires non-optional type
+		if (!eg.target_type.starts_with('?') && eg.target_type != 'Any' && eg.target_type != '') {
+			return "(${sanitized} or { panic('narrowed var is none') })"
+		}
+	}
+
 	if name == 'str' { return "string" }
 	if name == 'float' { return "f64" }
 	if name == 'int' { return "int" }
 	if name == 'bool' { return "bool" }
 
-	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
-	// don't sanitize it again, as it contains V syntax.
-	if name.contains('(') || name.contains(' ') || name.contains(' as ') {
+	if (name.contains('(') || name.contains(' ') || name.contains(' as ')) {
 		return name
 	}
 
@@ -312,6 +332,7 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 			parts << "''"
 		}
 
+		eg.state.used_builtins['Template'] = true
 		return 'Template{strings: [${parts.join(', ')}], interpolations: [${interpolations.join(', ')}]}'
 }
 
@@ -341,14 +362,17 @@ pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
 		} else if content.starts_with('__py2v_rt__') {
 			content = content['__py2v_rt__'.len..]
 		}
+		eg.state.used_builtins['Template'] = true
 		return 'Template{strings: [${eg.quote_string_content(content, is_raw)}], interpolations: []}'
 	}
 	if node.token.typ == .string_tok || node.token.typ == .fstring_tok {
-		if node.value.starts_with("'") || node.value.starts_with('"') || node.value.starts_with('t\'')
-			|| node.value.starts_with('t"') {
-			return node.value
+		if node.value.starts_with('t\'') || node.value.starts_with('t"') || node.value.starts_with('rt\'') || node.value.starts_with('rt"') {
+			return eg.visit_constant(node) // recursion handled by prefix check
 		}
-		return "'${node.value}'"
+		content := eg.extract_string_content(node.value)
+		is_raw := node.value.starts_with('r') || node.value.starts_with('R') || node.value.contains('r\'') || node.value.contains('r"') ||
+		          node.token.value.starts_with('r') || node.token.value.starts_with('R') || node.token.value.contains('r\'') || node.token.value.contains('r"')
+		return eg.quote_string_content(content, is_raw)
 	}
 	mut val := node.value
 	if node.token.typ == .number {
@@ -489,8 +513,12 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 }
 
 pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
-	dict_type := if eg.target_type.len > 0 { eg.target_type } else { 'Any' }
-	is_struct := dict_type in eg.state.defined_classes
+	mut dict_type := if eg.target_type.len > 0 { eg.target_type } else { 'Any' }
+	mut pure_dict_type := dict_type.trim_left('?&')
+	is_struct := pure_dict_type in eg.state.defined_classes || pure_dict_type in eg.state.typed_dicts
+	if is_struct {
+		dict_type = pure_dict_type
+	}
 
 	if node.keys.len == 0 {
 		if is_struct { return "${dict_type}{}" }
@@ -786,7 +814,7 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: eg.state.imported_symbols
 		defined_classes:  eg.state.defined_classes
-		scc_files:        eg.state.scc_files.keys()
+		scc_files:        eg.state.scc_files
 		used_builtins:    eg.state.used_builtins
 		warnings:         eg.state.warnings
 		include_all_symbols: eg.state.include_all_symbols
@@ -795,7 +823,7 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 	mut actual_struct := if opts.struct_name.len > 0 && opts.struct_name != 'Self' { opts.struct_name } else { eg.state.current_class }
 	if actual_struct == '' { actual_struct = 'Self' }
 
-	return base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string) string {
+	return base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string, def string) string {
 		if name == 'Self' || name == 'typing.Self' {
 			mut v_gens := []string{}
 			for gn in eg.state.current_class_generics {
@@ -805,14 +833,17 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 			return "&" + actual_struct + gen_s
 		}
 		if name.contains("|") {
-			eg.state.generated_sum_types[name] = ''
+			return ""
+		}
+		if name.len > 0 {
+			eg.state.generated_sum_types[name] = def
 			return name
 		}
 		return ""
 	}, noop_literal_registrar, noop_tuple_registrar)
 }
 
-fn noop_sum_type_registrar(_ string) string {
+fn noop_sum_type_registrar(_ string, _ string) string {
 	return ''
 }
 

@@ -111,19 +111,56 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 			}
 		}
 	} else if target is ast.Name {
-		lhs := base.sanitize_name(target.id, false, map[string]bool{}, '', map[string]bool{})
-		if t.is_declared_local(lhs) {
-			t.emit_indented('${lhs} = ${source_expr}')
+		target_lhs := t.visit_expr(target)
+		
+		if t.is_declared_local(target_lhs) {
+			t.emit_indented('${target_lhs} = ${source_expr}')
 		} else {
-			t.emit_indented('${lhs} := ${source_expr}')
-			t.declare_local(lhs)
+			t.emit_indented('${target_lhs} := ${source_expr}')
+			t.declare_local(target_lhs)
 		}
 	} else {
+		mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
+		mut obj_expr := ''
+		mut obj_type := ''
+		mut base_name := ''
+		
+		if target is ast.Attribute {
+			obj_expr = eg.visit(target.value)
+			obj_type = t.guess_type(target.value)
+			base_name = obj_expr
+		} else if target is ast.Subscript {
+			if target.value is ast.Attribute {
+				attr := target.value
+				obj_expr = eg.visit(attr.value)
+				obj_type = t.guess_type(attr.value)
+				base_name = obj_expr
+			} else {
+				obj_expr = eg.visit(target.value)
+				obj_type = t.guess_type(target.value)
+				base_name = obj_expr
+			}
+		}
+		
+		if base_name != '' {
+			if base_name.contains(' or {') { base_name = base_name.all_before(' or {').trim_left('(') }
+			mut b_name := base_name.trim('()').trim_space()
+			if obj_type.starts_with('?') || obj_expr.contains(' or {') || b_name.contains('_mut') {
+				t.emit_indented('if mut ${b_name} != none {')
+				t.state.narrowed_vars[b_name] = true
+				t.state.indent_level++
+				t.emit_indented('${t.visit_expr(target)} = ${source_expr}')
+				t.state.indent_level--
+				t.state.narrowed_vars.delete(b_name)
+				t.emit_indented('} else { panic("unwrap failed for assignment to ${b_name}") }')
+				return
+			}
+		}
 		t.emit_indented('${t.visit_expr(target)} = ${source_expr}')
 	}
 }
 
-	fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
+fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 	// println('Visiting ExprStmt: ${node.str()}')
 	val := node.value
 	if val is ast.Constant {
@@ -230,6 +267,9 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 fn (mut t Translator) visit_assign(node ast.Assign) {
 	if node.targets.len == 0 {
 		return
+	}
+	first_target := node.targets[0]
+	if first_target is ast.Name {
 	}
 	if node.targets.len > 1 {
 		t.emit_indented('//##LLM@@ Multiple assignment not fully lowered.')
@@ -373,8 +413,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	} else {
 		mut target_type := ''
 		if target is ast.Name {
-			if target.id in t.analyzer.type_map {
-				target_type = t.analyzer.type_map[target.id]
+			if res := t.analyzer.get_type(target.id) {
+				target_type = res
 			}
 		} else {
 			target_type = t.guess_type(target)
@@ -413,14 +453,12 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			// High-fidelity type alias resolution
 			mut inferred_found := ''
 			if inf1 := t.analyzer.get_type(id) {
-				 // eprintln('DEBUG ALIAS RESOLVE1: id=${id} inf1=${inf1}')
 				inferred_found = inf1
 			}
 			
 			if inferred_found == '' || inferred_found == 'int' || inferred_found == 'Any' {
 				qual := t.analyzer.get_qualified_name(id)
 				if inf2 := t.analyzer.get_type(qual) {
-					 // eprintln('DEBUG ALIAS RESOLVE2: id=${id} qual=${qual} inf2=${inf2}')
 					if inf2 != 'int' && inf2 != 'Any' {
 						inferred_found = inf2
 					}
@@ -471,59 +509,63 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 						}
 					}
 					t.emit_indented('type ${target.id} = ${def}')
-					eprintln('EMITTED ALIAS: type ${target.id} = ${def}')
 					t.declare_local(target.id)
 					return
 				}
 			}
 		}
 
-		lhs := base.sanitize_name(id, false, map[string]bool{}, '', map[string]bool{})
+		t.state.in_assignment_lhs = true
+		lhs := t.visit_expr(target)
+		t.state.in_assignment_lhs = false
 		mut rhs_text := rhs
-		if t.state.current_class.ends_with('Task') && rhs == 'r' && lhs in ['h', 'd', 'i', 'w'] {
-			rhs_text = '(${rhs} as ${t.state.current_class}Rec)'
-		}
 		mut lhs_t := t.guess_type(target)
-		if id in t.analyzer.raw_type_map {
+		if id.len > 0 && id in t.analyzer.raw_type_map {
 			lhs_t = t.analyzer.raw_type_map[id]
 		}
 		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
 		
-		if t.state.indent_level == 0 && (id.is_upper() || id in t.state.global_vars) && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
-			mut v_id := if id in t.state.global_vars { id.to_lower() } else { base.to_snake_case(id).to_lower() }
-			// Check if the resulting name conflicts with V reserved keywords
-			if base.is_v_reserved_keyword(v_id) {
-				v_id = 'g_${v_id}'
-			}
-			if v_id != id {
-				t.state.name_remap[id] = v_id
-			}
+		if t.state.indent_level == 0 && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
+			mut v_id := base.to_snake_case(id).to_lower()
+			if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
+			if v_id != id { t.state.name_remap[id] = v_id }
 			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
 			t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 			t.declare_local(lhs)
 			return
 		}
 
-		if t.state.indent_level == 0 && ((id.is_upper() && id.len > 1) || id in t.state.global_vars) {
-			mut v_id := if id in t.state.global_vars { id.to_lower() } else { base.to_snake_case(id).to_lower() }
-			// Check if the resulting name conflicts with V reserved keywords
-			if base.is_v_reserved_keyword(v_id) {
-				v_id = 'g_${v_id}'
-			}
-			if v_id != id {
-				t.state.name_remap[id] = v_id
-			}
-			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
+		if id in t.state.global_vars || (t.state.indent_level == 0 && id.len > 1) {
+			mut v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
+			if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
+			if v_id != id { t.state.name_remap[id] = v_id }
 			mut v_type := v_lhs_t
 			if v_type == 'unknown' || v_type == 'Any' {
 				v_type_inferred := t.guess_type(node.value)
-				if v_type_inferred != 'unknown' && v_type_inferred != 'none' {
+				if v_type_inferred != 'unknown' && v_type_inferred != 'none' && v_type_inferred != 'Any' {
 					v_type = t.map_annotation_str(v_type_inferred, '', false, false, false)
+				} else if node.value is ast.Call {
+					if node.value.func is ast.Name {
+						fid := node.value.func.id
+						if fid.len > 0 && fid[0].is_capital() {
+							v_type = '&' + base.sanitize_name(fid, true, map[string]bool{}, '', map[string]bool{})
+						}
+					}
 				}
 			}
-			if v_type == 'unknown' { v_type = 'Any' }
-			t.emit_indented('${pub_prefix}__global ${v_id} ${v_type}')
-			t.emit_indented('${v_id} = ${rhs_text}')
+			if v_type == 'unknown' || v_type == 'Any' {
+				if v_id in t.state.global_var_types {
+					v_type = t.map_annotation_str(t.state.global_var_types[v_id], '', false, false, false)
+					if rhs_text == 'none' && !v_type.starts_with('?') {
+						v_type = '?' + v_type
+					}
+				} else {
+					v_type = 'Any'
+				}
+			}
+			mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
+			ve.add_global('__global ${v_id} ${v_type}')
+			t.emit_indented('unsafe { ${v_id} = ${rhs_text} }')
 			t.declare_local(lhs)
 			return
 		}
@@ -544,20 +586,20 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 					if inner in t.state.defined_classes && !t.state.defined_classes[inner]['is_struct'] && !t.state.defined_classes[inner]['is_type_alias'] {
 						is_ref = true
 					}
-					if (v_inferred.starts_with("&") || is_ref) && !inner.starts_with("&") {
-						inner = "&" + inner
+					is_interface := inner in t.state.known_interfaces || inner in t.state.class_to_impl
+					if (v_inferred.starts_with("&") || is_ref) && !inner.starts_with("&") && !inner.starts_with('[]') {
+						if !is_interface {
+							inner = "&" + inner
+						}
 					}
-					t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
+					if is_interface {
+						t.emit_indented("${lhs} = ${rhs_text}")
+					} else {
+						t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
+					}
 				}
 			} else {
-				mut final_rhs := rhs_text
-				rhs_type := t.guess_type(node.value)
-				if t.state.narrowed_vars[lhs] && t.state.in_loop_count > 0 {
-					if rhs_type.starts_with('?') {
-						final_rhs = '${rhs_text} or { break }'
-					}
-				}
-				t.emit_indented('${lhs} = ${final_rhs}')
+				t.emit_indented('${lhs} = ${rhs_text}')
 			}
 		} else {
 			inferred := t.guess_type(node.value)
@@ -570,7 +612,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			rhs_text = 'none'
 		}
 			if v_inferred != 'Any' && v_inferred != 'int' {
-				t.analyzer.type_map[id] = v_inferred
+				t.analyzer.type_map[t.analyzer.get_qualified_name(id)] = v_inferred
 			}
 
 			// Decompose list literal for mutable locals if it has elements (for cap optimization)
@@ -594,45 +636,26 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			}
 
 			is_opt_none := (v_inferred.starts_with('?') || v_inferred == 'Any') && (rhs_text.contains('none') || rhs_text.contains('NoneType'))
-			if id in t.mutable_locals || lhs in t.mutable_locals || is_opt_none {
-				t.emit_indented('mut ${lhs} := ${rhs_text}')
+			
+			// Force explicit type cast for initial optional assignment
+			v_type_final := if is_opt_none && !v_inferred.starts_with('?') && v_inferred != 'Any' { '?' + v_inferred } else { v_inferred }
+			
+			qual := t.analyzer.get_qualified_name(id)
+			if id in t.mutable_locals || lhs in t.mutable_locals || qual in t.mutable_locals || is_opt_none {
+				if v_type_final.starts_with('?') || v_type_final.contains('|') {
+					t.emit_indented('mut ${lhs} := ${v_type_final}(${rhs_text})')
+				} else {
+					t.emit_indented('mut ${lhs} := ${rhs_text}')
+				}
 			} else {
-				t.emit_indented('${lhs} := ${rhs_text}')
+				if v_type_final.starts_with('?') || v_type_final.contains('|') {
+					t.emit_indented('${lhs} := ${v_type_final}(${rhs_text})')
+				} else {
+					t.emit_indented('${lhs} := ${rhs_text}')
+				}
 			}
 			t.declare_local(lhs)
 		}
-		return
-	}
-	if target is ast.Subscript {
-		mut base_type := t.guess_type(target.value)
-		if base_type == 'Any' || base_type == 'None' {
-			if target.value is ast.Name {
-				base_type = t.analyzer.type_map[target.value.id]
-			}
-		}
-		pure_type := base_type.trim_left('&')
-		if pure_type in t.state.defined_classes {
-			field_name := if target.slice is ast.Constant { target.slice.value.trim('\'"') } else { t.visit_expr(target.slice) }
-			if pure_type == 'MyDict' && field_name == 'b' && (t.state.current_file_name.contains('readonly') || t.state.current_file_name.contains('ReadOnly') || t.state.current_file_name.contains('pep705')) {
-				t.emit_indented('\$compile_error(\"Cannot assign to ReadOnly TypedDict field \'b\'\")')
-				return
-			}
-			t.emit_indented('${t.visit_expr(target.value)}.${field_name} = ${rhs}')
-			return
-		}
-		if target.slice is ast.Slice {
-			sl := target.slice
-			list_obj := t.visit_expr(target.value)
-			lower := if val := sl.lower { t.visit_expr(val) } else { '0' }
-			upper := if val := sl.upper { t.visit_expr(val) } else { '${list_obj}.len' }
-			
-			t.state.used_delete_many = true
-			t.state.used_insert_many = true
-			t.emit_indented('${list_obj}.delete_many(${lower}, (${upper}) - (${lower}))')
-			t.emit_indented('${list_obj}.insert_many(${lower}, ${rhs})')
-			return
-		}
-		t.emit_indented('${t.visit_expr(target.value)}[${t.visit_expr(target.slice)}] = ${rhs}')
 		return
 	}
 	
@@ -667,28 +690,17 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	t.state.in_assignment_lhs = true
 	lhs_expr := t.visit_expr(target)
 	t.state.in_assignment_lhs = false
-	// Always wrap attribute and subscript assignments in unsafe blocks
-	// to allow pointer/field mutation when needed (V 0.5 strict immutability)
+	
+	if target is ast.Name {
+		t.visit_destructuring(target, rhs, 'unknown')
+		return
+	}
+	
 	if target is ast.Attribute || target is ast.Subscript {
-		// Check if this is a simple local variable that's known to be mutable
-		mut skip_unsafe := false
-		if target is ast.Attribute {
-			if target.value is ast.Name {
-				name := target.value
-				sanitized := base.sanitize_name(name.id, false, map[string]bool{}, '', map[string]bool{})
-				// Skip unsafe for mutable locals
-				if sanitized in t.mutable_locals || t.is_declared_local(sanitized) {
-					skip_unsafe = true
-				}
-			}
-		}
-		if skip_unsafe {
-			t.emit_indented('${lhs_expr} = ${rhs}')
-		} else {
-			t.emit_indented('unsafe { ${lhs_expr} = ${rhs} }')
-		}
-	} else {
-		t.emit_indented('${lhs_expr} = ${rhs}')
+		t.state.in_assignment_lhs = true
+		t.visit_destructuring(target, rhs, 'unknown')
+		t.state.in_assignment_lhs = false
+		return
 	}
 }
 
@@ -722,12 +734,28 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				rhs_text = '${t.state.current_assignment_type}(none)'
 			}
 			ann_raw := t.annotation_raw_name(node.annotation)
-			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
-				v_id := base.to_snake_case(id_inv).to_lower()
-				mut is_mutated := false
-				if m_info := t.analyzer.get_mutability(id_inv) {
-					is_mutated = m_info.is_mutated
+			
+			if id_inv in t.state.global_vars || t.state.indent_level == 0 {
+				mut v_id := base.sanitize_name(id_inv, false, map[string]bool{}, "", map[string]bool{})
+				if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
+				if v_id != id_inv { t.state.name_remap[id_inv] = v_id }
+				
+				mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
+				mut v_type := t.state.current_assignment_type
+				if (v_type == '' || v_type == 'Any') && v_id in t.state.global_var_types {
+					v_type = t.map_annotation_str(t.state.global_var_types[v_id], '', false, false, false)
 				}
+				ve.add_global('__global ${v_id} ${v_type}')
+				t.emit_indented('unsafe { ${v_id} = ${rhs_text} }')
+				t.declare_local(lhs)
+				t.state.current_assignment_type = prev_assignment_type
+				return
+			}
+			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
+				v_id := base.sanitize_name(id_inv, false, map[string]bool{}, "", map[string]bool{})
+				mut is_mutated := false
+				m_info := t.analyzer.get_mutability(id_inv)
+				is_mutated = m_info.is_mutated
 				
 				// Detect if it's a struct/class type or mutated
 				c_type := t.state.current_assignment_type.trim_left('?&')
@@ -742,22 +770,43 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				pub_prefix := if t.state.is_exported(id_inv) { 'pub ' } else { '' }
 				
 				if is_mutated || is_struct {
-					t.emit_indented('__global ${v_id} = ${rhs_text}')
+					decl_type := t.state.global_var_types[v_id] or { t.state.current_assignment_type }
+					mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
+					ve.add_global('__global ${v_id} ${decl_type}')
+					t.emit_indented('${v_id} = ${rhs_text}')
 				} else {
 					t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 				}
 				t.state.current_assignment_type = prev_assignment_type
 				return
 			}
-			if t.state.current_class.ends_with('Task') && rhs_text == 'r' && lhs in ['h', 'd', 'i', 'w'] {
-				rhs_text = '(${rhs_text} as ${t.state.current_class}Rec)'
-			}
 			is_opt := t.state.current_assignment_type.starts_with('?') || t.state.current_assignment_type == 'Any'
+			v_type := t.state.current_assignment_type
 			if t.is_declared_local(lhs) {
-				t.emit_indented('${lhs} = ${rhs_text}')
+				if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
+					pure := v_type.trim_left('?&')
+					is_interface := pure in t.state.known_interfaces || pure in t.state.class_to_impl
+					if is_interface {
+						t.emit_indented('${lhs} = ${rhs_text}')
+					} else {
+						t.emit_indented('${lhs} = ${v_type}(${rhs_text})')
+					}
+				} else {
+					t.emit_indented('${lhs} = ${rhs_text}')
+				}
 			} else {
 				if lhs in t.mutable_locals || is_opt {
-					t.emit_indented('mut ${lhs} := ${rhs_text}')
+					if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
+						pure := v_type.trim_left('?&')
+						is_interface := pure in t.state.known_interfaces || pure in t.state.class_to_impl
+						if is_interface {
+							t.emit_indented('mut ${lhs} := ${rhs_text}')
+						} else {
+							t.emit_indented('mut ${lhs} := ${v_type}(${rhs_text})')
+						}
+					} else {
+						t.emit_indented('mut ${lhs} := ${rhs_text}')
+					}
 				} else {
 					t.emit_indented('${lhs} := ${rhs_text}')
 				}
@@ -776,37 +825,57 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 		t.state.in_assignment_lhs = false
 		rhs_text := eg.visit(value)
 		
-		if rhs_text == 'none' && !t.state.current_assignment_type.starts_with('?') {
-			t.state.current_assignment_type = '?' + t.state.current_assignment_type
-		}
-		mut final_rhs := rhs_text
-		if rhs_text == 'none' && t.state.current_assignment_type.starts_with('?') {
-			final_rhs = '${t.state.current_assignment_type}(none)'
-		}
-		
-		t.emit_indented('${lhs_expr} = ${final_rhs}')
+		t.emit_indented('${lhs_expr} = ${rhs_text}')
 		t.state.current_assignment_type = prev_t
 	} else {
-		// Variable declaration without value: x: int | str
+		prev_t := t.state.current_assignment_type
+		t.state.current_assignment_type = t.map_annotation(node.annotation)
+		t.state.current_ann_raw = t.annotation_raw_name(node.annotation)
 		if node.target is ast.Name {
-			lhs := base.sanitize_name(node.target.id, false, map[string]bool{}, '', map[string]bool{})
-			if !t.is_declared_local(lhs) {
-				t.state.current_assignment_type = t.map_annotation(node.annotation)
+			id_inv := node.target.id
+			lhs := base.sanitize_name(id_inv, false, map[string]bool{}, '', map[string]bool{})
+			
+			if id_inv in t.state.global_vars || t.state.indent_level == 0 {
+				mut v_id := if id_inv in t.state.global_vars { id_inv.to_lower() } else { base.to_snake_case(id_inv).to_lower() }
+				if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
+				if v_id != id_inv { t.state.name_remap[id_inv] = v_id }
+				
+				mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
 				v_type := t.state.current_assignment_type
+				ve.add_global('__global ${v_id} ${v_type}')
 				
+				// In V, globals must be initialized.
+				default_val := base.get_v_default_value(v_type, [])
+				t.emit_indented('unsafe { ${v_id} = ${default_val} }')
+				t.declare_local(lhs)
+				t.state.current_assignment_type = prev_t
+				return
+			}
+
+			if !t.is_declared_local(lhs) {
+				v_type := t.state.current_assignment_type
 				mut zero_val := '0'
-				if v_type == 'string' { zero_val = "''" }
-				else if v_type == 'bool' { zero_val = 'false' }
-				else if v_type == 'f64' { zero_val = '0.0' }
-				else if v_type == 'Any' { zero_val = 'none' }
-				else {
-					zero_val = '0' // Simple fallback for tests expecting x := 0
+				if v_type == 'string' {
+					zero_val = "''"
+				} else if v_type == 'bool' {
+					zero_val = 'false'
+				} else if v_type == 'f64' {
+					zero_val = '0.0'
+				} else if v_type == 'Any' {
+					zero_val = 'none'
+				} else {
+					zero_val = '0'
 				}
-				
-				t.emit_indented('${lhs} := ${zero_val}')
+
+				mut mut_prefix := ''
+				if lhs in t.mutable_locals || id_inv in t.mutable_locals {
+					mut_prefix = 'mut '
+				}
+				t.emit_indented('${mut_prefix}${lhs} := ${zero_val}')
 				t.declare_local(lhs)
 			}
 		}
+		t.state.current_assignment_type = prev_t
 	}
 }
 
@@ -838,7 +907,7 @@ fn (mut t Translator) visit_aug_assign(node ast.AugAssign) {
 		rhs := if target_type in ['f64', 'float'] {
 			'math.floor(${target_expr} / ${value_expr})'
 		} else {
-			out_type := if target_type == 'i64' { 'i64' } else { 'int' }
+			out_type := if target_type in ['i64', 'u64', 'f64'] { target_type } else { 'int' }
 			'${out_type}(math.floor(f64(${target_expr}) / f64(${value_expr})))'
 		}
 		t.emit_indented('${target_expr} = ${rhs}')

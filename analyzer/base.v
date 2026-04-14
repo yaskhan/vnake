@@ -98,14 +98,63 @@ pub fn (mut t TypeInferenceBase) set_type(name string, typ string) {
 }
 
 pub fn (t &TypeInferenceBase) get_type(name string) string {
-	if name in t.type_map { return t.type_map[name] }
 	if !name.contains('.') && t.scope_names.len > 0 {
 		for i := t.scope_names.len - 1; i >= 0; i-- {
 			qual := t.scope_names[..i+1].join('.') + '.' + name
-			if qual in t.type_map { return t.type_map[qual] }
+			if qual in t.type_map { 
+				res := t.type_map[qual]
+				eprintln('DEBUG: analyzer.get_type scoped(${name}) ${qual} = ${res}')
+				return res 
+			}
+		}
+	}
+
+	if name in t.type_map { 
+		res := t.type_map[name]
+		eprintln('DEBUG: analyzer.get_type ${name} = ${res}')
+		return res 
+	}
+	
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := t.get_class_bases(cls)
+		for b in bases {
+			if b == 'object' { continue }
+			mut res := t.get_type('${b}.${attr}')
+			if res != 'Any' {
+				return res
+			}
+			// Try CamelCase
+			res = t.get_type('${b}.${to_camel_case(attr)}')
+			if res != 'Any' {
+				return res
+			}
 		}
 	}
 	return 'Any'
+}
+
+pub fn (t &TypeInferenceBase) get_call_signature(name string) ?CallSignature {
+	if name in t.call_signatures {
+		return t.call_signatures[name]
+	}
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		attr := name.all_after_last('.')
+		bases := t.get_class_bases(cls)
+		for b in bases {
+			if b == 'object' { continue }
+			if res := t.get_call_signature('${b}.${attr}') {
+				return res
+			}
+			// Try CamelCase
+			if res := t.get_call_signature('${b}.${to_camel_case(attr)}') {
+				return res
+			}
+		}
+	}
+	return none
 }
 
 pub fn (t &TypeInferenceBase) has_type(name string) bool {
@@ -117,10 +166,44 @@ pub fn (mut t TypeInferenceBase) set_mutability(name string, info MutabilityInfo
 }
 
 pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
-	return t.mutability_map[name] or { MutabilityInfo{} }
+	if !name.contains('.') && t.scope_names.len > 0 {
+		for i := t.scope_names.len - 1; i >= 0; i-- {
+			qual := t.scope_names[..i+1].join('.') + '.' + name
+			if qual in t.mutability_map { 
+				return t.mutability_map[qual]
+			}
+		}
+	}
+
+	if name in t.mutability_map { 
+		return t.mutability_map[name] 
+	}
+	if name.contains('.') {
+		cls := name.all_before_last('.')
+		meth_arg := name.all_after_last('.')
+		
+		// 1. Look UP (inheritance)
+		bases := t.get_class_bases(cls)
+		for b in bases {
+			if b == 'object' { continue }
+			res := t.get_mutability('${b}.${meth_arg}')
+			if res.is_mutated || res.is_reassigned { return res }
+		}
+		
+		// 2. Look DOWN (interfaces -> implementations)
+		// If current class is a base/interface, check if ANY child-impl has mut
+		for potential_impl, parents in t.class_hierarchy {
+			if cls in parents {
+				res := t.get_mutability('${potential_impl}.${meth_arg}')
+				if res.is_mutated || res.is_reassigned { return res }
+			}
+		}
+	}
+	return MutabilityInfo{}
 }
 
 pub fn (mut t TypeInferenceBase) add_class_to_hierarchy(class_name string, bases []string) {
+	eprintln('DEBUG: TypeInferenceBase.add_class_to_hierarchy name=${class_name}')
 	t.class_hierarchy[class_name] = bases
 	t.defined_classes_cache[class_name] = map[string]bool{}
 }
