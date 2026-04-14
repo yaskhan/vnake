@@ -118,6 +118,8 @@ pub mut:
 	dataclass_init_vars          map[string]map[string]string
 	dataclass_defaults           map[string]map[string]string
 	in_loop_count                int
+	in_generator                 bool
+	has_yield                    bool
 }
 
 pub const cached_indents = [
@@ -235,6 +237,8 @@ pub fn new_translator_state() &TranslatorState {
 		is_full_module:               false
 		dataclass_init_vars:          map[string]map[string]string{}
 		dataclass_defaults:           map[string]map[string]string{}
+		in_generator:                 false
+		has_yield:                    false
 	}
 }
 
