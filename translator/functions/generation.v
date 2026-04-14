@@ -79,9 +79,10 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	}
 
 	for decorator in node.decorator_list {
+		mut dec_name := ''
 		mut dec_str := ''
 		if decorator is ast.Call {
-			func_str := env.visit_expr_fn(decorator.func)
+			dec_name = env.visit_expr_fn(decorator.func)
 			mut args_list := []string{}
 			for arg in decorator.args {
 				args_list << env.visit_expr_fn(arg)
@@ -89,11 +90,18 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			for kw in decorator.keywords {
 				args_list << '${kw.arg}=${env.visit_expr_fn(kw.value)}'
 			}
-			dec_str = '${func_str}(${args_list.join(', ')})'
+			dec_str = '${dec_name}(${args_list.join(', ')})'
 		} else {
-			dec_str = env.visit_expr_fn(decorator)
+			dec_name = env.visit_expr_fn(decorator)
+			dec_str = dec_name
 		}
-		output << '// @${dec_str}'
+
+		if !dec_name.ends_with('classmethod') && !dec_name.ends_with('staticmethod') &&
+			!dec_name.ends_with('property') && !dec_name.ends_with('.setter') &&
+			!dec_name.ends_with('.deleter') && !dec_name.ends_with('deprecated') &&
+			!dec_name.ends_with('lru_cache') && dec_name !in ['timer', 'log'] {
+			output << '// @${dec_str}'
+		}
 	}
 
 	mut args_str_list := []string{}
@@ -104,6 +112,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	mut args := node.args.posonlyargs.clone()
 	args << node.args.args
 	args << node.args.kwonlyargs
+
 
 	// Receiver handling
 	if is_method && node.name != '__new__' && args.len > 0 {
