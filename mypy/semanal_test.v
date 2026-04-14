@@ -447,3 +447,42 @@ fn test_visit_assignment_stmt_marks_classvar_in_class_scope() {
 		assert analyzed_type.name != 'ClassVar'
 	}
 }
+
+fn test_async_for_context_checks() {
+	mut sa := new_test_semantic_analyzer()
+
+	// 1. async for statement
+	mut for_stmt := &ForStmt{
+		is_async: true
+		expr: NameExpr{name: 'it'}
+		index: NameExpr{name: 'i'}
+		body: Block{body: []Statement{}}
+	}
+	sa.visit_for_stmt(mut for_stmt) or { panic(err.msg) }
+
+	// 2. async dictionary comprehension
+	mut dict_comp := &DictionaryComprehension{
+		key: NameExpr{name: 'k'}
+		value: NameExpr{name: 'v'}
+		indices: [Expression(NameExpr{name: 'k'})]
+		sequences: [Expression(NameExpr{name: 'it'})]
+		condlists: [[]Expression{}]
+		is_async: [true]
+	}
+	sa.visit_dictionary_comprehension(mut dict_comp) or { panic(err.msg) }
+
+	// 3. async generator expression
+	mut gen_expr := &GeneratorExpr{
+		left_expr: NameExpr{name: 'x'}
+		indices: [Expression(NameExpr{name: 'x'})]
+		sequences: [Expression(NameExpr{name: 'it'})]
+		condlists: [[]Expression{}]
+		is_async: [true]
+	}
+	sa.visit_generator_expr(mut gen_expr) or { panic(err.msg) }
+
+	assert sa.errors.num_messages() == 3
+	assert sa.errors.error_info_list[0].message == "'async for' outside async function"
+	assert sa.errors.error_info_list[1].message == "'async for' outside async function"
+	assert sa.errors.error_info_list[2].message == "'async for' outside async function"
+}

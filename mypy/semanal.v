@@ -801,6 +801,12 @@ pub fn (mut sa SemanticAnalyzer) visit_dictionary_comprehension(mut o Dictionary
 	o.key.accept(mut sa)!
 	o.value.accept(mut sa)!
 	for i in 0 .. o.indices.len {
+		if o.is_async[i] {
+			if !sa.is_async_context() {
+				sa.msg.fail("'async for' outside async function", o.get_context(), false,
+					false, none)
+			}
+		}
 		if mut lval := o.indices[i].as_lvalue() {
 			sa.analyze_lvalue(mut lval, false, false)!
 		}
@@ -815,6 +821,12 @@ pub fn (mut sa SemanticAnalyzer) visit_dictionary_comprehension(mut o Dictionary
 pub fn (mut sa SemanticAnalyzer) visit_generator_expr(mut o GeneratorExpr) !AnyNode {
 	o.left_expr.accept(mut sa)!
 	for i in 0 .. o.indices.len {
+		if o.is_async[i] {
+			if !sa.is_async_context() {
+				sa.msg.fail("'async for' outside async function", o.get_context(), false,
+					false, none)
+			}
+		}
 		if mut lval := o.indices[i].as_lvalue() {
 			sa.analyze_lvalue(mut lval, false, false)!
 		}
