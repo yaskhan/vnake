@@ -49,9 +49,7 @@ pub fn (eg &ExprGen) guess_type_no_loc(node ast.Expression) string {
 pub fn (mut eg ExprGen) wrap_bool(node ast.Expression, invert bool) string {
 	v_type := eg.guess_type(node)
 	expr := eg.visit(node)
-	eprintln('DEBUG: ExprGen.wrap_bool expr=${expr} type=${v_type} invert=${invert}')
 	if v_type == 'Any' || v_type.starts_with('?') {
-		eprintln('DEBUG: wrap_bool marking py_bool used for expr=${expr} type=${v_type}')
 		eg.state.used_builtins['py_bool'] = true
 	}
 	return base.wrap_bool(node, expr, v_type, invert)
@@ -88,7 +86,6 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 		ast.DictComp { return eg.visit_dict_comp(node, '') or { '{}' } }
 		ast.SetComp { return eg.visit_set_comp(node, '') or { '{}' } }
 		ast.IfExp {
-			eprintln('DEBUG: ExprGen.visit IfExp node=${node.str()}')
 			return eg.visit_if_exp(node)
 		}
 		ast.Starred { return eg.visit_starred(node) }
@@ -104,9 +101,11 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 }
 
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
+	if node.id == '__name__' {
+		return '__name__'
+	}
 	mut name := eg.state.name_remap[node.id] or { node.id }
 	if name != node.id {
-		eprintln("DEBUG: visit_name remapped ${node.id} -> ${name} (in_lhs=${eg.state.in_assignment_lhs})")
 	}
 	
 	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
@@ -119,8 +118,8 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	
 	v_type := eg.guess_type(node)
 	if v_type.starts_with('?') && !eg.state.in_assignment_lhs {
-		// If explicitly narrowed in this scope, V 0.5 already considers it non-optional
-		if eg.state.narrowed_vars[sanitized] {
+		// If explicitly narrowed in this scope, or it's a _mut shadow variable, V 0.5 already considers it non-optional
+		if eg.state.narrowed_vars[sanitized] || sanitized.ends_with('_mut') {
 			return sanitized
 		}
 		// Unwrap if the target context requires non-optional type
@@ -333,6 +332,7 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 			parts << "''"
 		}
 
+		eg.state.used_builtins['Template'] = true
 		return 'Template{strings: [${parts.join(', ')}], interpolations: [${interpolations.join(', ')}]}'
 }
 
@@ -362,6 +362,7 @@ pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
 		} else if content.starts_with('__py2v_rt__') {
 			content = content['__py2v_rt__'.len..]
 		}
+		eg.state.used_builtins['Template'] = true
 		return 'Template{strings: [${eg.quote_string_content(content, is_raw)}], interpolations: []}'
 	}
 	if node.token.typ == .string_tok || node.token.typ == .fstring_tok {

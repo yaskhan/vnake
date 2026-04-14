@@ -118,6 +118,8 @@ pub mut:
 	dataclass_init_vars          map[string]map[string]string
 	dataclass_defaults           map[string]map[string]string
 	in_loop_count                int
+	in_generator                 bool
+	has_yield                    bool
 }
 
 pub const cached_indents = [
@@ -235,6 +237,8 @@ pub fn new_translator_state() &TranslatorState {
 		is_full_module:               false
 		dataclass_init_vars:          map[string]map[string]string{}
 		dataclass_defaults:           map[string]map[string]string{}
+		in_generator:                 false
+		has_yield:                    false
 	}
 }
 
@@ -274,7 +278,6 @@ pub fn (mut s TranslatorState) update_class_hierarchy() {
 	}
 
 	for class_name, _ in s.defined_classes {
-		eprintln('DEBUG: state defined class: ${class_name}')
 		if class_name !in s.class_hierarchy {
 			s.class_hierarchy[class_name] = []string{}
 		}

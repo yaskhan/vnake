@@ -28,7 +28,6 @@ pub fn (mut eg ExprGen) visit_assert(node ast.Assert) string {
 }
 
 pub fn (mut eg ExprGen) visit_if_exp(node ast.IfExp) string {
-	eprintln('DEBUG: visit_if_exp node_test=${node.test.str()}')
 	test := eg.wrap_bool(node.test, false)
 	body := eg.visit(node.body)
 	orelse := eg.visit(node.orelse)

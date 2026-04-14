@@ -99,7 +99,6 @@ pub fn wrap_bool(node ast.Expression, expr string, v_type string, invert bool) s
 		return if invert { '!${expr}' } else { expr }
 	}
 	if v_type == 'Any' {
-		eprintln('DEBUG: base.wrap_bool Any type found for expr=${expr} invert=${invert}')
 		return if invert { '!py_bool(${expr})' } else { 'py_bool(${expr})' }
 	}
 	return bool_condition(expr, v_type, invert)

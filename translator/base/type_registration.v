@@ -2,6 +2,7 @@ module base
 
 import ast
 import models
+import strings
 
 pub struct HelperEmitter {
 pub mut:
@@ -141,29 +142,29 @@ pub fn register_tuple_struct(tuple_types_str string, include_all_symbols bool, m
 }
 
 fn clean_sum_part(s string) string {
-	replacements := {
-		'int':    'Int'
-		'string': 'String'
-		'bool':   'Bool'
-		'f64':    'F64'
-		'i64':    'I64'
-		'u32':    'U32'
-		'u64':    'U64'
-		'i8':     'I8'
-		'i16':    'I16'
-		'u8':     'U8'
-		'u16':    'U16'
-		'Any':    'Any'
-		'void':   'Void'
-		'none':   'None'
+	mut out := match s {
+		'int' { 'Int' }
+		'string' { 'String' }
+		'bool' { 'Bool' }
+		'f64' { 'F64' }
+		'i64' { 'I64' }
+		'u32' { 'U32' }
+		'u64' { 'U64' }
+		'i8' { 'I8' }
+		'i16' { 'I16' }
+		'u8' { 'U8' }
+		'u16' { 'U16' }
+		'Any' { 'Any' }
+		'void' { 'Void' }
+		'none' { 'None' }
+		else { s }
 	}
-	mut out := replacements[s] or { s }
 	out = out.replace('[]', 'Array').replace('map', 'Map')
-	mut clean := ''
+	mut clean := strings.new_builder(out.len)
 	for ch in out {
 		if ch.is_letter() || ch.is_digit() || ch == `_` {
-			clean += ch.str()
+			clean.write_rune(ch)
 		}
 	}
-	return clean
+	return clean.str()
 }

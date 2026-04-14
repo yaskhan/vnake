@@ -1,6 +1,7 @@
 module main
 
 import os
+import strings
 import translator
 
 struct ExpectedGroup {
@@ -81,8 +82,14 @@ fn test_transpilation() {
 		// eprintln('Translating ${py_path}...')
 		res := t.translate(source, py_path)
 		mut actual := res
-		for w in t.state.warnings {
-			actual += '\n// WARNING: ${w}'
+		if t.state.warnings.len > 0 {
+			mut sb := strings.new_builder(res.len + t.state.warnings.len * 64)
+			sb.write_string(res)
+			for w in t.state.warnings {
+				sb.write_string('\n// WARNING: ')
+				sb.write_string(w)
+			}
+			actual = sb.str()
 		}
 		
 		is_ok := check_expected_output(actual, expected, expected_path) or {

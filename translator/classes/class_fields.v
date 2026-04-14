@@ -328,7 +328,6 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			if t0 := env.analyzer.type_map['${struct_name}.${orig_name}'] {
 				f_type = t0
 			}
-			eprintln('DEBUG: collect_init_fields struct=${struct_name} attr=${orig_name} f_type=${f_type}')
 			if f_type in ['Any', 'none', 'unknown'] {
 				f_type = init_field_types[orig_name] or {
 					h.infer_init_value_type(value_expr, arg_type_map, &env)
@@ -374,12 +373,10 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 }
 
 fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_name string, mut added_fields map[string]bool, is_dataclass bool, is_typed_dict bool, dataclass_m map[string]string, mut d_field_order []string, mut env ClassVisitEnv) []FieldDefInfo {
-	eprintln('DEBUG: process_class_attributes START struct=${struct_name} body_len=${body.len}')
 	mut fields := []FieldDefInfo{}
 
 	for stmt in body {
 		if stmt is ast.AnnAssign {
-			eprintln('DEBUG: process_class_attributes AnnAssign target=${stmt.target.str()}')
 			if stmt.target is ast.Name {
 				orig_name := stmt.target.id
 				field_name := sanitize_name(orig_name, false)
@@ -438,7 +435,6 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 						base_struct_name := struct_name.replace('_Impl', '')
 						env.analyzer.type_map['${base_struct_name}.${orig_name}'] = field_type
 					}
-					eprintln('DEBUG: process_class_attributes struct=${struct_name} attr=${orig_name} f_type=${field_type} REGISTERED')
 				}
 			}
 		} else if stmt is ast.Assign {

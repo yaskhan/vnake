@@ -94,14 +94,17 @@ pub fn (mut eg ExprGen) visit_subscript(node ast.Subscript) string {
 		return '${value}[${value}.len - ${neg}]'
 	}
 
-	if val_type == 'Any' {
+	eprintln("DEBUG: subscript val_type=${val_type} value=${value}")
+	if val_type == 'Any' || (val_type.starts_with('?') && !val_type.contains('[]') && !val_type.contains('map[')) {
 		eg.state.used_builtins['py_subscript'] = true
 		res := 'py_subscript(${value}, ${index})'
 		if eg.target_type != 'Any' && eg.target_type != '' && !eg.target_type.starts_with('?') {
-			return '${eg.target_type}(${res})'
+			return '(${res} as ${eg.target_type})'
 		}
 		return res
 	}
+	
+	// Fallback to native V subscript
 	return '${value}[${index}]'
 }
 

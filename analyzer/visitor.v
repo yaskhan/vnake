@@ -94,6 +94,9 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 		ast.Call {
 			if node.func is ast.Name {
 				fid := node.func.id
+				if fid == 'cast' && node.args.len >= 2 {
+					return t.expr_to_name(node.args[0])
+				}
 				if fid.len > 0 && fid[0].is_capital() {
 					if fid in t.class_hierarchy {
 						return '&' + fid
@@ -201,12 +204,17 @@ fn (mut t TypeInferenceVisitorMixin) store_explicit_any(name string, loc string)
 	}
 }
 
+fn (mut t TypeInferenceVisitorMixin) mark_reassigned(name string) {
+	qual := t.get_qualified_name(name)
+	mut info := t.mutability_map[qual] or { MutabilityInfo{} }
+	info.is_reassigned = true
+	t.mutability_map[qual] = info
+}
+
 fn (mut t TypeInferenceVisitorMixin) mark_reassigned_expr(node ast.Expression) {
 	match node {
 		ast.Name {
-			mut info := t.get_mutability(node.id)
-			info.is_reassigned = true
-			t.set_mutability(node.id, info)
+			t.mark_reassigned(node.id)
 		}
 		ast.Attribute {
 			t.mark_reassigned_expr(node.value)
@@ -231,12 +239,17 @@ fn (mut t TypeInferenceVisitorMixin) mark_reassigned_expr(node ast.Expression) {
 	}
 }
 
+fn (mut t TypeInferenceVisitorMixin) mark_mutated(name string) {
+	qual := t.get_qualified_name(name)
+	mut info := t.mutability_map[qual] or { MutabilityInfo{} }
+	info.is_mutated = true
+	t.mutability_map[qual] = info
+}
+
 fn (mut t TypeInferenceVisitorMixin) mark_mutated_expr(node ast.Expression) {
 	match node {
 		ast.Name {
-			mut info := t.get_mutability(node.id)
-			info.is_mutated = true
-			t.set_mutability(node.id, info)
+			t.mark_mutated(node.id)
 		}
 		ast.Attribute {
 			t.mark_mutated_expr(node.value)
@@ -1036,6 +1049,14 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 			cls := t.scope_names[t.scope_names.len - 2]
 			if cls.len > 0 && cls[0].is_capital() {
 				t.store_type(s_arg, cls)
+				// If it's a method (not @property), mark self as mutated to match Translator's forcing of 'mut self'
+				mut is_property := false
+				for decorator in node.decorator_list {
+					if t.render_expr(decorator) == 'property' { is_property = true; break }
+				}
+				if !is_property && s_arg == 'self' {
+					t.mark_mutated(s_arg)
+				}
 			}
 		}
 	}
@@ -1202,13 +1223,16 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 					t.mark_reassigned_expr(target)
 				}
 				current := t.get_type(target.id)
+				qual_cur := t.get_qualified_name(target.id)
+				is_scoped_match := qual_cur in t.type_map
+				
 				is_cap := target.id.len > 0 && target.id[0].is_capital()
 				if value_type != 'Any' {
 					mut target_type := value_type
 					if current.starts_with('?') && !target_type.starts_with('?') && current[1..] == target_type {
 						target_type = current
 					}
-					if (current in ['Any', 'none', 'int'] && value_type != 'none') || current == 'Any' || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
+					if !is_scoped_match || (current in ['Any', 'none', 'int'] && value_type != 'none') || current == 'Any' || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
 						t.store_type(target.id, target_type)
 					}
 				} else if node.value is ast.Name {

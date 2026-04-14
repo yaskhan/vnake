@@ -112,7 +112,6 @@ fn (mut t Translator) declare_local(name string) {
 		return
 	}
 	if name == 'dest' {
-		eprintln("DEBUG: declare_local ${name} at stack=${t.state.scope_stack.len}")
 	}
 	mut scope := t.state.scope_stack.pop()
 	scope[name] = true
@@ -137,12 +136,10 @@ fn (mut t Translator) guess_type(node ast.Expression) string {
 pub fn (mut t Translator) map_annotation(node ?ast.Expression) string {
 	res := if n := node {
 		rendered := t.analyzer.render_expr(n)
-		eprintln('DEBUG: map_annotation rendered=${rendered}')
 		t.map_annotation_str(rendered, t.state.current_class, false, true, true)
 	} else {
 		'Any'
 	}
-	eprintln('DEBUG: map_annotation node=${node} res=${res}')
 	return res
 }
 
@@ -591,7 +588,9 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 		t.state.class_hierarchy[k] = v.clone()
 		t.state.defined_classes[k] = map[string]bool{}
 		for base_name in v {
-			t.state.known_interfaces[base_name] = true
+			if !base_name.ends_with('Mixin') {
+				t.state.known_interfaces[base_name] = true
+			}
 		}
 	}
 	t.state.update_class_hierarchy()
@@ -599,7 +598,6 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	// Capture concrete types for globals if they are assigned later
 	for stmt in module_node.body {
 		if stmt is ast.Assign {
-			eprintln('DEBUG: pre-scan Assign')
 			for target in stmt.targets {
 				if target is ast.Name {
 					id := target.id
@@ -607,23 +605,18 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 					mut v_type := ''
 					if mypy_t := t.analyzer.get_mypy_type(id, loc_key) {
 						v_type = analyzer.map_python_type_to_v(mypy_t)
-						eprintln('DEBUG: pre-scan GLOBAL INFERRED: ${id} [${loc_key}] -> ${mypy_t} -> ${v_type}')
 					} else {
-						eprintln('DEBUG: pre-scan GLOBAL FAILED: ${id} [${loc_key}]')
 					}
 					if v_type == '' || v_type == 'Any' {
 						v_type = t.guess_type(stmt.value)
 					}
-					eprintln('DEBUG: pre-scan id=${id} v_type=${v_type}')
 					v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
-					eprintln('DEBUG: pre-scan id=${id} v_id=${v_id} v_type=${v_type}')
 					if v_type != 'unknown' && v_type != 'Any' && v_type != 'none' {
 						t.state.global_var_types[v_id] = v_type
 					}
 				}
 			}
 		} else if stmt is ast.AnnAssign {
-			eprintln('DEBUG: pre-scan AnnAssign')
 			if stmt.target is ast.Name {
 				id := stmt.target.id
 				loc_key := '${stmt.target.get_token().line}:${stmt.target.get_token().column}'
@@ -633,17 +626,13 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 				}
 				if v_type == '' || v_type == 'Any' {
 					v_type = t.map_annotation(stmt.annotation)
-					eprintln('DEBUG: pre-scan AnnAssign FALLBACK map_annotation(taskWorkArea) -> ${v_type}')
 					if v_type == '' || v_type == 'Any' {
 						if val := stmt.value {
-							eprintln('DEBUG: pre-scan AnnAssign VALUE TYPE: ${val.type_name()}')
 							v_type = t.guess_type(val)
 						}
 					}
 				}
-				eprintln('DEBUG: pre-scan AnnAssign id=${id} v_type=${v_type}')
 				v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
-				eprintln('DEBUG: pre-scan AnnAssign id=${id} v_id=${v_id} v_type=${v_type}')
 				if v_type != 'unknown' && v_type != 'Any' && v_type != 'none' {
 					t.state.global_var_types[v_id] = v_type
 				}
@@ -676,7 +665,6 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	for name, info in t.analyzer.mutability_map {
 		if info.is_reassigned || info.is_mutated {
 			if name == 'dest' {
-				eprintln("DEBUG: Mark ${name} as mutable in translator")
 			}
 			t.mutable_locals[name] = true
 		}

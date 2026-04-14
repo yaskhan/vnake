@@ -58,8 +58,6 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 			if is_none {
 				if (op == 'is not' && positive) || (op == '!=' && positive) || (op == 'is' && !positive) || (op == '==' && !positive) {
 					mut orig_type := m.guess_type(left)
-					eprintln("DEBUG: collect_narrowing var=${var_name} orig_type=${orig_type} op=${op} pos=${positive}")
-					eprintln('DEBUG: collect_narrowing var=${var_name} orig_type=${orig_type}')
 					if !orig_type.starts_with('?') && orig_type != 'Any' {
 						orig_type = '?' + orig_type
 					}
@@ -95,7 +93,6 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		if narrowed_type == 'none' { continue }
 		sanitized := m.sanitize_name(var_name, false)
 		base_type := m.guess_type(ast.Name{id: var_name})
-		eprintln('DEBUG: apply_flow_narrowing var=${var_name} n_type=${n_type} base_type=${base_type}')
 
 		mut is_auto := false
 		if branch_suffix != '_while' {
@@ -109,6 +106,11 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		if is_auto {
 			// Mark variable as narrowed so that later accesses don't add redundant 'or' blocks
 			m.env.state.narrowed_vars[sanitized] = true
+			if var_name in m.env.state.name_remap {
+				original_remaps[var_name] = m.env.state.name_remap[var_name]
+			} else {
+				original_remaps[var_name] = '__NONE__'
+			}
 			continue
 		}
 
@@ -286,8 +288,8 @@ fn (m &ControlFlowModule) is_name_main(node ast.If) bool {
 		if comp.left is ast.Name && comp.left.id == '__name__' {
 			if comp.comparators.len > 0 && comp.comparators[0] is ast.Constant {
 				c := comp.comparators[0] as ast.Constant
-				val := c.value
-				return val == "'__main__'" || val == '"__main__"'
+				val := c.value.trim('\'"')
+				return val == '__main__'
 			}
 		}
 	}

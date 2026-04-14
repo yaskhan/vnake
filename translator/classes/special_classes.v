@@ -172,12 +172,12 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 					}
 				}
 			}
-
+			
 			if mut_prefix != '' && (ann_str.contains('&') || ann_str.starts_with('?')) {
 				// References don't need mut parameter flags
 				mut_prefix = ''
 			}
-
+			
 			p_args << '${mut_prefix}${arg_name} ${ann_str}'
 		}
 		mut m_name := sanitize_name(method.name, false)

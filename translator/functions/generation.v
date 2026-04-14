@@ -48,7 +48,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		return
 	}
 
-	is_method := struct_name.len > 0 && env.state.scope_stack.len == 0
+	is_method := struct_name.len > 0
 	mut is_abstract := false
 	for base_name in env.state.current_class_bases {
 		if node.name in env.state.abstract_methods[base_name] {
@@ -60,12 +60,16 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		return
 	}
 
-	mut is_nested := env.state.scope_stack.len > 0
+	mut is_nested := env.state.scope_stack.len > 0 && !is_method
 	mut annotations_data := map[string]string{}
 
 	dec_info := h.get_decorator_info(node, struct_name, env)
 	mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
 	is_generator := dec_info.is_generator
+	prev_in_generator := env.state.in_generator
+	env.state.in_generator = is_generator
+	prev_has_yield := env.state.has_yield
+	env.state.has_yield = false
 
 	mut output := []string{}
 	if env.state.include_all_symbols {
@@ -102,7 +106,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	args << node.args.kwonlyargs
 
 	// Receiver handling
-	if is_method && node.name != '__new__' && args.len > 0 && args[0].arg in ['self', 'cls'] {
+	if is_method && node.name != '__new__' && args.len > 0 {
 		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
 			mut is_mutated := h.is_mutating_method(node, struct_name, &env)
 			mut func_keys := []string{}
@@ -366,12 +370,13 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		is_primitive_arg := clean_type_arg in ['int', 'string', 'bool', 'f32', 'f64', 'i64', 'i16',
 			'i8', 'u8', 'u16', 'u32', 'u64', 'byte', 'rune', 'void', 'any']
 
-		if (arg.arg in defaults_map && is_mut) || (is_primitive_arg && is_reassigned) {
-			local_mut_copies << [arg_name, arg_name]
-			is_mut = false
-		}
-		
-		if !is_primitive_arg {
+		if (arg.arg in defaults_map && is_mut) || (is_primitive_arg && is_reassigned) || (!is_primitive_arg && is_mut) {
+			mut target_copy_name := arg_name
+			if !is_primitive_arg && is_mut && (arg_type.contains('&') || arg_type.starts_with('?') || arg_type in env.state.known_interfaces) {
+				target_copy_name = '${arg_name}_mut'
+				env.state.name_remap[arg_name] = target_copy_name
+			}
+			local_mut_copies << [arg_name, target_copy_name]
 			is_mut = false
 		}
 
@@ -602,6 +607,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		c_str := if captures.len > 0 { '[${captures.join(', ')}] ' } else { '' }
 		ret_s_nested := if any_ret != 'void' && any_ret != '' { ' ${any_ret}' } else { '' }
 		decl = 'mut ${func_name} := fn ${c_str}(${any_args.join(', ')})${ret_s_nested} {'
+		
+		// Register the function type for correct call handling (like wrapping *args)
+		// Use known_v_types which is accessible to guess_type
+		v_type := 'fn (${any_args.join(', ')}) ${if any_ret.len > 0 { any_ret } else { 'void' }}'
+		env.state.known_v_types[func_name] = v_type
 	} else {
 		ret_s_def := if ret_type != 'void' && ret_type != '' { ' ${ret_type}' } else { '' }
 		decl = '${nor_attr}${dep_attr}${pub_pfx}fn ${receiver_str}${func_name}${func_generics_str}(${args_str_list.join(', ')})${ret_s_def} {'
@@ -682,15 +692,27 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 
 	for copy in local_mut_copies {
 		env.emit_fn(env.state.indent() + 'mut ${copy[1]} := ${copy[0]}')
+		env.declare_local_fn(copy[1])
 	}
-
 	for stmt in node.body {
 		env.visit_stmt_fn(stmt)
 	}
 
+	if env.state.in_generator && !env.state.has_yield {
+		// This is just a normal function returning an iterator
+	}
+
+	// Clean up name remaps for parameters
+	for copy in local_mut_copies {
+		if copy[0] != copy[1] {
+			env.state.name_remap.delete(copy[0])
+		}
+	}
+
 	if ret_type != 'void' && ret_type != '' && !is_init && !ends_with_return(node.body) {
+		// V requires explicit return
 		default_val := base.get_v_default_value(ret_type, v_gens_to_declare)
-		env.emit_fn(env.state.indent() + 'return ${default_val}')
+		env.emit_fn(env.state.indent() + 'return ${default_val} // TODO: default value for ${ret_type}')
 	}
 
 	if is_generator {
@@ -708,6 +730,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	env.pop_scope_fn()
 	env.state.in_init = prev_in_init
 	env.state.current_function_return_type = prev_ret_type_state
+	env.state.has_yield = prev_has_yield
+	env.state.in_generator = prev_in_generator
 	for line in dec_info.injected_end {
 		env.emit_fn(env.state.indent() + line)
 	}

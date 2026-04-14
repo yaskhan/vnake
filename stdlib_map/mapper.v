@@ -83,6 +83,7 @@ fn (mut m StdLibMapper) init_mappings() {
 		'exit': 'exit'
 		'argv': 'os.args'
 		'platform': 'os.user_os'
+		'version_info': 'sys_version_info'
 	}
 
 	// IO

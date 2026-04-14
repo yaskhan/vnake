@@ -133,8 +133,13 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 			struct_lines << '// Config: ${config_bits.join(", ")}'
 		}
 	} else if configs.len > 0 {
-		mut config_comment := []string{}
-		for key in configs.keys() {
+		mut config_keys := []string{cap: configs.len}
+		for k, _ in configs {
+			config_keys << k
+		}
+		config_keys.sort()
+		mut config_comment := []string{cap: configs.len}
+		for key in config_keys {
 			config_comment << '${key}=${configs[key]}'
 		}
 		struct_lines << '// ConfigDict: ${config_comment.join(", ")}'

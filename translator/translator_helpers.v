@@ -63,7 +63,6 @@ fn (t &Translator) is_pure_literal_expr(node ast.Expression) bool {
 }
 
 fn (mut t Translator) append_helpers() {
-	eprintln('DEBUG: append_helpers START. used_builtins=${t.state.used_builtins.keys()}')
 	if !t.state.omit_builtins {
 		if 'py_any' in t.state.used_builtins {
 		t.emit_helper_function_code('fn py_any[T](a []T) bool {\n    for item in a {\n        if item {\n            return true\n        }\n    }\n    return false\n}')

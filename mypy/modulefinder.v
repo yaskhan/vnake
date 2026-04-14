@@ -300,6 +300,15 @@ pub fn compute_search_paths(sources []MypyBuildSource, options Options, data_dir
 			}
 		}
 		python_path << os.getwd()
+
+		// Add PYTHONPATH
+		if pythonpath := os.getenv_opt('PYTHONPATH') {
+			for path in pythonpath.split(os.path_delimiter) {
+				if path.len > 0 && path !in python_path {
+					python_path << path
+				}
+			}
+		}
 	}
 
 	// MYPYPATH
@@ -309,9 +318,25 @@ pub fn compute_search_paths(sources []MypyBuildSource, options Options, data_dir
 	}
 	mypypath << options.mypy_path
 
-	// Package path (site-packages)
+	// Python environment paths
 	python_exe := options.python_executable or { "python3" }
-	_, package_path := getsearch_dirs(python_exe)
+	sys_path, site_pkgs := getsearch_dirs(python_exe)
+
+	// Add sys.path to python_path if alt_lib_path is none
+	if alt_lib_path == none {
+		for path in sys_path {
+			if path.len > 0 && path !in python_path && path !in site_pkgs {
+				python_path << path
+			}
+		}
+	}
+
+	// Package path (site-packages)
+	mut package_path := []string{}
+	if !options.no_site_packages {
+		package_path = site_pkgs.clone()
+	}
+
 	return SearchPaths{
 		python_path:   python_path.reverse()
 		mypy_path:     mypypath

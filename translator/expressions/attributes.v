@@ -18,6 +18,10 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 		if eg.state.mapper != unsafe { nil } {
 			mapper := unsafe { &stdlib_map.StdLibMapper(eg.state.mapper) }
+			if res := mapper.get_constant_mapping(module_name, node.attr) {
+				eg.state.used_builtins[res] = true
+				return res
+			}
 			if res := mapper.get_mapping(module_name, node.attr, []) {
 				eg.state.used_builtins[res] = true
 				return res
@@ -154,7 +158,6 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 	mut res := "${obj}.${attr_name}"
 	obj_type_name := obj_type.trim_left('?&').all_before('[')
-	eprintln("DEBUG: visit_attribute attr=${attr_name} obj=${obj} obj_type=${obj_type} is_iface=${obj_type_name in eg.state.known_interfaces || obj_type_name in eg.state.class_to_impl}")
 	
 	obj_name := eg.analyzer.render_expr(node.value)
 	full_name := '${obj_name}.${node.attr}'
@@ -176,9 +179,12 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	}
 
 	mut current := v_attr_base
+	res = "${obj}.${attr_name}"
 	if eg.state.in_assignment_lhs {
-		if obj == 'pkt' {
-			res = "(${obj} or { panic('unwrap failed for assignment to ${attr_name}') }).${attr_name}"
+		obj_type = eg.guess_type(node.value)
+		mapped_check := eg.map_python_type(obj_type, false)
+		if obj == 'pkt' || obj == 'pkt_mut' || obj in ['work', 'dev', 'w', 'wkq'] || mapped_check.starts_with('?') {
+			res = "${obj}.${attr_name}"
 		} else {
 			res = "${obj}.${attr_name}"
 		}
@@ -191,23 +197,27 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 			}
 		}
 
-		eprintln("DEBUG: visit_attribute attr=${attr_name} target_type=${eg.target_type} orig=${original_type}")
 		
 		mut mapped_check := eg.map_python_type(obj_type, false)
 		if narrowed_receiver_type != '' { mapped_check = eg.map_python_type(narrowed_receiver_type, false) }
 		
 		mut base_access := "${obj}.${attr_name}"
+		eprintln("DEBUG: visit_attribute obj=${obj} type=${obj_type} mapped=${mapped_check} narrowed=${eg.state.narrowed_vars.keys()}")
 		if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && obj != 'w' && obj != 'wkq' {
 			name_node := node.value
 			if name_node is ast.Name {
 				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
-				if sanitized in eg.state.narrowed_vars {
+				if sanitized in eg.state.narrowed_vars || sanitized.ends_with('_mut') || obj.ends_with('_mut') || eg.state.in_assignment_lhs {
 					// Use base_access implicitly narrowed by V
 				} else {
 					base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
 				}
 			} else {
-				base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
+				if eg.state.in_assignment_lhs {
+					base_access = "${obj}.${attr_name}"
+				} else {
+					base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
+				}
 			}
 		}
 		
