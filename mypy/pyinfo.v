@@ -7,31 +7,52 @@ import os
 
 // getsite_packages returns a list of site-packages directories
 pub fn getsite_packages(python_exe string) []string {
-	res := os.execute("${os.quoted_path(python_exe)} -c \"import site; print('\\\\n'.join(site.getsitepackages() if hasattr(site, 'getsitepackages') else []))\"")
-	if res.exit_code != 0 {
+	mut p := os.new_process(python_exe)
+	p.set_args(['-c', "import site; print('\\\\n'.join(site.getsitepackages() if hasattr(site, 'getsitepackages') else []))"])
+	p.set_redirect_stdio()
+	p.run()
+	p.wait()
+	if p.code != 0 {
+		p.close()
 		return []string{}
 	}
-	return res.output.trim_space().split_into_lines().filter(it.trim_space() != '')
+	out := p.stdout_slurp()
+	p.close()
+	return out.trim_space().split_into_lines().filter(it.trim_space() != '')
 }
 
 // getsyspath returns system path
 pub fn getsyspath(python_exe string) []string {
-	res := os.execute("${os.quoted_path(python_exe)} -c \"import sys; print('\\\\n'.join(sys.path))\"")
-	if res.exit_code != 0 {
+	mut p := os.new_process(python_exe)
+	p.set_args(['-c', "import sys; print('\\\\n'.join(sys.path))"])
+	p.set_redirect_stdio()
+	p.run()
+	p.wait()
+	if p.code != 0 {
+		p.close()
 		return []string{}
 	}
-	return res.output.trim_space().split_into_lines().filter(it.trim_space() != '')
+	out := p.stdout_slurp()
+	p.close()
+	return out.trim_space().split_into_lines().filter(it.trim_space() != '')
 }
 
 // getsearch_dirs returns two lists: (syspath, sitepackages)
 pub fn getsearch_dirs(python_exe string) ([]string, []string) {
 	python_script := "import sys, site; print('---'); print('\\\\n'.join(sys.path)); print('---'); print('\\\\n'.join(site.getsitepackages() if hasattr(site, 'getsitepackages') else []))"
-	res := os.execute("${os.quoted_path(python_exe)} -c \"${python_script}\"")
-	if res.exit_code != 0 {
+	mut p := os.new_process(python_exe)
+	p.set_args(['-c', python_script])
+	p.set_redirect_stdio()
+	p.run()
+	p.wait()
+	if p.code != 0 {
+		p.close()
 		return []string{}, []string{}
 	}
 
-	parts := res.output.split('---')
+	out := p.stdout_slurp()
+	p.close()
+	parts := out.split('---')
 	if parts.len < 3 {
 		return []string{}, []string{}
 	}
