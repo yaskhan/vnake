@@ -174,13 +174,13 @@ pub:
 // visit_unbound_type handles UnboundType
 pub fn (v TypeMeetVisitor) visit_unbound_type(t &UnboundType) !MypyTypeNode {
 	if v.s is NoneType {
-		return UninhabitedType{}
+		return MypyTypeNode(UninhabitedType{})
 	} else if v.s is UninhabitedType {
-		return v.s
+		return MypyTypeNode(v.s as UninhabitedType)
 	}
-	return AnyType{
+	return MypyTypeNode(AnyType{
 		type_of_any: TypeOfAny.special_form
-	}
+	})
 }
 
 // visit_any handles AnyType

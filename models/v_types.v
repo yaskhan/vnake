@@ -30,10 +30,11 @@ pub fn get_tuple_struct_name(types_str string) string {
 }
 
 // map_python_type_to_v maps Python type to V type
-pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
+pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	if py_type.len == 0 {
 		return 'void'
 	}
+	eprintln('DEBUG: map_python_type_to_v ${py_type}')
 	if py_type.starts_with('[]') || py_type.starts_with('map[') || py_type.starts_with('datatypes.') {
 		return py_type
 	}
@@ -79,19 +80,23 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		}
 	}
 
-	// Pre-process basic types
+	if clean_type.ends_with('.args') { return '...Any' }
+	if clean_type.ends_with('.kwargs') { return 'map[string]Any' }
+
 	match clean_type {
 		'int' { return 'int' }
+		'i64', 'mypy_extensions.i64' { return 'i64' }
 		'float' { return 'f64' }
 		'str' { return 'string' }
 		'bool' { return 'bool' }
-		'None' { return 'none' }
+		'None' { return 'NoneType' }
 		'Any' { return 'Any' }
 		'object' { return 'Any' }
 		'builtins.int' { return 'int' }
 		'builtins.float' { return 'f64' }
 		'builtins.str' { return 'string' }
 		'builtins.bool' { return 'bool' }
+		'Callable', 'callable', 'typing.Callable', 'collections.abc.Callable' { return 'fn (...Any) Any' }
 		else {}
 	}
 	
@@ -110,14 +115,14 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 		if 'Any' in unique_v_parts { return 'Any' }
 		
 		mut non_none := []string{}
-		for t in unique_v_parts { if t != 'none' { non_none << t } }
+		for t in unique_v_parts { if t != 'none' && t != 'NoneType' { non_none << t } }
 		if non_none.len == 1 && unique_v_parts.len > 1 {
 			return '?${non_none[0]}'
 		}
 		
 		union_str := unique_v_parts.join(' | ')
 		if !allow_union {
-			reg_res := sum_type_registrar(union_str)
+			reg_res := sum_type_registrar('', union_str)
 			if reg_res.len > 0 { return reg_res }
 		}
 		return union_str
@@ -134,119 +139,194 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Sum type registration as fallback
-	reg_res := sum_type_registrar(clean_type)
+	reg_res := sum_type_registrar('', clean_type)
 	if reg_res.len > 0 { return reg_res }
 
-	// Basic type mapping fallback
-	return map_basic_type(clean_type)
+	res := map_basic_type(clean_type)
+	eprintln('DEBUG: map_python_type_to_v RESULT ${py_type} -> ${res}')
+	return res
 }
 
 // map_complex_type handles complex types like List[int], Dict[str, Any]
-fn map_complex_type(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
+fn map_complex_type(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	 // eprintln('DEBUG MAP_COMPLEX: ${py_type}')
 	bracket_idx := py_type.index('[') or { return map_basic_type(py_type) }
 	base_type := py_type[..bracket_idx].trim_space()
 	mut args_str := py_type[bracket_idx + 1..py_type.len - 1].trim_space()
 
-	if base_type in ['List', 'list', 'typing.List', 'typing.Sequence', 'typing.Iterable', 'Sequence', 'Iterable'] {
-		inner_type := if args_str.len > 0 { map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar) } else { 'Any' }
-		return '[]${inner_type}'
-	}
-
-	if base_type in ['Dict', 'dict', 'typing.Dict', 'typing.Mapping', 'Mapping'] {
-		mut key_type := 'string'
-		mut val_type := 'Any'
-		if args_str.len > 0 {
-			parts := split_generic_args(args_str)
-			if parts.len >= 2 {
-				key_type = map_python_type_to_v(parts[0].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
-				val_type = map_python_type_to_v(parts[1].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
-			} else if parts.len == 1 {
-				val_type = map_python_type_to_v(parts[0].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+	match base_type {
+		'List', 'list', 'typing.List', 'typing.Sequence', 'typing.Iterable', 'Sequence', 'Iterable' {
+			inner_type := if args_str.len > 0 {
+				map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar,
+					literal_registrar, tuple_registrar)
+			} else {
+				'Any'
 			}
+			res := '[]${inner_type}'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
 		}
-		if key_type == 'Any' { key_type = 'string' }
-		return 'map[${key_type}]${val_type}'
-	}
-
-	if base_type in ['Set', 'set', 'typing.Set'] {
-		inner_type := if args_str.len > 0 { map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar) } else { 'Any' }
-		return 'datatypes.Set[${inner_type}]'
-	}
-
-	if base_type in ['Tuple', 'tuple', 'typing.Tuple'] {
-		if args_str.len == 0 { return '[]Any' }
-		parts := split_generic_args(args_str)
-		if parts.len > 0 {
+		'Dict', 'dict', 'typing.Dict', 'typing.Mapping', 'Mapping' {
+			mut key_type := 'string'
+			mut val_type := 'Any'
+			if args_str.len > 0 {
+				parts := split_generic_args(args_str)
+				if parts.len >= 2 {
+					key_type = map_python_type_to_v(parts[0].trim_space(), self_name, allow_union,
+						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+					val_type = map_python_type_to_v(parts[1].trim_space(), self_name, allow_union,
+						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+				} else if parts.len == 1 {
+					val_type = map_python_type_to_v(parts[0].trim_space(), self_name, allow_union,
+						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+				}
+			}
+			if key_type == 'Any' {
+				key_type = 'string'
+			}
+			res := 'map[${key_type}]${val_type}'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
+		}
+		'Set', 'set', 'typing.Set' {
+			inner_type := if args_str.len > 0 {
+				map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar,
+					literal_registrar, tuple_registrar)
+			} else {
+				'Any'
+			}
+			res := 'datatypes.Set[${inner_type}]'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
+		}
+		'Tuple', 'tuple', 'typing.Tuple' {
+			if args_str.len == 0 {
+				return '[]Any'
+			}
+			parts := split_generic_args(args_str)
+			if parts.len > 0 {
+				mut v_parts := []string{}
+				for p in parts {
+					v_parts << map_python_type_to_v(p.trim_space(), self_name, allow_union,
+						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+				}
+				tuple_res := tuple_registrar(v_parts.join(', '))
+				if tuple_res.len > 0 {
+					return tuple_res
+				}
+			}
+			res := '[]Any'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
+		}
+		'Optional', 'typing.Optional' {
+			inner_type := if args_str.len > 0 {
+				map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar,
+					literal_registrar, tuple_registrar)
+			} else {
+				'Any'
+			}
+			if inner_type.starts_with('?') {
+				eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${inner_type}')
+				return inner_type
+			}
+			res := '?${inner_type}'
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
+		}
+		'Union', 'typing.Union' {
+			if args_str.len == 0 {
+				return 'Any'
+			}
+			parts := split_generic_args(args_str)
 			mut v_parts := []string{}
 			for p in parts {
-				v_parts << map_python_type_to_v(p.trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+				v_parts << map_python_type_to_v(p.trim_space(), self_name, allow_union,
+					generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
 			}
-			tuple_res := tuple_registrar(v_parts.join(', '))
-			if tuple_res.len > 0 { return tuple_res }
+
+			mut unique := []string{}
+			for p in v_parts {
+				if p !in unique {
+					unique << p
+				}
+			}
+
+			if 'Any' in unique {
+				return 'Any'
+			}
+
+			mut non_none := []string{}
+			for t in unique {
+				if t != 'none' {
+					non_none << t
+				}
+			}
+			if non_none.len == 1 && unique.len > 1 {
+				return '?${non_none[0]}'
+			}
+			res := unique.join(' | ')
+			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
+			return res
 		}
-		return '[]Any'
-	}
-
-	if base_type in ['Optional', 'typing.Optional'] {
-		inner_type := if args_str.len > 0 { map_python_type_to_v(args_str, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar) } else { 'Any' }
-		if inner_type.starts_with('?') { return inner_type }
-		return '?${inner_type}'
-	}
-
-	if base_type in ['Union', 'typing.Union'] {
-		if args_str.len == 0 { return 'Any' }
-		parts := split_generic_args(args_str)
-		mut v_parts := []string{}
-		for p in parts {
-			v_parts << map_python_type_to_v(p.trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
-		}
-		
-		mut unique := []string{}
-		for p in v_parts { if p !in unique { unique << p } }
-		
-		if 'Any' in unique { return 'Any' }
-		
-		mut non_none := []string{}
-		for t in unique { if t != 'none' { non_none << t } }
-		if non_none.len == 1 && unique.len > 1 {
-			return '?${non_none[0]}'
-		}
-		
-		union_str := unique.join(' | ')
-		if !allow_union {
-			reg_res := sum_type_registrar(union_str)
-			if reg_res.len > 0 { return reg_res }
-		}
-		return union_str
-	}
-
-	if base_type in ['Literal', 'typing.Literal'] {
-		parts := split_generic_args(args_str)
-		res := literal_registrar(parts)
-		if res.len > 0 { return res }
-		return 'Any'
-	}
-
-	if base_type in ['Callable', 'typing.Callable', 'collections.abc.Callable'] {
-		return 'fn (...Any) Any'
-	}
-
-	if base_type in ['TypeGuard', 'TypeIs', 'typing.TypeGuard', 'typing.TypeIs'] {
-		return 'bool'
-	}
-
-	if base_type in ['Final', 'ClassVar', 'Annotated', 'Required', 'NotRequired', 'ReadOnly',
-		'typing.Final', 'typing.ClassVar', 'typing.Annotated', 'typing.Required', 'typing.NotRequired', 'typing.ReadOnly'] {
-		if args_str.len > 0 {
+		'Literal', 'typing.Literal' {
 			parts := split_generic_args(args_str)
-			inner := map_python_type_to_v(parts[0].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
-			if base_type in ['NotRequired', 'typing.NotRequired'] && !inner.starts_with('?') {
-				return '?${inner}'
+			res := literal_registrar(parts)
+			if res.len > 0 {
+				return res
 			}
-			return inner
+			return 'Any'
 		}
-		return 'Any'
+		'Callable', 'typing.Callable', 'collections.abc.Callable' {
+			if args_str.len > 0 {
+				parts := split_generic_args(args_str)
+				if parts.len >= 2 {
+					mut arg_types := []string{}
+					args_part := parts[0].trim_space()
+					if args_part.starts_with('[') && args_part.ends_with(']') {
+						inner_args := args_part[1..args_part.len - 1].trim_space()
+						if inner_args.len > 0 {
+							arg_parts := split_generic_args(inner_args)
+							for p in arg_parts {
+								arg_types << map_python_type_to_v(p.trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+							}
+						}
+					} else if args_part == '...' {
+						arg_types << '...Any'
+					} else {
+						arg_types << map_python_type_to_v(args_part, self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+					}
+					
+					ret_type := map_python_type_to_v(parts[1].trim_space(), self_name, allow_union, generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+					if ret_type == 'none' || ret_type == 'void' {
+						return 'fn (${arg_types.join(", ")})'
+					}
+					return 'fn (${arg_types.join(", ")}) ${ret_type}'
+				}
+			}
+			return 'fn (...Any) Any'
+		}
+		'TypeGuard', 'TypeIs', 'typing.TypeGuard', 'typing.TypeIs' {
+			return 'bool'
+		}
+		'TypeForm', 'typing.TypeForm', 'typing_extensions.TypeForm' {
+			return 'string'
+		}
+		'Final', 'ClassVar', 'InitVar', 'Annotated', 'Required', 'NotRequired', 'ReadOnly',
+		'typing.Final', 'typing.ClassVar', 'typing.InitVar', 'typing.Annotated', 'typing.Required', 'typing.NotRequired',
+		'typing.ReadOnly' {
+			if args_str.len > 0 {
+				parts := split_generic_args(args_str)
+				inner := map_python_type_to_v(parts[0].trim_space(), self_name, allow_union,
+					generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+				if base_type in ['NotRequired', 'typing.NotRequired'] && !inner.starts_with('?') {
+					return '?${inner}'
+				}
+				return inner
+			}
+			return 'Any'
+		}
+		else {}
 	}
 
 	res := map_basic_type(base_type)
@@ -261,111 +341,75 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 	return res
 }
 
+// split_generic_args separates top-level generic arguments while respecting nested brackets.
+// Optimization: Uses a start index and string slicing to avoid repeated O(N) string concatenations.
 fn split_generic_args(s string) []string {
 	mut result := []string{}
 	mut depth := 0
-	mut current := ''
+	mut start := 0
 	for i := 0; i < s.len; i++ {
 		ch := s[i]
 		match ch {
-			`[` { depth++ }
-			`]` { depth-- }
+			`[` {
+				depth++
+			}
+			`]` {
+				depth--
+			}
 			`,` {
 				if depth == 0 {
-					result << current.trim_space()
-					current = ''
-					continue
+					result << s[start..i].trim_space()
+					start = i + 1
 				}
 			}
 			else {}
 		}
-		current += ch.ascii_str()
 	}
-	if current.trim_space().len > 0 {
-		result << current.trim_space()
+	if start < s.len {
+		tail := s[start..].trim_space()
+		if tail.len > 0 {
+			result << tail
+		}
 	}
 	return result
 }
 
+// map_basic_type maps common Python type names to V equivalents.
+// Optimization: Uses a match Expression instead of a map literal to avoid re-allocation
+// on every call. Redundant prefixed entries (e.g. typing.Any) are removed as they are
+// already handled by prefix-stripping logic.
 fn map_basic_type(name string) string {
 	mut clean_name := name
-	if clean_name.starts_with('typing.') { clean_name = clean_name[7..] }
-	if clean_name.starts_with('typing_extensions.') { clean_name = clean_name[18..] }
-	if clean_name.starts_with('builtins.') { clean_name = clean_name[9..] }
+	if clean_name.starts_with('typing.') {
+		clean_name = clean_name[7..]
+	} else if clean_name.starts_with('typing_extensions.') {
+		clean_name = clean_name[18..]
+	} else if clean_name.starts_with('builtins.') {
+		clean_name = clean_name[9..]
+	}
 	clean_name = clean_name.trim_space()
 
-	mapping := {
-		'int':                             'int'
-		'float':                           'f64'
-		'str':                             'string'
-		'bytes':                           '[]u8'
-		'bool':                            'bool'
-		'None':                            'none'
-		'Any':                             'Any'
-		'object':                          'Any'
-		'list':                            '[]Any'
-		'dict':                            'map[string]Any'
-		'tuple':                           '[]Any'
-		'set':                             'datatypes.Set[Any]'
-		'memoryview':                      '[]u8'
-		'bytearray':                       '[]u8'
-		'IO':                              'os.File'
-		'TextIO':                          'os.File'
-		'BinaryIO':                        'os.File'
-		'StringIO':                        'strings.Builder'
-		'io.StringIO':                     'strings.Builder'
-		'NoReturn':                        'noreturn'
-		'List':                            '[]Any'
-		'Dict':                            'map[string]Any'
-		'Tuple':                           '[]Any'
-		'Set':                             'datatypes.Set[Any]'
-		'Optional':                        '?Any'
-		'Union':                           'Any'
-		'Callable':                        'fn (...Any) Any'
-		'callable':                        'fn (...Any) Any'
-		'collections.abc.Callable':        'fn (...Any) Any'
-		'Sequence':                        '[]Any'
-		'Iterable':                        '[]Any'
-		'Mapping':                         'map[string]Any'
-		'typing.Any':                      'Any'
-		'typing.List':                     '[]Any'
-		'typing.Dict':                     'map[string]Any'
-		'typing.Tuple':                    '[]Any'
-		'typing.Set':                      'datatypes.Set[Any]'
-		'typing.Optional':                 '?Any'
-		'typing.Union':                    'Any'
-		'typing.Callable':                 'fn (...Any) Any'
-		'typing_extensions.Callable':      'fn (...Any) Any'
-		'typing_extensions.Union':         'Any'
-		'typing.NoReturn':                 'noreturn'
-		'typing.Sequence':                 '[]Any'
-		'typing.Iterable':                 '[]Any'
-		'typing.Mapping':                  'map[string]Any'
-		'builtins.int':                    'int'
-		'builtins.float':                  'f64'
-		'builtins.str':                    'string'
-		'builtins.bool':                   'bool'
-		'builtins.bytes':                  '[]u8'
-		'builtins.object':                 'Any'
-		'LiteralString':                   'string'
-		'typing.LiteralString':            'string'
-		'typing_extensions.LiteralString': 'string'
-		'TypeForm':                        'Any'
-		'typing.TypeForm':                 'Any'
-		'typing_extensions.TypeForm':      'Any'
-		'type':                            'Any'
-		'builtins.type':                   'Any'
-		'Final':                           'Any'
-		'typing.Final':                    'Any'
-		'ClassVar':                        'Any'
-		'typing.ClassVar':                 'Any'
-		'ForwardRef':                      'Any'
-		'typing.ForwardRef':               'Any'
-		'annotationlib.ForwardRef':        'Any'
+	return match clean_name {
+		'int' { 'int' }
+		'float' { 'f64' }
+		'str' { 'string' }
+		'bytes' { '[]u8' }
+		'bool' { 'bool' }
+		'None' { 'none' }
+		'Any', 'object' { 'Any' }
+		'list', 'List', 'Sequence', 'Iterable' { '[]Any' }
+		'dict', 'Dict', 'Mapping' { 'map[string]Any' }
+		'tuple', 'Tuple' { '[]Any' }
+		'set', 'Set' { 'datatypes.Set[Any]' }
+		'memoryview', 'bytearray' { '[]u8' }
+		'IO', 'TextIO', 'BinaryIO' { 'os.File' }
+		'StringIO', 'io.StringIO' { 'strings.Builder' }
+		'NoReturn' { 'noreturn' }
+		'Optional' { '?Any' }
+		'Union' { 'Any' }
+		'Callable', 'callable', 'collections.abc.Callable' { 'fn (...Any) Any' }
+		'LiteralString' { 'string' }
+		'TypeForm', 'type', 'Final', 'ClassVar', 'ForwardRef', 'Annotated', 'Required', 'NotRequired', 'ReadOnly', 'annotationlib.ForwardRef' { 'Any' }
+		else { clean_name }
 	}
-
-	if clean_name in mapping {
-		return mapping[clean_name]
-	}
-	return clean_name
 }

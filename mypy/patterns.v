@@ -7,6 +7,7 @@ module mypy
 // PatternBase embeds NodeBase for source location.
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct PatternBase {
 pub mut:
 	base NodeBase
@@ -21,6 +22,7 @@ pub mut:
 //   pattern=P,    name=X  → as-pattern
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct AsPattern {
 pub mut:
 	pbase   PatternBase
@@ -40,6 +42,7 @@ pub fn (mut n AsPattern) accept(mut v NodeVisitor) !AnyNode {
 // OrPattern — `<p1> | <p2> | ...`
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct OrPattern {
 pub mut:
 	pbase    PatternBase
@@ -58,6 +61,7 @@ pub fn (mut n OrPattern) accept(mut v NodeVisitor) !AnyNode {
 // ValuePattern — `x.y` or `x.y.z`
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct ValuePattern {
 pub mut:
 	pbase PatternBase
@@ -83,6 +87,7 @@ pub enum SingletonValue {
 	none_
 }
 
+@[heap]
 pub struct SingletonPattern {
 pub mut:
 	pbase PatternBase
@@ -102,6 +107,7 @@ pub fn (mut n SingletonPattern) accept(mut v NodeVisitor) !AnyNode {
 // SequencePattern — `[<p1>, <p2>, ...]`
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct SequencePattern {
 pub mut:
 	pbase    PatternBase
@@ -121,6 +127,7 @@ pub fn (mut n SequencePattern) accept(mut v NodeVisitor) !AnyNode {
 // capture=None means `*_` (wildcard spread)
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct StarredPattern {
 pub mut:
 	pbase   PatternBase
@@ -140,6 +147,7 @@ pub fn (mut n StarredPattern) accept(mut v NodeVisitor) !AnyNode {
 // Invariant: len(keys) == len(values)
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct MappingPattern {
 pub mut:
 	pbase  PatternBase
@@ -161,6 +169,7 @@ pub fn (mut n MappingPattern) accept(mut v NodeVisitor) !AnyNode {
 // Invariant: len(keyword_keys) == len(keyword_values)
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct ClassPattern {
 pub mut:
 	pbase PatternBase
@@ -206,4 +215,6 @@ pub fn (mut p PatternNode) accept(mut v NodeVisitor) !AnyNode {
 		ClassPattern { p.accept(mut v)! }
 	}
 }
+
+
 

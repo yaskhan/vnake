@@ -15,15 +15,15 @@ fn (m &ControlFlowModule) unmangle_generic_name(name string) string {
 
 fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr string) (string, map[string]string) {
 	mut bindings := map[string]string{}
-
+	// m.env.state.warnings << 'COMPILE_PATTERN START Type:' + typeof(pattern).name
+	
 	if pattern is ast.MatchValue {
 		return '${subject_expr} == ${m.visit_expr(pattern.value)}', bindings
 	}
 	if pattern is ast.MatchSingleton {
-		if pattern.value.value == 'None' {
-			return '${subject_expr} is none', bindings
-		}
-		return '${subject_expr} == ${pattern.value.value.to_lower()}', bindings
+		// m.env.state.warnings << 'PATTERN: MatchSingleton'
+		val := if pattern.value.value == 'None' { 'none' } else { pattern.value.value.to_lower() }
+		return '${subject_expr} == ${val}', bindings
 	}
 	if pattern is ast.MatchSequence {
 		mut array_types := ['[]int', '[]f64', '[]string', '[]bool', '[]Any']
@@ -105,7 +105,9 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 			}
 
 			sub_cond, sub_binds := m.compile_pattern(p, sub_expr)
-			checks << '(${sub_cond})'
+			if sub_cond != 'true' {
+				checks << '(${sub_cond})'
+			}
 			for k, v in sub_binds {
 				bindings[k] = v
 			}
@@ -119,7 +121,9 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 		}
 		return full_condition, bindings
 	}
+
 	if pattern is ast.MatchMapping {
+		// m.env.state.warnings << 'PATTERN: MatchMapping'
 		map_types := ['map[string]int', 'map[string]string', 'map[string]Any']
 		mut or_parts := []string{}
 		for t in map_types {
@@ -156,7 +160,9 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 		return cond, bindings
 	}
 	if pattern is ast.MatchClass {
-		cls_name_expr := m.visit_expr(pattern.cls)
+		// m.env.state.warnings << 'PATTERN: MatchClass'
+		cls_name_expr := m.map_annotation(pattern.cls)
+		// m.env.state.warnings << 'PATTERN: MatchClass cls_name_expr=' + cls_name_expr
 		mut cls_name := m.unmangle_generic_name(cls_name_expr)
 		if cls_name.len > 0 && !cls_name[0].is_capital() && !cls_name.contains('[') {
 			cls_name = cls_name[0].ascii_str().to_upper() + cls_name[1..]
@@ -212,16 +218,18 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 		return parts.join(' || '), bindings
 	}
 	if pattern is ast.MatchAs {
+		// m.env.state.warnings << 'PATTERN: MatchAs name=' + (pattern.name or { 'none' })
 		mut cond := 'true'
 		mut val_expr := subject_expr
 		if sub := pattern.pattern {
+			// m.env.state.warnings << 'PATTERN: MatchAs SUB-PATTERN: ' + typeof(sub).name
 			sc, sb := m.compile_pattern(sub, subject_expr)
 			cond = sc
 			for k, v in sb {
 				bindings[k] = v
 			}
 			if sub is ast.MatchClass {
-				cn_expr := m.visit_expr(sub.cls)
+				cn_expr := m.map_annotation(sub.cls)
 				mut cn := m.unmangle_generic_name(cn_expr)
 				if cn.len > 0 && !cn[0].is_capital() {
 					cn = cn[0].ascii_str().to_upper() + cn[1..]
@@ -240,7 +248,8 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 		}
 		return 'true', bindings
 	}
-	return 'false', bindings
+	m.env.state.warnings << 'UNKNOWN PATTERN TYPE: ' + typeof(pattern).name
+	return 'true', bindings
 }
 
 pub fn (mut m ControlFlowModule) visit_match(node ast.Match) {
@@ -252,6 +261,13 @@ pub fn (mut m ControlFlowModule) visit_match(node ast.Match) {
 	found_var := 'py_match_found_${match_id}'
 
 	m.emit('// Match statement lowered to if blocks')
+	for case in node.cases {
+		p := case.pattern
+		if p is ast.MatchClass || p is ast.MatchAs || p is ast.MatchValue || p is ast.MatchSingleton || p is ast.MatchSequence || p is ast.MatchMapping || p is ast.MatchStar || p is ast.MatchOr {
+			continue
+		}
+		m.env.state.warnings << 'UNSUPPORTED CASE PATTERN TYPE: ' + typeof(p).name
+	}
 	m.emit('${subject_var} := ${subject}')
 	m.emit('${subject_any} := Any(${subject_var})')
 	m.emit('mut ${found_var} := false')

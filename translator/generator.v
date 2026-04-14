@@ -26,8 +26,8 @@ pub fn (e &VCodeEmitter) generator_emit_helpers() string {
 	return e.emit_helpers()
 }
 
-pub fn generator_emit_global_helpers(imports []string, structs []string, functions []string, module_name string) string {
-	return VCodeEmitter.emit_global_helpers(imports, structs, functions, module_name)
+pub fn generator_emit_global_helpers(imports []string, structs []string, functions []string, module_name string, classes []string, used_builtins map[string]bool) string {
+	return VCodeEmitter.emit_global_helpers(imports, structs, functions, module_name, classes, used_builtins)
 }
 
 pub fn (mut e VCodeEmitter) generator_add_import(module_name string) {

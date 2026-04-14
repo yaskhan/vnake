@@ -175,14 +175,14 @@ pub const operator = &ErrorCode{
 
 pub const list_item = &ErrorCode{
 	code:            'list-item'
-	description:     'Check list items in a list expression [item, ...]'
+	description:     'Check list items in a list Expression [item, ...]'
 	category:        'General'
 	default_enabled: true
 }
 
 pub const dict_item = &ErrorCode{
 	code:            'dict-item'
-	description:     'Check dict items in a dict expression {key: value, ...}'
+	description:     'Check dict items in a dict Expression {key: value, ...}'
 	category:        'General'
 	default_enabled: true
 }
@@ -248,28 +248,28 @@ pub const deprecated = &ErrorCode{
 
 pub const unreachable = &ErrorCode{
 	code:            'unreachable'
-	description:     'Warn about unreachable statements or expressions'
+	description:     'Warn about unreachable statements or Expressions'
 	category:        'General'
 	default_enabled: true
 }
 
 pub const redundant_cast = &ErrorCode{
 	code:            'redundant-cast'
-	description:     'Check that cast changes type of expression'
+	description:     'Check that cast changes type of Expression'
 	category:        'General'
 	default_enabled: true
 }
 
 pub const redundant_expr = &ErrorCode{
 	code:            'redundant-expr'
-	description:     'Warn about redundant expressions'
+	description:     'Warn about redundant Expressions'
 	category:        'General'
 	default_enabled: false
 }
 
 pub const truthy_bool = &ErrorCode{
 	code:            'truthy-bool'
-	description:     'Warn about expressions that could always evaluate to true in boolean contexts'
+	description:     'Warn about Expressions that could always evaluate to true in boolean contexts'
 	category:        'General'
 	default_enabled: false
 }

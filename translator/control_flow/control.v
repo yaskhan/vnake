@@ -10,10 +10,16 @@ pub fn (mut m ControlFlowModule) visit_break(_ ast.Break) {
 		}
 		target_depth := m.loop_depth_stack[m.loop_depth_stack.len - 1]
 		diff := m.env.state.vexc_depth - target_depth
+		if diff > 0 {
+			m.env.state.used_builtins['vexc'] = true
+		}
 		for _ in 0 .. diff {
 			m.emit('vexc.end_try()')
 		}
 	} else {
+		if m.env.state.vexc_depth > 0 {
+			m.env.state.used_builtins['vexc'] = true
+		}
 		for _ in 0 .. m.env.state.vexc_depth {
 			m.emit('vexc.end_try()')
 		}
@@ -28,10 +34,16 @@ pub fn (mut m ControlFlowModule) visit_continue(_ ast.Continue) {
 	if m.loop_depth_stack.len > 0 {
 		target_depth := m.loop_depth_stack[m.loop_depth_stack.len - 1]
 		diff := m.env.state.vexc_depth - target_depth
+		if diff > 0 {
+			m.env.state.used_builtins['vexc'] = true
+		}
 		for _ in 0 .. diff {
 			m.emit('vexc.end_try()')
 		}
 	} else {
+		if m.env.state.vexc_depth > 0 {
+			m.env.state.used_builtins['vexc'] = true
+		}
 		for _ in 0 .. m.env.state.vexc_depth {
 			m.emit('vexc.end_try()')
 		}
@@ -48,6 +60,14 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 			}
 		}
 	}
+	
+	// Ensure we end all active try blocks before returning
+	if m.env.state.vexc_depth > 0 {
+		m.env.state.used_builtins['vexc'] = true
+	}
+	for _ in 0 .. m.env.state.vexc_depth {
+		m.emit('vexc.end_try()')
+	}
 
 	if val := node.value {
 		expr := m.visit_expr(val)
@@ -58,7 +78,66 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 				m.emit('return none')
 			}
 		} else if expr.len > 0 {
+			ret_type := m.env.state.current_function_return_type
+			pure := ret_type.trim_left('?&')
+			is_interface := pure in m.env.state.known_interfaces || pure in m.env.state.class_to_impl
+			if is_interface && expr != 'none' {
+				mut v_type := 'Any'
+				if f := m.env.guess_type_fn {
+					v_type = f(val)
+				}
+				
+				is_opt_target := ret_type.starts_with('?')
+				is_opt_source := v_type.starts_with('?')
+				
+				is_any_source := v_type == 'Any' || v_type == ''
+				if is_any_source || is_opt_source || (expr.contains('.') && !expr.contains('(')) || expr == 't' {
+					m.emit('mut ret_match_val := ?${pure}(none)')
+					// If it's potentially an interface but NOT an Option, don't use 'if mut'
+					if is_opt_source {
+						m.emit('if mut val_raw := ${expr} {')
+					} else {
+						m.emit('{ mut val_raw := ${expr}')
+					}
+					m.env.state.indent_level++
+					m.emit('match val_raw {')
+					for cls_name, _ in m.env.state.defined_classes {
+						v_cls := m.env.state.class_to_impl[cls_name] or { cls_name }
+						if m.env.state.implements_interface(v_cls, pure) {
+							// For class-based implementations, we must take the address
+							// of the explicitly casted subject because 'it' might not be properly
+							// narrowed in some V 0.5 compiler edge cases.
+							prefix := if m.env.state.is_v_class_type(v_cls) { '&' } else { '' }
+							m.emit('    ${v_cls} { ret_match_val = ${prefix}(val_raw as ${v_cls}) }')
+						}
+					}
+					v_pure := v_type.trim_left('?&')
+					is_v_interface := v_pure in m.env.state.known_interfaces
+					// If we are matching to return an interface, OMIT NoneType branch from the match itself.
+					// None should be handled by the outer 'if mut val_raw := ...' or by 'ret_match_val' default.
+					if (v_type == 'Any' || v_type == '') && !is_v_interface && pure == 'Any' {
+						m.emit('    NoneType { ret_match_val = none }')
+					}
+					m.emit("    else { panic('cannot cast Any to interface ${pure}') }")
+					m.emit('}')
+					m.env.state.indent_level--
+					m.emit('}')
+					if is_opt_target {
+						m.emit('return ret_match_val')
+					} else {
+						m.emit('return (ret_match_val or { panic("missing return value") }) as ${pure}')
+					}
+				} else {
+				if expr.contains('(') && !expr.starts_with('(') && !expr.contains(' or {') && (v_type.starts_with('?') || v_type == 'Any') {
+					// Add unwrap for potential Option return from method calls when casting to interface
+					m.emit('return (${expr} or { panic("missing return value") }) as ${pure}')
+				} else {
+					m.emit('return ${expr} as ${pure}')
+				}
+			}
+		} else {
 			m.emit('return ${expr}')
+		}
 		} else {
 			m.emit('return')
 		}

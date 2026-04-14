@@ -116,8 +116,8 @@ pub fn (e &Errors) is_errors() bool {
 	return e.error_info_map.len > 0
 }
 
-pub fn new_errors(options Options) Errors {
-	return Errors.new(&options, none, none)
+pub fn new_errors(options &Options) Errors {
+	return Errors.new(options, none, none)
 }
 
 // set_file sets the current file for errors

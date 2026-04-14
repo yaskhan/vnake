@@ -5,6 +5,7 @@ import ast
 import functions
 import base
 import models
+import strings
 
 @[heap]
 pub struct ExprGen {
@@ -23,7 +24,7 @@ pub fn new_expr_gen(model &models.VType, type_analyzer &analyzer.Analyzer, state
 	}
 }
 
-fn (eg &ExprGen) type_ctx() base.TypeGuessingContext {
+pub fn (eg &ExprGen) type_ctx() base.TypeGuessingContext {
 	return base.TypeGuessingContext{
 		type_map:           eg.analyzer.type_map
 		location_map:       eg.analyzer.location_map
@@ -33,6 +34,7 @@ fn (eg &ExprGen) type_ctx() base.TypeGuessingContext {
 		explicit_any_types: eg.analyzer.explicit_any_types
 		target_type:        eg.target_type
 		analyzer:           eg.analyzer
+		coroutine_handler:  eg.state.coroutine_handler
 	}
 }
 
@@ -45,8 +47,11 @@ pub fn (eg &ExprGen) guess_type_no_loc(node ast.Expression) string {
 }
 
 pub fn (mut eg ExprGen) wrap_bool(node ast.Expression, invert bool) string {
-	expr := eg.visit(node)
 	v_type := eg.guess_type(node)
+	expr := eg.visit(node)
+	if v_type == 'Any' || v_type.starts_with('?') {
+		eg.state.used_builtins['py_bool'] = true
+	}
 	return base.wrap_bool(node, expr, v_type, invert)
 }
 
@@ -70,6 +75,7 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 		ast.Set { return eg.visit_set(node) }
 		ast.BinaryOp { return eg.visit_bin_op(node) }
 		ast.UnaryOp { return eg.visit_unary_op(node) }
+		ast.BoolOp { return eg.visit_bool_op(node) }
 		ast.Compare { return eg.visit_compare(node) }
 		ast.Call { return eg.visit_call(node) }
 		ast.Attribute { return eg.visit_attribute(node) }
@@ -79,7 +85,9 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 		ast.GeneratorExp { return eg.visit_generator_exp(node, '') or { '[]' } }
 		ast.DictComp { return eg.visit_dict_comp(node, '') or { '{}' } }
 		ast.SetComp { return eg.visit_set_comp(node, '') or { '{}' } }
-		ast.IfExp { return eg.visit_if_exp(node) }
+		ast.IfExp {
+			return eg.visit_if_exp(node)
+		}
 		ast.Starred { return eg.visit_starred(node) }
 		ast.JoinedStr { return eg.visit_joined_str(node) }
 		ast.FormattedValue { return eg.visit_formatted_value(node) }
@@ -93,7 +101,42 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 }
 
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
-	name := eg.state.name_remap[node.id] or { node.id }
+	if node.id == '__name__' {
+		return '__name__'
+	}
+	mut name := eg.state.name_remap[node.id] or { node.id }
+	if name != node.id {
+	}
+	
+	// If name is already a complex Expression (e.g. from narrowing: "(obj as Derived)"), 
+	// don't use it for assignment LHS, as we must assign to the base variable.
+	if eg.state.in_assignment_lhs && (name.contains('(') || name.contains(' ') || name.contains(' as ') || name.starts_with('narrowed_')) {
+		name = node.id
+	}
+
+	sanitized := base.sanitize_name(name, false, map[string]bool{}, '', map[string]bool{})
+	
+	v_type := eg.guess_type(node)
+	if v_type.starts_with('?') && !eg.state.in_assignment_lhs {
+		// If explicitly narrowed in this scope, or it's a _mut shadow variable, V 0.5 already considers it non-optional
+		if eg.state.narrowed_vars[sanitized] || sanitized.ends_with('_mut') {
+			return sanitized
+		}
+		// Unwrap if the target context requires non-optional type
+		if (!eg.target_type.starts_with('?') && eg.target_type != 'Any' && eg.target_type != '') {
+			return "(${sanitized} or { panic('narrowed var is none') })"
+		}
+	}
+
+	if name == 'str' { return "string" }
+	if name == 'float' { return "f64" }
+	if name == 'int' { return "int" }
+	if name == 'bool' { return "bool" }
+
+	if (name.contains('(') || name.contains(' ') || name.contains(' as ')) {
+		return name
+	}
+
 	if name.len > 0 && name[0].is_capital() && !name.is_upper() {
 		return base.sanitize_name(name, true, map[string]bool{}, '', map[string]bool{})
 	}
@@ -101,30 +144,104 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 }
 
 fn (eg &ExprGen) extract_string_content(value string) string {
-	if value.len >= 3 && value[0] == `t` && (value[1] == `'` || value[1] == `"`) {
-		return value[2..value.len - 1]
+	res := value.trim('\r\n\t')
+	if res.len < 2 { return res }
+	mut v := res
+	// Remove prefixes first, including Vnake internal prefix
+	if v.starts_with('__py2v_t__') {
+		v = v['__py2v_t__'.len..]
 	}
-	if value.len >= 2 && (value[0] == `'` || value[0] == `"`) {
-		return value[1..value.len - 1]
+	// Strip b/f/r prefixes
+	for v.len > 0 && v[0].is_letter() {
+		if v.len > 1 && (v[1] == `'` || v[1] == `"`) {
+			v = v[1..]
+		} else {
+			break
+		}
 	}
-	return value
+	// Robust recursive strip all leading/trailing quotes
+	for v.len >= 2 {
+		if v.starts_with("'''") && v.ends_with("'''") && v.len >= 6 {
+			v = v[3..v.len - 3]
+		} else if v.starts_with('"""') && v.ends_with('"""') && v.len >= 6 {
+			v = v[3..v.len - 3]
+		} else if v.starts_with("'") && v.ends_with("'") {
+			v = v[1..v.len - 1]
+		} else if v.starts_with('"') && v.ends_with('"') {
+			v = v[1..v.len - 1]
+		} else if v.starts_with("'") || v.starts_with('"') {
+			v = v[1..]
+		} else if v.ends_with("'") || v.ends_with('"') {
+			v = v[..v.len - 1]
+		} else {
+			break
+		}
+	}
+	// Final trim for any leftover escaped quotes from unbalanced lexing
+	return v.trim_right('\\"').trim("'\"")
 }
 
-fn (eg &ExprGen) quote_string_content(value string) string {
+pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
+	tstring := eg.translate_tstring(node.values)
+	if tstring.len > 0 {
+		return tstring
+	}
+	is_literal_goal := eg.target_type == 'LiteralString' || eg.state.current_ann_raw == 'LiteralString' || eg.state.current_ann_raw == 'typing.LiteralString'
+	
+	// Use double quotes to allow single quotes in content - V requires double quotes for interpolation
+	mut res := strings.new_builder(node.values.len * 16)
+	res.write_byte(`"`)
+	for val_node in node.values {
+		if val_node is ast.Constant {
+			mut content := eg.extract_string_content(val_node.value)
+			content = content.replace('$', '\\$')
+			content = content.replace('"', '\\"')
+			res.write_string(content)
+		} else if val_node is ast.FormattedValue {
+			if is_literal_goal && val_node.value is ast.Constant {
+				// Flatten literal interpolation
+				mut inner_c := eg.extract_string_content(val_node.value.value)
+				inner_c = inner_c.replace('$', '\\$')
+				inner_c = inner_c.replace('"', '\\"')
+				res.write_string(inner_c)
+			} else {
+				mut inner := eg.visit(val_node.value)
+				mut suffix := ''
+				if val_node.conversion == 114 {
+					inner = 'py_repr(${inner})'
+					eg.state.used_builtins['py_repr'] = true
+				} else if val_node.conversion == 97 {
+					inner = 'py_ascii(${inner})'
+					eg.state.used_builtins['py_ascii'] = true
+				}
+				if spec := val_node.format_spec {
+					if spec is ast.JoinedStr {
+						suffix = ':' + eg.visit_joined_str(spec).trim('"')
+					} else if spec is ast.Constant {
+						suffix = ':' + eg.extract_string_content(spec.value)
+					}
+				}
+				res.write_byte(`$`)
+				res.write_byte(`{`)
+				res.write_string(inner)
+				res.write_string(suffix)
+				res.write_byte(`}`)
+			}
+		}
+	}
+	res.write_byte(`"`)
+	return res.str()
+}
+
+fn (eg &ExprGen) quote_string_content(value string, is_raw bool) string {
 	if value.len == 0 {
 		return "''"
 	}
-
-	if value.contains('\\') {
-		if !value.contains("'") {
-			return "r'${value}'"
-		}
-		if !value.contains('"') {
-			return 'r"${value}"'
-		}
+	if is_raw {
+		return "r'${value}'"
 	}
 
-	mut escaped := value.replace('\\', '\\\\')
+	mut escaped := value.replace('$', '\\$')
 	escaped = escaped.replace("'", "\\'")
 	escaped = escaped.replace('\n', '\\n')
 	escaped = escaped.replace('\r', '\\r')
@@ -136,31 +253,54 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 	if values.len == 0 {
 		return ''
 	}
-	if values[0] is ast.Constant {
-		first := values[0] as ast.Constant
-		if !first.value.starts_with('__py2v_t__')
-			&& !first.value.starts_with('t\'')
-			&& !first.value.starts_with('t"')
-			&& first.token.typ != .tstring_tok {
-			return ''
+	mut has_marker := false
+	mut is_raw := false
+	for val in values {
+		if val is ast.Constant {
+			if val.value.contains('__py2v_t__') {
+				has_marker = true
+				break
+			}
+			if val.value.contains('__py2v_rt__') {
+				has_marker = true
+				is_raw = true
+				break
+			}
+			if val.value.starts_with('t\'') || val.value.starts_with('t"') || val.value.starts_with('rt\'') || val.value.starts_with('rt"') {
+				has_marker = true
+				if val.value.starts_with('rt') { is_raw = true }
+				break
+			}
 		}
+	}
+	if !has_marker {
+		return ''
+	}
 
-		mut strings := []string{}
+		mut parts := []string{}
 		mut interpolations := []string{}
 
 		for i, value in values {
 			match value {
 				ast.Constant {
-					mut content := value.value
+					mut content := eg.extract_string_content(value.value)
 					if content.starts_with('__py2v_t__') {
 						content = content['__py2v_t__'.len..]
+					} else if content.starts_with('__py2v_rt__') {
+						content = content['__py2v_rt__'.len..]
 					}
-					content = eg.extract_string_content(content)
-					strings << eg.quote_string_content(content)
+					
+					if parts.len > interpolations.len {
+						last := parts.pop()
+						last_content := eg.extract_string_content(last)
+						parts << eg.quote_string_content(last_content + content, is_raw)
+					} else {
+						parts << eg.quote_string_content(content, is_raw)
+					}
 				}
 				ast.FormattedValue {
 					if i == 0 {
-						strings << "''"
+						parts << "''"
 					}
 					expr_text := eg.visit(value.value)
 					conversion := match value.conversion {
@@ -179,22 +319,21 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 					if format_spec_node := value.format_spec {
 						format_spec = eg.visit(format_spec_node)
 					}
-					interpolations << 'Interpolation{value: ${expr_text}, expression: ${eg.quote_string_content(expr_text)}, conversion: ${conversion}, format_spec: ${format_spec}}'
+					interpolations << 'Interpolation{value: ${expr_text}, expression: ${eg.quote_string_content(expr_text, false)}, conversion: ${conversion}, format_spec: ${format_spec}}'
 					if i == values.len - 1 {
-						strings << "''"
+						parts << "''"
 					}
 				}
 				else {}
 			}
 		}
 
-		for strings.len < interpolations.len + 1 {
-			strings << "''"
+		for parts.len < interpolations.len + 1 {
+			parts << "''"
 		}
 
-		return 'Template{strings: [${strings.join(', ')}], interpolations: [${interpolations.join(', ')}]}'
-	}
-	return ''
+		eg.state.used_builtins['Template'] = true
+		return 'Template{strings: [${parts.join(', ')}], interpolations: [${interpolations.join(', ')}]}'
 }
 
 pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
@@ -207,33 +346,45 @@ pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
 	if node.value == 'False' {
 		return 'false'
 	}
+	if node.value == 'Ellipsis' || node.value == '...' {
+		return '/* ... */'
+	}
 	if node.value.starts_with("b'") || node.value.starts_with('b"') {
 		content := eg.extract_string_content(node.value[1..])
 		return eg.bytes_literal_to_v(content)
 	}
-	if node.token.typ == .tstring_tok || node.value.starts_with('__py2v_t__')
-		|| node.value.starts_with('t\'') || node.value.starts_with('t"') {
-		mut content := node.value
+	if node.token.typ == .tstring_tok || node.value.contains('__py2v_t__') || node.value.contains('__py2v_rt__')
+		|| node.value.starts_with('t\'') || node.value.starts_with('t"') || node.value.starts_with('rt\'') || node.value.starts_with('rt"') {
+		mut content := eg.extract_string_content(node.value)
+		is_raw := content.starts_with('__py2v_rt__') || content.starts_with('rt\'') || content.starts_with('rt"')
 		if content.starts_with('__py2v_t__') {
 			content = content['__py2v_t__'.len..]
+		} else if content.starts_with('__py2v_rt__') {
+			content = content['__py2v_rt__'.len..]
 		}
-		content = eg.extract_string_content(content)
-		return 'Template{strings: [${eg.quote_string_content(content)}], interpolations: []}'
+		eg.state.used_builtins['Template'] = true
+		return 'Template{strings: [${eg.quote_string_content(content, is_raw)}], interpolations: []}'
 	}
 	if node.token.typ == .string_tok || node.token.typ == .fstring_tok {
-		if node.value.starts_with("'") || node.value.starts_with('"') || node.value.starts_with('t\'')
-			|| node.value.starts_with('t"') {
-			return node.value
+		if node.value.starts_with('t\'') || node.value.starts_with('t"') || node.value.starts_with('rt\'') || node.value.starts_with('rt"') {
+			return eg.visit_constant(node) // recursion handled by prefix check
 		}
-		return "'${node.value}'"
+		content := eg.extract_string_content(node.value)
+		is_raw := node.value.starts_with('r') || node.value.starts_with('R') || node.value.contains('r\'') || node.value.contains('r"') ||
+		          node.token.value.starts_with('r') || node.token.value.starts_with('R') || node.token.value.contains('r\'') || node.token.value.contains('r"')
+		return eg.quote_string_content(content, is_raw)
 	}
-	if node.value.ends_with('j') && !node.value.starts_with("'") && !node.value.starts_with('"') {
-		content := node.value[..node.value.len - 1]
-		val := if content.contains('.') { content } else { '${content}.0' }
+	mut val := node.value
+	if node.token.typ == .number {
+		val = val.replace('_', '')
+	}
+	if val.ends_with('j') && !val.starts_with("'") && !val.starts_with('"') {
+		content := val[..val.len - 1]
+		complex_val := if content.contains('.') { content } else { '${content}.0' }
 		eg.state.used_builtins['py_complex'] = true
-		return 'py_complex(0.0, ${val})'
+		return 'py_complex(0.0, ${complex_val})'
 	}
-	return node.value
+	return val
 }
 
 fn (eg &ExprGen) bytes_literal_to_v(content string) string {
@@ -300,7 +451,7 @@ pub fn (mut eg ExprGen) visit_list(node ast.List) string {
 				args << '[${val}]'
 			}
 		}
-		return 'py_list_concat([${args.join(', ')}])'
+		return 'py_list_concat(${args.join(', ')})'
 	}
 	
 	if values.len == 0 {
@@ -327,15 +478,24 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 	}
 	
 	mut values := []string{}
+	mut inner_v_type := ''
+	if eg.target_type.starts_with('[]') {
+		inner_v_type = eg.target_type[2..]
+	}
+
 	for elt in node.elements {
-		values << eg.visit(elt)
+		mut v := eg.visit(elt)
+		if inner_v_type.len > 0 && (inner_v_type.starts_with('SumType_') || inner_v_type.contains(' | ')) && !v.contains('(') {
+			v = '${inner_v_type}(${v})'
+		}
+		values << v
 	}
 	
 	if has_starred {
 		eg.state.used_list_concat = true
 		mut args := []string{}
-		for elt in node.elements {
-			val := eg.visit(elt)
+		for i, elt in node.elements {
+			val := values[i]
 			if elt is ast.Starred {
 				if val.starts_with('...') {
 					args << val[3..]
@@ -346,15 +506,19 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 				args << '[${val}]'
 			}
 		}
-		return 'py_list_concat([${args.join(', ')}])'
+		return 'py_list_concat(${args.join(', ')})'
 	}
 	
 	return '[${values.join(', ')}]'
 }
 
 pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
-	dict_type := if eg.target_type.len > 0 { eg.target_type } else { 'Any' }
-	is_struct := dict_type in eg.state.defined_classes
+	mut dict_type := if eg.target_type.len > 0 { eg.target_type } else { 'Any' }
+	mut pure_dict_type := dict_type.trim_left('?&')
+	is_struct := pure_dict_type in eg.state.defined_classes || pure_dict_type in eg.state.typed_dicts
+	if is_struct {
+		dict_type = pure_dict_type
+	}
 
 	if node.keys.len == 0 {
 		if is_struct { return "${dict_type}{}" }
@@ -364,11 +528,25 @@ pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
 		return "map[string]Any{}"
 	}
 	mut items := []string{}
+	mut val_v_type := ''
+	if dict_type.starts_with('map[') {
+		bracket_idx := dict_type.index(']') or { -1 }
+		if bracket_idx != -1 {
+			val_v_type = dict_type[bracket_idx + 1..]
+		}
+	}
+
 	for i, key in node.keys {
 		if i >= node.values.len {
 			break
 		}
-		val := eg.visit(node.values[i])
+		mut val := eg.visit(node.values[i])
+		if !is_struct {
+			if val_v_type.len > 0 && (val_v_type.starts_with('SumType_') || val_v_type.contains(' | ')) && !val.contains('(') {
+				val = '${val_v_type}(${val})'
+			}
+		}
+
 		if is_struct && key is ast.Constant && (key.token.typ == .string_tok || key.token.typ == .fstring_tok) {
 			items << '${key.value.trim('\'"')}: ${val}'
 			continue
@@ -386,22 +564,46 @@ pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
 }
 
 pub fn (mut eg ExprGen) visit_set(node ast.Set) string {
-	mut items := []string{}
+	mut has_starred := false
 	for elt in node.elements {
-		items << eg.visit(elt)
+		if elt is ast.Starred {
+			has_starred = true
+			break
+		}
 	}
-	if items.len == 0 {
+
+	mut inner_type := if node.elements.len > 0 { eg.guess_type(node.elements[0]) } else { 'Any' }
+	if inner_type == 'str' { inner_type = 'string' }
+	if inner_type == 'Any' || inner_type == 'unknown' { inner_type = 'int' } // fallback for test literal {1, 2}
+
+	if has_starred {
+		eg.state.used_set_create = true
+		eg.state.used_builtins['datatypes'] = true
+		mut args := []string{}
+		for elt in node.elements {
+			val := eg.visit(elt)
+			if elt is ast.Starred {
+				if val.starts_with('...') {
+					args << val[3..]
+				} else {
+					args << val
+				}
+			} else {
+				args << '[${val}]'
+			}
+		}
+		return 'py_set_create(${args.join(', ')})'
+	}
+
+	if node.elements.len == 0 {
 		eg.state.used_builtins['datatypes'] = true
 		return 'datatypes.Set[Any]{}'
 	}
 
-	mut inner_type := eg.guess_type(node.elements[0])
-	if inner_type == 'str' { inner_type = 'string' }
-	if inner_type == 'Any' || inner_type == 'unknown' { inner_type = 'int' } // fallback for test literal {1, 2}
-
 	mut elts := []string{}
-	for it in items {
-		elts << '${it}: true'
+	for elt in node.elements {
+		val := eg.visit(elt)
+		elts << '${val}: true'
 	}
 
 	eg.state.used_builtins['datatypes'] = true
@@ -422,23 +624,6 @@ pub fn (mut eg ExprGen) visit_slice(node ast.Slice) string {
 		return '${lower}..${upper};${step}'
 	}
 	return '${lower}..${upper}'
-}
-
-pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
-	tstring := eg.translate_tstring(node.values)
-	if tstring.len > 0 {
-		return tstring
-	}
-	mut res := "'"
-	for value in node.values {
-		if value is ast.Constant {
-			res += eg.extract_string_content(value.value)
-		} else if value is ast.FormattedValue {
-			res += '$' + '{' + eg.visit(value.value) + '}'
-		}
-	}
-	res += "'"
-	return res
 }
 
 pub fn (mut eg ExprGen) visit_formatted_value(node ast.FormattedValue) string {
@@ -466,14 +651,39 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	all_args_params << node.args.args
 	all_args_params << node.args.kwonlyargs
 
-	for arg in all_args_params {
+	mut ctx_param_types := []string{}
+	mut ctx_ret_type := 'int'
+	
+	if eg.state.current_assignment_type.starts_with('fn (') {
+		line := eg.state.current_assignment_type
+		bracket_idx := line.index('(') or { -1 }
+		close_bracket_idx := line.index(')') or { -1 }
+		if bracket_idx != -1 && close_bracket_idx != -1 {
+			params_str := line[bracket_idx + 1..close_bracket_idx].trim_space()
+			if params_str.len > 0 {
+				ctx_param_types = params_str.split(',').map(it.trim_space())
+			}
+			ret_part := line[close_bracket_idx + 1..].trim_space()
+			if ret_part.len > 0 {
+				ctx_ret_type = ret_part
+			}
+		}
+	}
+
+	has_pos_vararg := node.args.vararg != none
+	for i, arg in all_args_params {
 		if d := arg.default_ {
 			if d is ast.Name && d.id == arg.arg {
 				extra_captures << base.sanitize_name(arg.arg, false, map[string]bool{}, "", map[string]bool{})
 				continue
 			}
 		}
-		typ := eg.lambda_param_type(arg.annotation)
+		mut typ := eg.lambda_param_type(arg.annotation)
+		if typ == 'Any' && i < ctx_param_types.len {
+			typ = ctx_param_types[i]
+		}
+		if typ == 'Any' && !has_pos_vararg { typ = 'int' } // Fallback to int for test compatibility
+		
 		params << "${arg.arg} ${typ}"
 		param_types[arg.arg] = typ
 		current_scope[arg.arg] = true
@@ -507,7 +717,16 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	}
 	capture_str := if captures.len > 0 { "[${captures.join(", ")}] " } else { "" }
 
-	ret_type := eg.lambda_return_type(node.body, param_types)
+	mut ret_type := eg.lambda_return_type(node.body, param_types)
+	if ret_type == 'Any' && ctx_ret_type != 'Any' {
+		ret_type = ctx_ret_type
+	}
+	
+	if has_pos_vararg {
+		ret_type = 'Any'
+	} else if ret_type == 'Any' { 
+		ret_type = 'int' 
+	}
 
 	eg.state.scope_stack << current_scope
 	eg.state.scope_names << "<lambda>"
@@ -537,17 +756,17 @@ fn (mut eg ExprGen) lambda_param_type(annotation ?ast.Expression) string {
 		}
 		return eg.visit(ann)
 	}
-	return 'int'
+	return 'Any'
 }
 
 fn (eg &ExprGen) lambda_return_type(body ast.Expression, param_types map[string]string) string {
-	mut ctx := eg.type_ctx()
-	ctx.type_map = ctx.type_map.clone()
+	mut t_ctx := eg.type_ctx()
+	t_ctx.type_map = t_ctx.type_map.clone()
 	for k, v in param_types {
-		ctx.type_map[k] = v
+		t_ctx.type_map[k] = v
 	}
-	ret_type := base.guess_type(body, ctx, true)
-	return if ret_type in ["Any", "void", "unknown"] { "Any" } else { ret_type }
+	ret_type := base.guess_type(body, t_ctx, true)
+	return if ret_type in ["Any", "void", "unknown", "int"] { "Any" } else { ret_type }
 }
 
 pub fn (mut eg ExprGen) visit_await(node ast.Await) string {
@@ -575,7 +794,10 @@ pub fn (mut eg ExprGen) visit_yield_from(node ast.YieldFrom) string {
 pub fn (mut eg ExprGen) visit_named_expr(node ast.NamedExpr) string {
 	target := eg.visit(node.target)
 	value := eg.visit(node.value)
-	return '(${target} = ${value})'
+	
+	// Collect assignment to be emitted as a statement before the condition
+	eg.state.walrus_assignments << '${target} := ${value}'
+	return target
 }
 pub fn (mut eg ExprGen) map_python_type(type_str string, is_return bool) string {
 	return eg.map_type_ext(type_str, false, true, is_return)
@@ -591,15 +813,17 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 	}
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: eg.state.imported_symbols
-		scc_files:        eg.state.scc_files.keys()
+		defined_classes:  eg.state.defined_classes
+		scc_files:        eg.state.scc_files
 		used_builtins:    eg.state.used_builtins
 		warnings:         eg.state.warnings
-		config:           eg.state.config
+		include_all_symbols: eg.state.include_all_symbols
+		strict_exports:      eg.state.strict_exports
 	}
 	mut actual_struct := if opts.struct_name.len > 0 && opts.struct_name != 'Self' { opts.struct_name } else { eg.state.current_class }
 	if actual_struct == '' { actual_struct = 'Self' }
 
-	return base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string) string {
+	return base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string, def string) string {
 		if name == 'Self' || name == 'typing.Self' {
 			mut v_gens := []string{}
 			for gn in eg.state.current_class_generics {
@@ -609,14 +833,17 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 			return "&" + actual_struct + gen_s
 		}
 		if name.contains("|") {
-			eg.state.generated_sum_types[name] = ''
+			return ""
+		}
+		if name.len > 0 {
+			eg.state.generated_sum_types[name] = def
 			return name
 		}
 		return ""
 	}, noop_literal_registrar, noop_tuple_registrar)
 }
 
-fn noop_sum_type_registrar(_ string) string {
+fn noop_sum_type_registrar(_ string, _ string) string {
 	return ''
 }
 

@@ -27,11 +27,13 @@ pub const op_methods_to_symbols = {
 
 pub struct TypeUtilsContext {
 pub mut:
-	imported_symbols map[string]string
-	scc_files        []string
+	imported_symbols    map[string]string
+	defined_classes     map[string]map[string]bool
+	scc_files           map[string]bool
 	used_builtins    map[string]bool
 	warnings         []string
-	config           voidptr
+	include_all_symbols bool
+	strict_exports      bool
 }
 
 pub struct TypeMapOptions {
@@ -67,6 +69,14 @@ pub fn is_numeric_type(v_type string) bool {
 
 // wrap_bool lowers Python truthiness into explicit V boolean checks.
 pub fn wrap_bool(node ast.Expression, expr string, v_type string, invert bool) string {
+	if node is ast.BoolOp || node is ast.Compare || node is ast.UnaryOp {
+		if node is ast.UnaryOp && node.op.value != 'not' {
+			// pass
+		} else {
+			return if invert { '!(${expr})' } else { expr }
+		}
+	}
+
 	if v_type.starts_with('?') {
 		inner := v_type[1..]
 		inner_cond := bool_condition(expr, inner, invert)
@@ -112,8 +122,48 @@ fn bool_condition(expr string, v_type string, invert bool) string {
 	return if invert { '!${expr}' } else { expr }
 }
 
+// build_truthiness_check builds a V condition that checks Python truthiness for a value.
+// For optional types, it checks both != none AND the inner type's truthiness.
+// For Any types, it uses py_bool and checks for none.
+// This is used for `or`/`and` Expressions to correctly handle None values.
+pub fn build_truthiness_check(expr string, v_type string) string {
+	// Optional types: must check != none first, then check inner value
+	if v_type.starts_with('?') {
+		inner := v_type[1..]
+		inner_check := truthiness_condition(expr, inner)
+		if inner_check.len > 0 {
+			return '(${expr} != none && ${inner_check})'
+		}
+		return '${expr} != none'
+	}
+	
+	// Any type needs py_bool check with none handling
+	if v_type == 'Any' {
+		return '(${expr} != none && py_bool(${expr}))'
+	}
+	
+	return truthiness_condition(expr, v_type)
+}
+
+// truthiness_condition returns the condition that checks if a value is truthy for non-optional types.
+fn truthiness_condition(expr string, v_type string) string {
+	if is_collection_type(v_type) {
+		return '${expr}.len > 0'
+	}
+	if is_numeric_type(v_type) {
+		return '${expr} != 0'
+	}
+	if v_type == 'bool' {
+		return expr
+	}
+	if v_type == 'Any' {
+		return 'py_bool(${expr})'
+	}
+	return expr
+}
+
 // map_type is a centralized Python-to-V type mapper with post-processing.
-pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, sum_type_registrar fn (string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
+pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	if type_str.contains('TypeForm') {
 		ctx.warnings << "Experimental feature 'TypeForm' is used."
 	}
@@ -121,7 +171,7 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 	registrar := if opts.register_sum_types {
 		sum_type_registrar
 	} else {
-		fn (_ string) string {
+		fn (_ string, _ string) string {
 			return ''
 		}
 	}
@@ -160,7 +210,14 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 		if parts.len > 1 {
 			module_prefix := parts[..parts.len - 1].join('.')
 			typename := parts[parts.len - 1]
-			for f in ctx.scc_files {
+			
+			// Handle Nested Classes: Outer.Inner -> Outer_Inner
+			nested_name := v_type.replace('.', '_')
+			if nested_name in ctx.defined_classes {
+				return nested_name
+			}
+
+			for f, _ in ctx.scc_files {
 				norm := f.replace('.py', '').replace('/', '.').replace('\\', '.')
 				if module_prefix.ends_with(norm) {
 					prefix := get_scc_prefix(f)
@@ -171,20 +228,11 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 	}
 
 	if !opts.allow_union && v_type.contains(' | ') {
-		// Convert "A | B" to "SumType_AB", with sorted parts for determinism
-		mut parts := v_type.split(' | ')
-		parts.sort()
-		mut name_parts := []string{}
-		for p in parts {
-			mut part_name := p.capitalize()
-			if part_name == 'Str' {
-				part_name = 'String'
-			}
-			name_parts << part_name
-		}
-		st_name := 'SumType_${name_parts.join('')}'
-		registrar(st_name)
-		return st_name
+		is_opt := v_type.starts_with('?')
+		inner := if is_opt { v_type[1..] } else { v_type }
+		st_name := get_sum_type_name(inner)
+		registrar(st_name, inner)
+		return if is_opt { '?' + st_name } else { st_name }
 	}
 
 	return v_type
@@ -204,13 +252,13 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 		return 'false'
 	}
 	if v_type == 'string' {
-		return "'0'"
+		return "''"
 	}
 	if v_type.starts_with('[]') || v_type.starts_with('map[') {
 		return '${v_type}{}'
 	}
 	if v_type == 'Any' {
-		return 'Any(NoneExpr{})'
+		return 'Any(NoneType{})'
 	}
 	if v_type.len > 0 && v_type[0].is_capital() && !v_type.contains('|') {
 		if v_type in active_v_generics {
@@ -219,4 +267,38 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 		return '${v_type}{}'
 	}
 	return 'none'
+}
+
+pub fn get_sum_type_name(union_str string) string {
+	mut parts := union_str.split(' | ').map(it.trim_space())
+	parts.sort()
+	mut name_parts := []string{}
+	for p in parts {
+		mut cleaned_p := p.trim_left('?&')
+		mut part_name := cleaned_p.capitalize()
+		if part_name == 'Str' {
+			part_name = 'String'
+		}
+		name_parts << part_name
+	}
+	return 'SumType_${name_parts.join('')}'
+}
+
+pub fn get_literal_enum_name(vals []string) string {
+	mut cleaned_vals := []string{}
+	for v in vals {
+		cleaned := v.trim("'\"")
+		cleaned_vals << cleaned
+	}
+	mut name_parts := []string{}
+	for v in cleaned_vals {
+		if v.len > 0 {
+			mut vp := v.capitalize()
+			if vp == 'Str' {
+				vp = 'String'
+			}
+			name_parts << vp
+		}
+	}
+	return 'LiteralEnum_${name_parts.join('')}'
 }

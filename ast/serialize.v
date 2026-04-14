@@ -378,7 +378,7 @@ pub fn (mut s Serializer) write_statement(node Statement) {
 				s.write_expression(val)
 			} else {
 				// Assignment must have a value in binary format usually, use none?
-				// Nativeparse expects an expression, so use a placeholder name.
+				// Nativeparse expects an Expression, so use a placeholder name.
 				s.write_tag(nodes_name_expr)
 				s.write_str('...')
 				s.write_loc(node.token)
@@ -703,7 +703,7 @@ pub fn (mut s Serializer) write_expression(node Expression) {
 		Lambda {
 			s.write_tag(nodes_lambda_expr)
 			s.write_parameters(node.args)
-			// Write body expression
+			// Write body Expression
 			s.write_expression(node.body)
 			s.write_loc(node.token)
 			s.write_tag(end_tag)
@@ -712,6 +712,18 @@ pub fn (mut s Serializer) write_expression(node Expression) {
 			s.write_tag(nodes_named_expr)
 			s.write_expression(node.target)
 			s.write_expression(node.value)
+			s.write_loc(node.token)
+			s.write_tag(end_tag)
+		}
+		BoolOp {
+			s.write_tag(nodes_bool_op_expr)
+			idx := bool_ops.index(node.op.value)
+			s.write_int(if idx >= 0 { idx } else { 0 })
+			s.write_tag(list_gen)
+			s.write_int_bare(node.values.len)
+			for v in node.values {
+				s.write_expression(v)
+			}
 			s.write_loc(node.token)
 			s.write_tag(end_tag)
 		}
@@ -847,7 +859,7 @@ pub fn (mut s Serializer) write_expression(node Expression) {
 			s.write_tag(end_tag)
 		}
 		else {
-			// Placeholder for unhandled expression types
+			// Placeholder for unhandled Expression types
 		}
 	}
 }

@@ -97,7 +97,7 @@ pub struct Plugin {
 pub mut:
 	options        Options
 	python_version []int
-	modules        ?map[string]MypyFile
+	modules        ?map[string]&MypyFile
 }
 
 // new_plugin creates a new Plugin
@@ -110,7 +110,7 @@ pub fn new_plugin(options Options) Plugin {
 }
 
 // set_modules sets modules for the plugin
-pub fn (mut p Plugin) set_modules(modules map[string]MypyFile) {
+pub fn (mut p Plugin) set_modules(modules map[string]&MypyFile) {
 	p.modules = modules.clone()
 }
 
@@ -128,7 +128,7 @@ pub fn (p Plugin) report_config_data(ctx ReportConfigContext) ?Any {
 }
 
 // get_additional_deps returns additional dependencies for a module
-pub fn (p Plugin) get_additional_deps(file MypyFile) []Dependency {
+pub fn (p Plugin) get_additional_deps(file &MypyFile) []Dependency {
 	return []Dependency{}
 }
 
@@ -213,7 +213,7 @@ pub fn new_chained_plugin(options Options, plugins []Plugin) ChainedPlugin {
 }
 
 // set_modules sets modules for all plugins
-pub fn (mut cp ChainedPlugin) set_modules(modules map[string]MypyFile) {
+pub fn (mut cp ChainedPlugin) set_modules(modules map[string]&MypyFile) {
 	for mut plugin in cp.plugins {
 		plugin.set_modules(modules)
 	}
@@ -289,7 +289,7 @@ pub interface CheckerPluginInterface {
 }
 
 pub interface SemanticAnalyzerPluginInterface {
-	modules         map[string]MypyFile
+	modules         map[string]&MypyFile
 	options         Options
 	cur_mod_id      string
 	msg             MessageBuilder

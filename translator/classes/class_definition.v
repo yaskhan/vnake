@@ -10,7 +10,14 @@ pub mut:
 }
 
 pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut env ClassVisitEnv, mut classes ClassesModule) {
-	struct_name := sanitize_name(node.name, true)
+	if node.name == 'TaskState' {
+		for i, stmt in node.body {
+		}
+	}
+	mut struct_name := sanitize_name(node.name, true)
+	if h.class_stack.len > 0 {
+		struct_name = h.class_stack.join('') + struct_name
+	}
 	if h.class_stack.len == 0 {
 		env.state.defined_top_level_symbols[node.name] = true
 	}
@@ -21,6 +28,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 
 	h.class_stack << struct_name
 	env.state.scope_names << node.name
+	env.analyzer.push_scope(node.name)
 	prev_class := env.state.current_class
 	prev_generics := env.state.current_class_generics.clone()
 	prev_generic_map := env.state.current_class_generic_map.clone()
@@ -47,21 +55,45 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					gn := env.visit_expr_fn(base_expr.slice)
 					if gn.len > 0 { py_generics << gn }
 				}
+			} else {
+				// Handle TypeVars in Base[T]
+				if base_expr.slice is ast.Name {
+					if base_expr.slice.id in env.state.type_vars {
+						if base_expr.slice.id !in py_generics { py_generics << base_expr.slice.id }
+					}
+				} else if base_expr.slice is ast.Tuple {
+					for elt in base_expr.slice.elements {
+						if elt is ast.Name {
+							if elt.id in env.state.type_vars {
+								if elt.id !in py_generics { py_generics << elt.id }
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 
 	env.state.current_class = struct_name
 	env.state.current_class_body = node.body.clone()
-	env.state.current_class_generics = py_generics.clone()
+	
+	mut all_class_generics := prev_generics.clone()
+	for pg in py_generics {
+		if pg !in all_class_generics { all_class_generics << pg }
+	}
+	env.state.current_class_generics = all_class_generics.clone()
 	env.state.current_class_generic_map = map[string]string{}
 	env.state.current_class_bases = []string{}
 	env.state.current_class_generic_bases = map[string]string{}
 	env.state.current_class_is_unittest = false
 
 	if py_generics.len > 0 {
-		env.state.current_class_generic_map = base.get_generic_map(py_generics, [])
+		mut parent_maps := []map[string]string{}
+		if prev_generic_map.len > 0 { parent_maps << prev_generic_map }
+		env.state.current_class_generic_map = base.get_generic_map(py_generics, parent_maps)
 	}
+	env.state.generic_scopes << env.state.current_class_generic_map
+	defer { env.state.generic_scopes.pop() }
 
 	if classes.pydantic_handler.is_pydantic_model(node) {
 		mut p_env := pydantic_support.new_pydantic_visit_env(
@@ -73,6 +105,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			env.emit_function_fn,
 			env.emit_constant_fn,
 			env.map_type_fn,
+			env.map_annotation_fn,
 			env.source_mapping,
 		)
 		processor := pydantic_support.new_pydantic_model_processor()
@@ -106,6 +139,10 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 	}
 
 	base_fields, current_class_bases, is_enum, is_int_enum, is_flag, is_unittest, is_protocol, _, is_typed_dict := classes.class_bases_handler.process_bases(node, struct_name, mut env)
+
+	if is_enum || is_int_enum {
+		env.state.defined_classes[struct_name]["is_enum"] = true
+	}
 	env.state.current_class_bases = current_class_bases
 	for f in base_fields { fields << f }
 
@@ -127,6 +164,8 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		}
 	}
 	body = filtered_body.clone()
+	has_init, has_new, static_methods, class_methods := classes.class_methods_handler.extract_method_info(node)
+	classes.class_methods_handler.register_class_info(struct_name, has_init, has_new, static_methods, class_methods, false, mut env)
 
 	mut abs_methods := []string{}
 	for base_name in current_class_bases {
@@ -180,11 +219,13 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		env.state.known_interfaces[struct_name] = true
 	}
 
-	mut has_post_init := false
-	for method in methods {
-		if method.name == '__post_init__' {
-			has_post_init = true
-			break
+	mut has_post_init := dataclass_metadata['has_post_init'] == 'true'
+	if !has_post_init {
+		for method in methods {
+			if method.name == '__post_init__' {
+				has_post_init = true
+				break
+			}
 		}
 	}
 
@@ -320,6 +361,8 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		struct_parts << '${pub_prefix}struct ${struct_name_for_body}${generics_str} {'
 		if struct_fields_str.len > 0 {
 			struct_parts << struct_fields_str.join('\n')
+		} else {
+			struct_parts << '    dummy_field_workaround bool'
 		}
 		struct_parts << '}'
 		if !is_unittest {
@@ -340,8 +383,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			meta_const_name := '${base.to_snake_case(struct_name)}_meta'
 			env.emit_constant_fn('pub const ${meta_const_name} = &${meta_struct_name}{}')
 		}
-
-		// Generate factory function new_X for simple struct if it has __init__ or __new__
+		// Generate factory functions for overloaded __init__ or __new__
 		if !is_enum && !is_flag {
 			ov_key_init := '${struct_name}.__init__'
 			ov_key_new := '${struct_name}.__new__'
@@ -357,7 +399,6 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 				
 				is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
 				for sig in sigs {
-					 // eprintln('DEBUG CLASS SIG: ${sig}')
 					mut type_suffix_parts := []string{}
 					mut factory_args := []string{}
 					mut factory_assignments := []string{}
@@ -380,6 +421,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					}
 					
 					mut mangled_factory := 'new_${base.to_snake_case(struct_name).to_lower()}'
+					if mangled_factory.ends_with('_impl') { mangled_factory = mangled_factory[..mangled_factory.len - 5] }
 					if type_suffix_parts.len > 0 {
 						mangled_factory = '${mangled_factory}_${type_suffix_parts.join("_")}'
 					} else {
@@ -400,67 +442,29 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					f_code << '}'
 					env.emit_function_fn(f_code.join('\n'))
 
-					const_name := base.to_snake_case('${struct_name_for_body}_${mangled_factory}_annotations')
+					const_name := base.to_snake_case('${struct_name_for_body}_${mangled_factory}_annotations').trim_left('_')
 					if anno_parts.len > 0 {
 						env.emit_constant_fn('pub const ${const_name} = { ${anno_parts.join(", ")} }')
-					}
-					}
-			} else {
-				mut init_method_opt := ?ast.FunctionDef(none)
-				for m in methods {
-					if m.name == '__init__' {
-						init_method_opt = m
-						break
+						env.emit_constant_fn('const ${const_name} = { ${anno_parts.join(", ")}, \'return\': \'&${struct_name_for_body}${generics}\' }')
 					}
 				}
-				if init_method := init_method_opt {
+			} else {
+				if !classes.class_methods_handler.has_method(methods, '__init__') && !classes.class_methods_handler.has_method(methods, '__new__') && !is_dataclass && !is_protocol && !is_typed_dict && !is_unittest {
 					prefix := if env.state.is_exported(struct_name) { 'pub ' } else { '' }
-					factory_name := get_factory_name(struct_name, &env)
 					generics := get_generics_with_variance_str(&env)
-					mut factory_args := []string{}
-					mut factory_assignments := []string{}
-					
-					start_idx := if init_method.args.args.len > 0 && init_method.args.args[0].arg in ['self', 'cls'] { 1 } else { 0 }
-					for i := start_idx; i < init_method.args.args.len; i++ {
-						arg := init_method.args.args[i]
-						name := sanitize_name(arg.arg, false)
-						mut a_type := 'Any'
-						if ann := arg.annotation {
-							a_type = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
-						}
-						factory_args << '${name} ${a_type}'
-						factory_assignments << 'self.${name} = ${name}'
-					}
-					
+					mangled_factory := base.get_factory_name(struct_name, env.state.class_hierarchy)
 					is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
-					mut f_code := []string{}
 					factory_ret := if is_pydantic { '!&${struct_name_for_body}${generics}' } else { '&${struct_name_for_body}${generics}' }
-					f_code << '${prefix}fn ${factory_name}${generics}(${factory_args.join(", ")}) ${factory_ret} {'
+					
+					mut f_code := []string{}
+					f_code << '${prefix}fn ${mangled_factory}${generics}() ${factory_ret} {'
 					f_code << '    mut self := &${struct_name_for_body}${generics}{}'
-					if factory_assignments.len > 0 {
-						f_code << '    ' + factory_assignments.join('\n    ')
-					}
 					if is_pydantic {
 						f_code << '    self.validate() or { return err }'
 					}
 					f_code << '    return self'
 					f_code << '}'
 					env.emit_function_fn(f_code.join('\n'))
-
-					const_name := base.to_snake_case('${struct_name_for_body}_${factory_name}_annotations')
-					mut anno_parts := []string{}
-					for i := start_idx; i < init_method.args.args.len; i++ {
-						arg := init_method.args.args[i]
-						name := sanitize_name(arg.arg, false)
-						mut a_type := 'Any'
-						if ann := arg.annotation {
-							a_type = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
-						}
-						anno_parts << "'${name}': '${a_type}'"
-					}
-					if anno_parts.len > 0 {
-						env.emit_constant_fn('pub const ${const_name} = { ${anno_parts.join(", ")} }')
-					}
 				}
 			}
 		}
@@ -476,6 +480,33 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		for method in methods {
 			env.visit_stmt_fn(method)
 		}
+
+		if struct_name_for_body.ends_with('_Impl') {
+			for f in fields {
+				if !f.name.starts_with('_') && !f.name.ends_with('_Impl') {
+					// Avoid creating getters for fields that already have matching methods
+					mut already_has_method := false
+					for m in methods {
+						if base.to_snake_case(m.name).to_lower() == f.name {
+							already_has_method = true
+							break
+						}
+					}
+					if already_has_method {
+					}
+					if !already_has_method {
+						mut f_type := f.def.split(' ').last()
+						env.emit_function_fn('fn (self &${struct_name_for_body}${generics_str}) ${f.name}() ${f_type} { return self.${f.name} }')
+					}
+				}
+			}
+		}
+	}
+	if py_generics.len > 0 {
+		mut gen_list := []string{}
+		for g in py_generics { gen_list << "'${g}'" }
+		const_name := base.to_snake_case('${struct_name}_type_params').trim_left('_')
+		env.emit_constant_fn('pub const ${const_name} = [ ${gen_list.join(", ")} ]')
 	}
 
 	defer {
@@ -484,6 +515,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		}
 		if env.state.scope_names.len > 0 {
 			env.state.scope_names = env.state.scope_names[..env.state.scope_names.len - 1]
+			env.analyzer.pop_scope()
 		}
 		env.state.current_class = prev_class
 		env.state.current_class_generics = prev_generics

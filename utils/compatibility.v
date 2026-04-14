@@ -8,7 +8,23 @@ pub fn new_compatibility_layer() CompatibilityLayer {
 }
 
 pub fn (c CompatibilityLayer) is_v_reserved(name string) bool {
-	return name in v_reserved_keywords() || name.to_lower() in v_reserved_keywords()
+	return is_v_reserved_keyword(name) || is_v_reserved_keyword(name.to_lower())
+}
+
+// is_v_reserved_keyword checks if the name is a V reserved keyword.
+// This is optimized to use a match Expression for faster lookup.
+fn is_v_reserved_keyword(name string) bool {
+	return match name {
+		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface',
+		'enum', 'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared',
+		'spawn', 'assert', 'sizeof', 'typeof', '__global', 'as', 'in', 'is', 'none', 'map',
+		'array', 'string', 'bool', 'any', 'Any', 'union' {
+			true
+		}
+		else {
+			false
+		}
+	}
 }
 
 pub fn (c CompatibilityLayer) is_python_soft_keyword(name string) bool {
@@ -22,46 +38,6 @@ pub fn (c CompatibilityLayer) preprocess_source(source string) string {
 	return result
 }
 
-fn v_reserved_keywords() []string {
-	return [
-		'fn',
-		'type',
-		'struct',
-		'mut',
-		'if',
-		'else',
-		'for',
-		'return',
-		'match',
-		'interface',
-		'enum',
-		'pub',
-		'import',
-		'module',
-		'const',
-		'unsafe',
-		'defer',
-		'go',
-		'chan',
-		'shared',
-		'spawn',
-		'assert',
-		'sizeof',
-		'typeof',
-		'__global',
-		'as',
-		'in',
-		'is',
-		'none',
-		'map',
-		'array',
-		'string',
-		'bool',
-		'any',
-		'Any',
-		'union',
-	]
-}
 
 fn python_soft_keywords() []string {
 	return ['match', 'case', 'type', 'soft']
@@ -84,7 +60,8 @@ fn (c CompatibilityLayer) preprocess_tstrings(source string) string {
 					result << quote
 					result << quote
 				}
-				result << '__py2v_t__'.bytes()
+				marker := if raw_prefix { '__py2v_rt__' } else { '__py2v_t__' }
+				result << marker.bytes()
 				i = prefix_end + quote_len
 				continue
 			}

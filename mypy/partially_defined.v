@@ -93,13 +93,13 @@ pub fn (mut bs BranchStatement) record_nested_branch(state BranchState) {
 			current.skipped = true
 			return
 		}
-		for k in state.must_be_defined.keys() {
+		for k, _ in state.must_be_defined {
 			current.must_be_defined[k] = true
 		}
-		for k in state.may_be_defined.keys() {
+		for k, _ in state.may_be_defined {
 			current.may_be_defined[k] = true
 		}
-		for k in current.must_be_defined.keys() {
+		for k, _ in current.must_be_defined {
 			current.may_be_defined.delete(k)
 		}
 	}
@@ -143,22 +143,22 @@ pub fn (bs BranchStatement) is_defined_in_a_branch(name string) bool {
 pub fn (bs BranchStatement) done() BranchState {
 	mut all_vars := map[string]bool{}
 	for b in bs.branches {
-		for k in b.may_be_defined.keys() {
+		for k, _ in b.may_be_defined {
 			all_vars[k] = true
 		}
-		for k in b.must_be_defined.keys() {
+		for k, _ in b.must_be_defined {
 			all_vars[k] = true
 		}
 	}
 	non_skipped := bs.branches.filter(!it.skipped)
 	mut must_be_defined := map[string]bool{}
 	if non_skipped.len > 0 {
-		for k in non_skipped[0].must_be_defined.keys() {
+		for k, _ in non_skipped[0].must_be_defined {
 			must_be_defined[k] = true
 		}
 		for i in 1 .. non_skipped.len {
 			mut to_remove := []string{}
-			for k in must_be_defined.keys() {
+			for k, _ in must_be_defined {
 				if k !in non_skipped[i].must_be_defined {
 					to_remove << k
 				}
@@ -169,7 +169,7 @@ pub fn (bs BranchStatement) done() BranchState {
 		}
 	}
 	mut may_be_defined := map[string]bool{}
-	for k in all_vars.keys() {
+	for k, _ in all_vars {
 		if k !in must_be_defined {
 			may_be_defined[k] = true
 		}

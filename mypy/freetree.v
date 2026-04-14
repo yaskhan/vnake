@@ -33,7 +33,7 @@ pub fn (mut tf TreeFreer) visit_block(block Block) {
 // This needs to be done recursively, since symbol tables contain
 // references to definitions, so those won't be freed but we want their
 // contents to be.
-pub fn free_tree(tree MypyFile) {
+pub fn free_tree(tree &MypyFile) {
 	// In V, we use the garbage collector, so explicit freeing is not needed.
 	// This function is kept for API compatibility but does nothing.
 	// The tree and its contents will be garbage collected when no longer referenced.

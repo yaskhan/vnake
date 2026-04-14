@@ -2,7 +2,7 @@ module base
 
 import ast
 
-// capture_value stores a complex expression into a temporary variable.
+// capture_value stores a complex Expression into a temporary variable.
 pub fn capture_value(node ast.Expression, visit_fn fn (ast.Expression) string, create_temp_fn fn () string, indent_fn fn () string) (string, []string) {
 	if node is ast.Name || node is ast.Constant {
 		return visit_fn(node), []string{}

@@ -144,7 +144,7 @@ pub fn (mut d DependencyAnalyzer) analyze_project(root_path string, recursive bo
 
 	mut raw_graph := map[string][]string{}
 	mut count := 0
-	for rel_path in d.file_index.keys() {
+	for rel_path, _ in d.file_index {
 		if rel_path.ends_with('.py') || rel_path.ends_with('.pyi') {
 			count++
 			if count % 100 == 0 {
@@ -164,16 +164,19 @@ pub fn (mut d DependencyAnalyzer) analyze_project(root_path string, recursive bo
 			continue
 		}
 		mut resolved_deps := []string{}
+		mut seen_deps := map[string]bool{}
 		for dep in deps {
 			if resolved_path := d.resolve_module_to_path(dep, root_path, file) {
 				if resolved_path in raw_graph {
-					if resolved_path !in resolved_deps {
+					if resolved_path !in seen_deps {
 						resolved_deps << resolved_path
+						seen_deps[resolved_path] = true
 					}
 				}
 			} else if dep in raw_graph {
-				if dep !in resolved_deps {
+				if dep !in seen_deps {
 					resolved_deps << dep
+					seen_deps[dep] = true
 				}
 			}
 		}

@@ -2,12 +2,10 @@ module translator
 
 import ast
 
-fn (t &Translator) collect_mutable_locals(stmts []ast.Statement) map[string]bool {
-	mut names := map[string]bool{}
+fn (t &Translator) collect_mutable_locals(stmts []ast.Statement, mut names map[string]bool) {
 	for stmt in stmts {
 		t.collect_mutable_locals_stmt(stmt, mut names)
 	}
-	return names
 }
 
 fn (t &Translator) collect_mutable_locals_stmt(stmt ast.Statement, mut names map[string]bool) {
@@ -17,6 +15,16 @@ fn (t &Translator) collect_mutable_locals_stmt(stmt ast.Statement, mut names map
 				if target is ast.Attribute {
 					if target.value is ast.Name {
 						names[target.value.id] = true
+					}
+				} else if target is ast.Name {
+					if target.id in names {
+						// Already saw it once, so it's mutable if reassigned
+						names[target.id] = true
+					} else {
+						// First time seeing it, might be just initialization
+						// But for now, we need a way to track "seen once" vs "reassigned".
+						// Given the current map[string]bool, we can't easily distinguish.
+						// However, if we assume any local assigned in a loop or IF is potentially mutable?
 					}
 				}
 			}
@@ -45,54 +53,24 @@ fn (t &Translator) collect_mutable_locals_stmt(stmt ast.Statement, mut names map
 			}
 		}
 		ast.If {
-			other := t.collect_mutable_locals(stmt.body)
-			for k in other.keys() {
-				names[k] = true
-			}
-			other2 := t.collect_mutable_locals(stmt.orelse)
-			for k in other2.keys() {
-				names[k] = true
-			}
+			t.collect_mutable_locals(stmt.body, mut names)
+			t.collect_mutable_locals(stmt.orelse, mut names)
 		}
 		ast.For {
-			other := t.collect_mutable_locals(stmt.body)
-			for k in other.keys() {
-				names[k] = true
-			}
-			other2 := t.collect_mutable_locals(stmt.orelse)
-			for k in other2.keys() {
-				names[k] = true
-			}
+			t.collect_mutable_locals(stmt.body, mut names)
+			t.collect_mutable_locals(stmt.orelse, mut names)
 		}
 		ast.While {
-			other := t.collect_mutable_locals(stmt.body)
-			for k in other.keys() {
-				names[k] = true
-			}
-			other2 := t.collect_mutable_locals(stmt.orelse)
-			for k in other2.keys() {
-				names[k] = true
-			}
+			t.collect_mutable_locals(stmt.body, mut names)
+			t.collect_mutable_locals(stmt.orelse, mut names)
 		}
 		ast.Try {
-			other := t.collect_mutable_locals(stmt.body)
-			for k in other.keys() {
-				names[k] = true
-			}
-			other2 := t.collect_mutable_locals(stmt.orelse)
-			for k in other2.keys() {
-				names[k] = true
-			}
-			other3 := t.collect_mutable_locals(stmt.finalbody)
-			for k in other3.keys() {
-				names[k] = true
-			}
+			t.collect_mutable_locals(stmt.body, mut names)
+			t.collect_mutable_locals(stmt.orelse, mut names)
+			t.collect_mutable_locals(stmt.finalbody, mut names)
 		}
 		ast.With {
-			other := t.collect_mutable_locals(stmt.body)
-			for k in other.keys() {
-				names[k] = true
-			}
+			t.collect_mutable_locals(stmt.body, mut names)
 		}
 		else {}
 	}

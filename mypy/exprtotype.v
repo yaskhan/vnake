@@ -3,7 +3,7 @@
 
 module mypy
 
-// expr_to_unanalyzed_type translates expression to type
+// expr_to_unanalyzed_type translates Expression to type
 // Result does not pass semantic analysis
 pub fn expr_to_unanalyzed_type(expr Expression,
 	options Options,
@@ -201,7 +201,7 @@ pub fn expr_to_unanalyzed_type(expr Expression,
 			})
 		}
 		else {
-			return error('Unsupported expression for type')
+			return error('Unsupported Expression for type')
 		}
 	}
 	return res

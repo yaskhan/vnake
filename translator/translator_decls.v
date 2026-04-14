@@ -10,6 +10,13 @@ import functions
 fn (mut t Translator) visit_function_def(node &ast.FunctionDef) {
 	prev_func := t.current_function_name
 	t.current_function_name = node.name
+	
+	// Reset narrowed variables to avoid leakage from previous functions
+	t.state.narrowed_vars.clear()
+	
+	old_output := t.state.output
+	t.state.output = []string{}
+	
 	mut env := functions.new_function_visit_env(
 		t.state,
 		t.analyzer,
@@ -20,16 +27,19 @@ fn (mut t Translator) visit_function_def(node &ast.FunctionDef) {
 			return t.visit_expr(expr)
 		},
 		fn [mut t] (line string) {
-			t.emit_indented(line)
+			t.state.output << line
 		},
 		fn [mut t] (line string) {
 			t.emit_constant_code(line)
 		},
+		fn [mut t] (line string) {
+			t.emit_function_code(line)
+		},
 		fn [mut t] () string {
 			return t.indent()
 		},
-		fn [mut t] () {
-			t.push_scope()
+		fn [mut t] (name string) {
+			t.push_scope(name)
 		},
 		fn [mut t] () {
 			t.pop_scope()
@@ -46,10 +56,28 @@ fn (mut t Translator) visit_function_def(node &ast.FunctionDef) {
 		false,
 	)
 	t.functions_module.visit_function_def(node, mut env)
+	
+	func_code := t.state.output.join('\n')
+	t.state.output = old_output
 	t.current_function_name = prev_func
+	
+	if func_code.len > 0 {
+		// Lift generic functions to top-level even if they are nested.
+		// Non-generic nested functions can stay as closures if they were generated that way.
+		is_lifted := node.type_params.len > 0 || (prev_func.len > 0 && !func_code.contains(' := fn '))
+		
+		if prev_func.len > 0 && !is_lifted {
+			t.state.output << func_code
+		} else {
+			t.emit_function_code(func_code)
+		}
+	}
 }
 
 fn (mut t Translator) visit_class_def(node &ast.ClassDef) {
+	old_output := t.state.output
+	t.state.output = []string{}
+	
 	mut env := classes.new_class_visit_env(
 		t.state,
 		t.analyzer,
@@ -60,7 +88,7 @@ fn (mut t Translator) visit_class_def(node &ast.ClassDef) {
 			return t.visit_expr(expr)
 		},
 		fn [mut t] (s string) {
-			t.emit_struct_code(s)
+			t.state.output << s
 		},
 		fn [mut t] (s string) {
 			t.emit_function_code(s)
@@ -77,16 +105,36 @@ fn (mut t Translator) visit_class_def(node &ast.ClassDef) {
 		false,
 	)
 	t.classes_module.visit_class_def(node, mut env)
+	
+	class_struct_code := t.state.output.join('\n')
+	t.state.output = old_output
+	
+	if class_struct_code.len > 0 {
+		t.emit_struct_code(class_struct_code)
+	}
 }
 
 fn (mut t Translator) emit_struct_code(s string) {
-	t.state.output << s
+	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
+	e.add_struct(s)
 }
 
 fn (mut t Translator) emit_function_code(s string) {
-	t.state.output << s
+	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
+	e.add_function(s)
+}
+
+fn (mut t Translator) emit_helper_function_code(s string) {
+	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
+	e.add_helper_function(s)
+}
+
+fn (mut t Translator) emit_helper_struct_code(s string) {
+	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
+	e.add_helper_struct(s)
 }
 
 fn (mut t Translator) emit_constant_code(s string) {
-	t.state.output << s
+	mut e := unsafe { &VCodeEmitter(t.state.emitter) }
+	e.add_constant(s)
 }

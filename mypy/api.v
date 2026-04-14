@@ -1,37 +1,53 @@
-// Work in progress by Codex. Started: 2026-03-22 21:31:00 +05:00
+// I, Antigravity, am working on this file. Started: 2026-03-31 18:20
 module mypy
 
-import strings
-
-pub struct ApiBuffers {
+// MypyAPI provides a high-level programmatic interface to Mypy's semantic analysis and type checking.
+pub struct MypyAPI {
 pub mut:
-	stdout strings.Builder
-	stderr strings.Builder
+	options &Options
+	errors  &Errors
 }
 
-pub type MainWrapperFn = fn (mut ApiBuffers) !
-
-fn run_main_wrapper(main_wrapper MainWrapperFn) (string, string, int) {
-	mut buffers := ApiBuffers{
-		stdout: strings.new_builder(0)
-		stderr: strings.new_builder(0)
+pub fn new_api(options &Options, errors &Errors) &MypyAPI {
+	return &MypyAPI{
+		options: options
+		errors:  errors
 	}
-	mut exit_status := 0
-
-	main_wrapper(mut buffers) or {
-		exit_status = 2
-		buffers.stderr.write_string(err.msg())
-		buffers.stderr.write_string('\n')
-	}
-
-	return buffers.stdout.str(), buffers.stderr.str(), exit_status
 }
 
-pub fn run(args []string) (string, string, int) {
-	_ = args
-	return run_main_wrapper(fn [args] (mut buffers ApiBuffers) ! {
-		_ = args
-		buffers.stderr.write_string('mypy.api.run: mypy/main.py is not translated yet')
-		return error('SystemExit: 2')
-	})
+// analyze performs semantic analysis on a single file.
+pub fn (mut api MypyAPI) analyze(mut file MypyFile, modules map[string]&MypyFile) ! {
+	mut sa := new_semantic_analyzer(modules, *api.errors, Plugin{}, *api.options)
+	file.accept(mut sa)!
+}
+
+// check performs type checking on a single file.
+pub fn (mut api MypyAPI) check(mut file MypyFile, modules map[string]&MypyFile) !&TypeChecker {
+	// 1. Semantic Analysis (required before type checking)
+	api.analyze(mut file, modules) or {
+		return error('Semantic analysis failed')
+	}
+	if api.errors.is_errors() {
+		return error('Semantic analysis reported errors')
+	}
+
+	// 2. Type Checking
+	mut tc := new_type_checker(*api.errors, modules, *api.options, file, file.path, Plugin{})
+	tc.check_first_pass()
+	if api.errors.is_errors() {
+		return error('Type checking reported errors')
+	}
+	return tc
+}
+
+// analyze_all performs semantic analysis on multiple files.
+pub fn (mut api MypyAPI) analyze_all(mut files []&MypyFile) ! {
+	mut modules := map[string]&MypyFile{}
+	for mut f in files {
+		modules[f.fullname] = f
+	}
+
+	for mut f in files {
+		api.analyze(mut f, modules)!
+	}
 }

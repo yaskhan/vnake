@@ -1,7 +1,7 @@
 // Literals and literal_hash for mypy (literals.py)
 module mypy
 
-// Key is a hashable key for expressions
+// Key is a hashable key for Expressions
 pub type Key = string
 
 // Literal kinds (from nodes.py)
@@ -9,7 +9,7 @@ pub const literal_no = 0 // Not a literal
 pub const literal_type = 1 // Variable reference
 pub const literal_yes = 2 // Literal value
 
-// literal_hash generates a hashable key for expressions supported by the binder.
+// literal_hash generates a hashable key for Expressions supported by the binder.
 pub fn literal_hash(e Expression) ?Key {
 	h := Hasher{}
 	match e {
@@ -34,7 +34,7 @@ pub fn literal_hash(e Expression) ?Key {
 	}
 }
 
-// literal returns the literal kind for an expression.
+// literal returns the literal kind for an Expression.
 pub fn literal(e Expression) int {
 	match e {
 		ComparisonExpr {

@@ -34,7 +34,7 @@ The transpiler includes dedicated support for transpiling [Pydantic](https://doc
 
 | Option | Vlang Implementation |
 |--------|----------------------|
-| `str_strip_whitespace` | Calls `.trim()` on all string fields in `.validate()` |
+| `str_strip_whitespace` | Calls `.trim_space()` on all string fields in `.validate()` |
 | `str_to_lower` | Calls `.to_lower()` on all string fields in `.validate()` |
 | `str_to_upper` | Calls `.to_upper()` on all string fields in `.validate()` |
 | `min_anystr_length` | Adds length check to all string fields in `.validate()` |
@@ -73,7 +73,6 @@ class User(BaseModel):
 
 ```v
 // Pydantic Model: User
-@[params]
 pub struct User {
 pub mut:
     id int
@@ -124,7 +123,6 @@ class User(BaseModel):
 ```v
 // Pydantic Model: User
 // Config: str_strip_whitespace=true
-@[params]
 pub struct User {
 pub mut:
     name string
@@ -141,8 +139,8 @@ pub fn new_User(name string, email string) !User {
 }
 
 pub fn (mut m User) validate() ! {
-    m.name = m.name.trim()
-    m.email = m.email.trim()
+    m.name = m.name.trim_space()
+    m.email = m.email.trim_space()
     if m.name.len > 50 { return error("Validation Error: name length must be <= 50") }
     if m.name.len < 2 { return error("Validation Error: name length must be >= 2") }
     m.email = User_validate_email(m.email)

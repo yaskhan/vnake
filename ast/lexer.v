@@ -272,10 +272,11 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 			l.advance_char()
 			l.advance_char()
 		}
-		prefix_value := if prefix.to_lower().contains('b') { 'b' } else { '' }
+		prefix_value := prefix
+		q_str := quote.ascii_str()
 		return Token{
 			typ:      typ
-			value:    "${prefix_value}'${value}'"
+			value:    "${prefix_value}${q_str}${q_str}${q_str}${value}${q_str}${q_str}${q_str}"
 			line:     l.line
 			column:   start_col
 			filename: l.filename
@@ -302,10 +303,11 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 	if l.pos < l.source.len {
 		l.advance_char() // closing quote
 	}
-	prefix_value := if prefix.to_lower().contains('b') { 'b' } else { '' }
+	prefix_value := prefix
+	q_str := quote.ascii_str()
 	return Token{
 		typ:      typ
-		value:    "${prefix_value}'${value}'"
+		value:    "${prefix_value}${q_str}${value}${q_str}"
 		line:     l.line
 		column:   start_col
 		filename: l.filename
@@ -376,6 +378,13 @@ fn (mut l Lexer) next_token() Token {
 	for {
 		if l.pos >= l.source.len {
 			return l.make_token(.eof, '')
+		}
+
+		// Handle initial indentation
+		if l.pos == 0 && (l.peek_char() == ` ` || l.peek_char() == `\t`) {
+			if tok := l.handle_indentation() {
+				return tok
+			}
 		}
 
 		ch := l.peek_char()

@@ -31,6 +31,7 @@ mut:
 	visit_continue(node &Continue)
 	visit_binary_op(node &BinaryOp)
 	visit_unary_op(node &UnaryOp)
+	visit_bool_op(node &BoolOp)
 	visit_compare(node &Compare)
 	visit_call(node &Call)
 	visit_name(node &Name)
@@ -113,6 +114,7 @@ fn walk_expr(mut v Visitor, node Expression) {
 		Set { v.visit_set(node) }
 		BinaryOp { v.visit_binary_op(node) }
 		UnaryOp { v.visit_unary_op(node) }
+		BoolOp { v.visit_bool_op(node) }
 		Compare { v.visit_compare(node) }
 		Call { v.visit_call(node) }
 		Attribute { v.visit_attribute(node) }

@@ -6,26 +6,28 @@ import base
 
 pub struct PydanticVisitEnv {
 pub mut:
-	state            base.TranslatorState
-	analyzer         analyzer.Analyzer
+	state            &base.TranslatorState
+	analyzer         &analyzer.Analyzer
 	visit_stmt_fn    fn (ast.Statement) = unsafe { nil }
 	visit_expr_fn    fn (ast.Expression) string = unsafe { nil }
 	emit_struct_fn   fn (string) = unsafe { nil }
 	emit_function_fn fn (string) = unsafe { nil }
 	emit_constant_fn fn (string) = unsafe { nil }
 	map_type_fn      fn (string, string, bool, bool, bool) string = unsafe { nil }
+	map_annotation_fn fn (ast.Expression) string = unsafe { nil }
 	source_mapping   bool
 }
 
 pub fn new_pydantic_visit_env(
-	state base.TranslatorState,
-	analyzer_ref analyzer.Analyzer,
+	state &base.TranslatorState,
+	analyzer_ref &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 	visit_expr_fn fn (ast.Expression) string,
 	emit_struct_fn fn (string),
 	emit_function_fn fn (string),
 	emit_constant_fn fn (string),
 	map_type_fn fn (string, string, bool, bool, bool) string,
+	map_annotation_fn fn (ast.Expression) string,
 	source_mapping bool,
 ) PydanticVisitEnv {
 	return PydanticVisitEnv{
@@ -37,6 +39,7 @@ pub fn new_pydantic_visit_env(
 		emit_function_fn: emit_function_fn
 		emit_constant_fn: emit_constant_fn
 		map_type_fn:      map_type_fn
+		map_annotation_fn: map_annotation_fn
 		source_mapping:   source_mapping
 	}
 }

@@ -1,6 +1,29 @@
 module analyzer
 
 import ast
+import strings
+
+pub fn to_camel_case(name string) string {
+	if name.len == 0 || name == '_' {
+		return name
+	}
+	mut parts := name.split('_')
+	mut res := strings.new_builder(name.len)
+	for i, part in parts {
+		if part.len == 0 {
+			continue
+		}
+		if i == 0 {
+			res.write_string(part)
+		} else {
+			res.write_string(part[0..1].to_upper())
+			if part.len > 1 {
+				res.write_string(part[1..])
+			}
+		}
+	}
+	return res.str()
+}
 
 pub fn expr_name(node ast.Expression) string {
 	return match node {
@@ -61,8 +84,10 @@ pub fn (mut t TypeInferenceUtilsMixin) find_lcs(types []string) string {
 		return 'Any'
 	}
 	mut unique_types := []string{}
+	mut seen := map[string]bool{}
 	for typ in types {
-		if typ !in unique_types {
+		if typ !in seen {
+			seen[typ] = true
 			unique_types << typ
 		}
 	}
@@ -151,7 +176,7 @@ pub fn (mut t TypeInferenceUtilsMixin) guess_node_type(node_type string) string 
 }
 
 pub fn map_python_type_to_v(py_type string) string {
-	mut clean_type := py_type.trim_space()
+	mut clean_type := py_type.trim_space().trim('\'"')
 	if clean_type.starts_with('typing_extensions.') {
 		clean_type = clean_type[18..]
 	}
@@ -167,6 +192,9 @@ pub fn map_python_type_to_v(py_type string) string {
 	match clean_type {
 		'int' {
 			return 'int'
+		}
+		'i64', 'mypy_extensions.i64' {
+			return 'i64'
 		}
 		'float' {
 			return 'f64'
@@ -221,6 +249,13 @@ pub fn map_python_type_to_v(py_type string) string {
 				}
 				return 'map[string]Any'
 			}
+			if clean_type == 'Final' {
+				return 'Any'
+			}
+			if clean_type.starts_with('Final[') {
+				inner := clean_type[6..clean_type.len - 1]
+				return map_python_type_to_v(inner)
+			}
 			if clean_type.starts_with('Set[') || clean_type.starts_with('set[') {
 				inner := clean_type[4..clean_type.len - 1]
 				return 'datatypes.Set[' + map_python_type_to_v(inner) + ']'
@@ -232,22 +267,38 @@ pub fn map_python_type_to_v(py_type string) string {
 			if clean_type.starts_with('Union[') {
 				inner := clean_type[6..clean_type.len - 1]
 				parts := inner.split(',').map(it.trim_space())
-				mut non_none := []string{}
+				mut mapped := []string{}
 				for part in parts {
-					if part != 'None' {
-						non_none << map_python_type_to_v(part)
+					m := map_python_type_to_v(part)
+					if m == 'Any' { return 'Any' }
+					if m !in mapped {
+						mapped << m
 					}
 				}
-				if non_none.len == 1 && parts.len > 1 {
+				
+				mut non_none := []string{}
+				for m in mapped {
+					if m != 'none' {
+						non_none << m
+					}
+				}
+				if non_none.len == 1 && mapped.len > 1 {
 					return '?' + non_none[0]
+				}
+				if non_none.len == 1 {
+					return non_none[0]
 				}
 				return if non_none.len > 0 { non_none.join(' | ') } else { 'Any' }
 			}
 			if clean_type.contains('|') {
-				parts := clean_type.split('|').map(it.trim_space())
+				mut parts := clean_type.split('|').map(it.trim_space())
 				mut mapped := []string{}
 				for p in parts {
-					mapped << map_python_type_to_v(p)
+					m := map_python_type_to_v(p)
+					if m == 'Any' { return 'Any' }
+					if m !in mapped {
+						mapped << m
+					}
 				}
 				
 				// Optional check
@@ -258,9 +309,12 @@ pub fn map_python_type_to_v(py_type string) string {
 					else { others << m }
 				}
 				if has_none && others.len == 1 {
-					return '?${others[0]}'
+					return '?' + others[0]
 				}
 				
+				if mapped.len == 1 {
+					return mapped[0]
+				}
 				return mapped.join(' | ')
 			}
 			return clean_type

@@ -1,77 +1,76 @@
 # Development
 
-This guide provides information for developers who want to contribute to the Python to Vlang Transpiler.
+This guide provides information for developers who want to contribute to the Vnake Transpiler (Python to V).
 
 ## Getting Started
 
 ### Prerequisites
 
-- **Python 3.10+**
-- **Git**
-- **pytest** (for running tests)
-- **mypy** (for type checking)
+- **V Compiler** - The V language compiler
+- **Git** - Version control
+- **C Compiler** - Required by V for compilation (gcc, clang, tcc, or msvc)
 
 ### Setup Development Environment
 
 ```bash
 # Clone the repository
-git clone https://github.com/yaskhan/pythontovlang.git
-cd pythontovlang
+git clone https://github.com/yaskhan/vnake.git
+cd vnake
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# or
-venv\Scripts\activate     # Windows
+# Build the project
+v -o vnake .
 
-# Install in development mode
-pip install -e ".[dev]"
+# Run tests
+v -enable-globals test tests
 ```
 
 ## Project Structure
 
 ```
-pythontovlang/
-├── py2v_transpiler/
-│   ├── __init__.py
-│   ├── config.py           # Configuration classes
-│   ├── main.py             # CLI entry point
-│   ├── core/
-│   │   ├── parser.py       # AST parsing
-│   │   ├── analyzer.py     # Type inference
-│   │   ├── generator.py    # Code generation
-│   │   ├── dependencies.py # Import analysis
-│   │   ├── decorators.py   # Decorator handling
-│   │   ├── coroutines.py   # Async support
-│   │   └── translator/
-│   │       ├── __init__.py     # Main visitor
-│   │       ├── base.py         # Base class
-│   │       ├── module.py       # Module handling
-│   │       ├── imports.py      # Import translation
-│   │       ├── expressions.py  # Expressions
-│   │       ├── literals.py     # Literals
-│   │       ├── variables.py    # Variables
-│   │       ├── control_flow.py # Control flow
-│   │       ├── functions.py    # Functions
-│   │       └── classes.py      # Classes
-│   ├── stdlib_map/
-│   │   ├── __init__.py
-│   │   ├── mapper.py       # Stdlib mappings
-│   │   └── builtins.py     # Built-in functions
-│   ├── models/
-│   │   ├── __init__.py
-│   │   └── v_types.py      # Type mappings
-│   └── tests/
-│       ├── test_*.py
-│       └── translator/
-├── docs/                   # Documentation
-├── examples/               # Example files
-├── tests/                  # Integration tests
-├── setup.py                # Package configuration
-├── requirements.txt        # Dependencies
-├── README.md               # Project overview
-├── TODO.md                 # Feature checklist
-└── AGENTS.md               # Development guidelines
+vnake/
+├── main.v                  # CLI entry point
+├── v.mod                   # V module definition
+├── ast/                    # Python-compatible parser and AST
+│   ├── ast.v               # AST node definitions
+│   ├── lexer.v             # Python lexer
+│   ├── parser.v            # Python parser
+│   ├── token.v             # Token definitions
+│   ├── visitor.v           # AST visitor
+│   ├── printer.v           # AST printer
+│   ├── serialize.v         # AST serialization
+│   └── errors.v            # Error definitions
+├── mypy/                   # Full mypy port
+│   ├── nodes.v             # Mypy AST nodes
+│   ├── types.v             # Type system
+│   ├── checker.v           # Type checker
+│   ├── bridge.v            # V AST → Mypy AST bridge
+│   └── ...                 # Many more mypy modules
+├── analyzer/               # Type analysis
+│   ├── analyzer.v          # Main analyzer
+│   ├── visitor.v           # Type inference visitor
+│   ├── inferers.v          # Alias inference
+│   ├── mypy_plugin.v       # Mypy plugin
+│   └── ...
+├── translator/             # Python → V translation
+│   ├── translator.v        # Main translator
+│   ├── vcode_emitter.v     # V code emitter
+│   ├── base/               # Base infrastructure
+│   ├── classes/            # Class handling
+│   ├── control_flow/       # Control flow
+│   ├── expressions/        # Expressions
+│   ├── functions/          # Functions
+│   ├── variables/          # Variables
+│   └── pydantic_support/   # Pydantic support
+├── stdlib_map/             # Standard library mappings
+│   ├── mapper.v            # Main mapper
+│   └── builtins.v          # Built-in functions
+├── models/                 # Common types and structures
+├── utils/                  # Utilities
+├── tests/                  # Test suite
+│   ├── cases/              # Test cases (.py + .expected.v)
+│   ├── transpiler_test.v
+│   └── remaining_expr_tests_test.v
+└── docs/                   # Documentation
 ```
 
 ## Development Workflow
@@ -80,55 +79,50 @@ pythontovlang/
 
 Edit the relevant module based on the feature or bug fix:
 
-- **New language feature**: `core/translator/`
-- **New stdlib mapping**: `stdlib_map/mapper.py`
-- **Type handling**: `models/v_types.py`
-- **CLI changes**: `main.py`
+- **New language feature**: `translator/` (expressions, statements, functions, etc.)
+- **New stdlib mapping**: `stdlib_map/mapper.v`
+- **Type handling**: `models/v_types.v`
+- **CLI changes**: `main.v`
+- **Parser changes**: `ast/` (only if new Python syntax is needed)
 
 ### 2. Add Tests
 
-Write tests for your changes:
+Write tests for your changes in `tests/cases/`:
 
 ```python
-# tests/test_your_feature.py
-def test_new_feature():
-    python_code = """
-    # Your Python code
-    """
-    expected_v = """
-    // Expected V code
-    """
-    assert transpile(python_code) == expected_v
+# tests/cases/my_feature.py (Python input)
+def new_feature(x: int) -> int:
+    return x * 2
+```
+
+```v
+// tests/cases/my_feature.expected.v (Expected output)
+fn new_feature(x int) int {
+    return x * 2
+}
 ```
 
 ### 3. Run Tests
 
 ```bash
 # Run all tests
-python -m pytest
+v -enable-globals test tests
 
 # Run specific test file
-python -m pytest tests/test_your_feature.py
+v -enable-globals test tests/transpiler_test.v
 
 # Run with verbose output
-python -m pytest -v
-
-# Run with coverage
-python -m pytest --cov=py2v_transpiler
+v -enable-globals test tests -stats
 ```
 
-### 4. Type Check
+### 4. Test Transpilation
 
 ```bash
-# Run mypy on the codebase
-mypy py2v_transpiler/
-```
+# Build the transpiler
+v -o vnake .
 
-### 5. Test Transpilation
-
-```bash
 # Test your changes on a sample file
-py2v examples/sample.py
+./vnake examples/sample.py
 
 # Check the generated V code
 cat examples/sample.v
@@ -141,166 +135,256 @@ v run examples/sample.v
 
 ### Style Guide
 
-- Follow **PEP 8** for Python code
-- Use **type hints** for all functions
-- Write **docstrings** for public APIs
+- Follow **V style conventions** (snake_case for functions, PascalCase for types)
+- Write **comments** for public APIs
 - Keep functions **focused and small**
+- Use **V's `pub` keyword** for public APIs
 
 ### Naming Conventions
 
-```python
-# Classes: PascalCase
-class TypeInference:
-    pass
+```v
+// Types: PascalCase
+pub struct TranslatorState {
+}
 
-# Functions: snake_case
-def map_python_type_to_v(py_type: str) -> str:
-    pass
+// Functions: snake_case
+pub fn map_python_type_to_v(py_type string) string {
+}
 
-# Constants: UPPER_CASE
-MAX_RECURSION_DEPTH = 100
+// Constants: snake_case with module prefix
+const builtin_types = ['int', 'str', 'bool']
 
-# Private methods: _prefix
-def _internal_helper():
-    pass
+// Methods: snake_case, receiver is short
+pub fn (mut t Translator) translate(source string) string {
+}
+
+// Fields: snake_case
+pub struct MyStruct {
+    name string
+    count int
+}
 ```
 
-### Type Hints
+### Module Organization
 
-Always use type hints:
+```v
+module my_module
 
-```python
-from typing import Optional, List, Dict, Any
+// Imports
+import os
+import json
 
-def process_node(
-    node: ast.AST,
-    context: Optional[Dict[str, Any]] = None
-) -> List[str]:
-    pass
+// Constants
+const VERSION = '1.0.0'
+
+// Types
+pub struct MyType {
+}
+
+// Public functions
+pub fn new_my_type() MyType {
+    return MyType{}
+}
+
+// Internal functions
+fn helper_function() {
+}
 ```
 
 ## Adding New Features
 
 ### 1. New Language Feature
 
-**Step 1**: Add AST visitor method
+**Step 1**: Ensure AST support (if needed)
 
-```python
-# core/translator/expressions.py
-class ExpressionsMixin:
-    def visit_NewFeature(self, node: ast.NewFeature) -> str:
-        # Translate to V
-        return f"v_code_for({self.visit(node.child)})"
+If the Python construct isn't already in the AST, add it to `ast/ast.v`:
+
+```v
+pub struct NewNode {
+pub:
+    token Token
+    // fields
+}
+
+pub fn (n &NewNode) get_token() Token {
+    return n.token
+}
+
+pub fn (n &NewNode) str() string {
+    return 'NewNode(...)'
+}
 ```
 
-**Step 2**: Add type handling (if needed)
+**Step 2**: Ensure parsing support (if needed)
 
-```python
-# models/v_types.py
-def map_python_type_to_v(py_type: str) -> str:
-    if py_type == "NewType":
-        return "v_new_type"
+Add parsing to `ast/parser.v`:
+
+```v
+fn (mut p Parser) parse_new_node() ?Expression {
+    tok := p.current_token
+    // parse logic
+    return NewNode{
+        token: tok
+    }
+}
 ```
 
-**Step 3**: Add tests
+**Step 3**: Add translation
 
-```python
-# tests/translator/test_new_feature.py
-def test_new_feature_basic():
-    code = """
-    x = new_feature(42)
-    """
-    assert transpile(code) == "x := v_new_feature(42)"
+Add visitor method in the appropriate translator module:
+
+```v
+// translator/expressions/expressions.v
+fn (mut e ExprGen) visit_NewNode(node ast.NewNode) string {
+    // Translate to V
+    return 'v_code_for(${e.visit(node.child)})'
+}
 ```
+
+**Step 4**: Add tests
+
+Create test files in `tests/cases/`:
+- `new_feature.py` - Python input
+- `new_feature.expected.v` - Expected V output
 
 ### 2. New Standard Library Mapping
 
 **Step 1**: Add to mapper
 
-```python
-# stdlib_map/mapper.py
-class StdLibMapper:
-    def __init__(self):
-        self.mappings["new_module"] = {
-            "function": self._new_module_function,
-        }
+```v
+// stdlib_map/mapper.v
+fn (mut m StdLibMapper) init_mappings() {
+    // ... existing mappings ...
     
-    def _new_module_function(self, args: List[str]) -> str:
-        return f"v_function({', '.join(args)})"
+    m.mappings['new_module'] = {
+        'function': 'v_function'
+    }
+}
 ```
 
-**Step 2**: Add tests
+**Step 2**: Add V import mapping (if needed)
 
-```python
-# tests/test_stdlib.py
-def test_new_module_mapping():
-    code = """
-    from new_module import function
-    result = function(1, 2)
-    """
-    assert "v_function(1, 2)" in transpile(code)
+```v
+fn (mut m StdLibMapper) init_imports() {
+    // ... existing imports ...
+    
+    m.v_imports['new_module'] = ['v_module']
+}
+```
+
+**Step 3**: Add tests
+
+```v
+// tests/transpiler_test.v
+fn test_new_module() {
+    // Transpile Python code that uses new_module
+    // Verify V output contains v_function
+}
 ```
 
 ### 3. New Type Support
 
 **Step 1**: Update type mapper
 
-```python
-# models/v_types.py
-def _map_ast_type(node: ast.AST, ...) -> str:
-    if isinstance(node, ast.NewTypeNode):
-        # Handle new type
-        return "v_type"
+```v
+// models/v_types.v
+fn map_basic_type(name string) string {
+    // ... existing mappings ...
+    
+    match name {
+        'NewType': 'v_type'
+        else: name
+    }
+}
 ```
 
-**Step 2**: Add tests
+**Step 2**: Handle in complex type mapping (if generic)
 
-```python
-# tests/test_types.py
-def test_new_type_mapping():
-    assert map_python_type_to_v("NewType[int]") == "v_type[int]"
+```v
+fn map_complex_type(py_type string, ...) string {
+    // Handle new generic type
+    if base_type == 'NewGeneric' {
+        return 'v_generic[${inner_types.join(", ")}]'
+    }
+}
 ```
 
 ## Debugging
 
 ### Enable Debug Output
 
-```python
-from py2v_transpiler.core.parser import PyASTParser
+Print the AST for debugging:
 
-parser = PyASTParser()
-tree = parser.parse(source_code)
-print(parser.dump_tree(tree))  # Debug AST
+```v
+module main
+
+import ast
+
+fn main() {
+    source := 'def foo(): pass'
+    mut lexer := ast.new_lexer(source, '')
+    mut parser := ast.new_parser(lexer)
+    mod := parser.parse_module()
+    
+    // Print AST
+    println(mod.str())
+}
 ```
 
 ### Type Inference Debug
 
-```python
-from py2v_transpiler.core.analyzer import TypeInference
+Check type analysis:
 
-analyzer = TypeInference()
-analyzer.analyze(tree)
-print(analyzer.get_type(some_node))
+```v
+import analyzer
+
+mut ana := analyzer.new_analyzer(map[string]string{})
+ana.analyze(module_node)
+
+// Check types
+println(ana.type_map)
 ```
 
 ### Verbose Transpilation
 
 ```bash
 # Enable warnings for dynamic types
-py2v script.py --warn-dynamic
+./vnake script.py --warn-dynamic
+```
+
+### Test Individual Components
+
+```bash
+# Build and run a test program
+v -g run debug_test.v
 ```
 
 ## Common Issues
 
+### Issue: Parser Error
+
+**Solution**: Check the lexer output and parser error messages:
+
+```v
+mut lexer := ast.new_lexer(source, filename)
+mut parser := ast.new_parser(lexer)
+mod := parser.parse_module()
+
+// Check for errors
+for err in parser.errors {
+    eprintln('Parse error: ${err.message}')
+}
+```
+
 ### Issue: Type Inference Fails
 
-**Solution**: Ensure code has type hints or add fallback handling:
+**Solution**: Ensure the type mapper handles the construct:
 
-```python
-def visit_Assign(self, node: ast.Assign) -> str:
-    inferred_type = self.type_inference.get_type(node.targets[0])
-    if inferred_type is None:
-        inferred_type = "Any"  # Fallback
+```v
+// Check if type is in the map
+if type_name !in v_type_mapping {
+    eprintln('Unknown type: ${type_name}')
+}
 ```
 
 ### Issue: V Compilation Error
@@ -311,43 +395,36 @@ def visit_Assign(self, node: ast.Assign) -> str:
 # View generated code
 cat script.v
 
-# Try to compile
+# Try to compile manually
 v build script.v
 ```
-
-### Issue: Import Not Found
-
-**Solution**: Add the mapping to stdlib_map/mapper.py or mark as unsupported.
 
 ## Testing Guidelines
 
 ### Test Categories
 
-1. **Unit Tests**: Test individual components
-2. **Integration Tests**: Test full transpilation
-3. **Regression Tests**: Test bug fixes
+1. **Unit Tests**: Test individual components in `ast/`, `analyzer/`, `translator/`
+2. **Integration Tests**: Test full transpilation via `tests/transpiler_test.v`
+3. **Regression Tests**: Test bug fixes with specific test cases
+
+### Test Case Files
+
+Test cases are pairs of files in `tests/cases/`:
+- `name.py` - Python source
+- `name.expected.v` - Expected V output
 
 ### Test Structure
 
-```python
-import pytest
-from py2v_transpiler.main import Transpiler
+```v
+// tests/transpiler_test.v
+module main
 
-class TestFeature:
-    def test_basic_case(self):
-        """Test the basic functionality."""
-        code = "..."
-        expected = "..."
-        assert Transpiler().transpile(code) == expected
-    
-    def test_edge_case(self):
-        """Test edge cases."""
-        pass
-    
-    def test_error_case(self):
-        """Test error handling."""
-        with pytest.raises(ExpectedError):
-            Transpiler().transpile(invalid_code)
+import os
+
+fn test_feature_name() {
+    // The test framework automatically finds .py and .expected.v pairs
+    // Just ensure the files are in tests/cases/
+}
 ```
 
 ## Documentation
@@ -359,7 +436,7 @@ When adding features, update:
 1. **README.md**: Overview and quick start
 2. **docs/supported-features.md**: Feature list
 3. **docs/stdlib-mapping.md**: Library mappings
-4. **TODO.md**: Mark completed features
+4. **docs/architecture.md**: Architecture overview
 
 ### Documentation Style
 
@@ -372,41 +449,72 @@ When adding features, update:
 
 ### Optimize AST Traversal
 
-```python
-# Good: Single pass
-def visit_Module(self, node: ast.Module) -> str:
-    for stmt in node.body:
-        self.visit(stmt)
+```v
+// Good: Single pass
+for stmt in node.body {
+    t.visit_stmt(stmt)
+}
 
-# Bad: Multiple walks
-for stmt in node.body:
-    ast.walk(node)  # Don't do this
+// Bad: Multiple walks - avoid this
+for stmt in node.body {
+    ast.walk_all(node)
+}
 ```
 
 ### String Building
 
-```python
-# Good: List accumulation
-output = []
-for item in items:
-    output.append(self.visit(item))
-return "\n".join(output)
+```v
+// Good: Array accumulation
+mut output := []string{}
+for item in items {
+    output << t.visit(item)
+}
+return output.join('\n')
 
-# Bad: String concatenation
-output = ""
-for item in items:
-    output += self.visit(item)  # Don't do this
+// Bad: String concatenation - avoid this
+mut output := ''
+for item in items {
+    output += t.visit(item)
+}
+return output
+```
+
+## Build System
+
+### Building
+
+```bash
+# Build with optimizations
+v -prod -o vnake .
+
+# Build with debugging symbols
+v -g -o vnake .
+
+# Build and run
+v run . script.py
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+v -enable-globals test tests
+
+# Run with output
+v -enable-globals test tests -stats
+
+# Run specific test file
+v -enable-globals test tests/transpiler_test.v
 ```
 
 ## Release Process
 
 ### Before Release
 
-1. Update version in `setup.py`
-2. Update `CHANGELOG.md` (if exists)
-3. Mark completed features in `TODO.md`
-4. Run all tests
-5. Run mypy type checking
+1. Update version in `v.mod`
+2. Update `docs/changelog.md`
+3. Run all tests
+4. Build with `v -prod`
 
 ### Create Release
 
@@ -414,12 +522,6 @@ for item in items:
 # Tag the release
 git tag -a v0.1.0 -m "Release v0.1.0"
 git push origin v0.1.0
-
-# Build package
-python setup.py sdist bdist_wheel
-
-# Upload to PyPI (when ready)
-twine upload dist/*
 ```
 
 ## Contributing
@@ -430,7 +532,7 @@ twine upload dist/*
 2. Create a feature branch
 3. Make your changes
 4. Add tests
-5. Run tests and type checking
+5. Run tests
 6. Submit PR
 
 ### Commit Messages
@@ -453,10 +555,11 @@ refactor: Improve translator structure
 
 ## Future Directions
 
-See [TODO.md](../TODO.md) and [todo2.md](../todo2.md) for:
+See `TODO.md` and other planning documents for:
 
 - Python 3.12+ syntax support
 - Performance optimizations
-- Better error messages
+- Better error messages with source locations
 - More stdlib mappings
 - Enhanced type inference
+- Better async/await support

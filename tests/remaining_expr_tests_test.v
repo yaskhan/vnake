@@ -4,7 +4,7 @@ import analyzer
 import ast
 import models
 import translator.base
-import translator.expressions as exprs
+import translator.Expressions as exprs
 
 fn translate_expr(source string, type_map map[string]string) string {
 	mut lexer := ast.new_lexer(source, 'test.py')
@@ -22,7 +22,7 @@ fn translate_expr(source string, type_map map[string]string) string {
 	return match first_stmt {
 		ast.Expr { eg.visit(first_stmt.value) }
 		ast.Assert { eg.visit_assert(first_stmt) }
-		else { panic('expected expression statement') }
+		else { panic('expected Expression statement') }
 	}
 }
 

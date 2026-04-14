@@ -45,24 +45,34 @@ pub fn analyze_instance_member_access(name string, inst Instance, context Contex
 		if node := sym.node {
 			return match node {
 				Var {
-					node.type_ or { MypyTypeNode(AnyType{
-						type_of_any: .from_error
-					}) }
+					if typ := node.type_ {
+						typ
+					} else {
+						MypyTypeNode(AnyType{
+							type_of_any: .from_error
+						})
+					}
 				}
 				FuncDef {
 					function_type(node, chk.named_type('builtins.function'))
 				}
 				Decorator {
-					node.var_.type_ or {
+					if typ := node.var_.type_ {
+						typ
+					} else {
 						MypyTypeNode(AnyType{
 							type_of_any: .from_error
 						})
 					}
 				}
 				OverloadedFuncDef {
-					node.type_ or { MypyTypeNode(AnyType{
-						type_of_any: .from_error
-					}) }
+					if typ := node.type_ {
+						typ
+					} else {
+						MypyTypeNode(AnyType{
+							type_of_any: .from_error
+						})
+					}
 				}
 				TypeInfo {
 					chk.type_type()

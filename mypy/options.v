@@ -528,16 +528,14 @@ pub fn (mut o Options) process_error_codes(error_callback fn (string)) {
 	disabled_code_names := o.disable_error_code
 	enabled_code_names := o.enable_error_code
 
-	valid_error_code_names := mypy_error_codes.keys()
-
 	mut invalid_code_names := []string{}
 	for code in enabled_code_names {
-		if code !in valid_error_code_names {
+		if code !in mypy_error_codes {
 			invalid_code_names << code
 		}
 	}
 	for code in disabled_code_names {
-		if code !in valid_error_code_names {
+		if code !in mypy_error_codes {
 			invalid_code_names << code
 		}
 	}
@@ -553,7 +551,7 @@ pub fn (mut o Options) process_error_codes(error_callback fn (string)) {
 	}
 
 	// Enabling an error code always overrides disabling
-	for code in o.enabled_error_codes.keys() {
+	for code, _ in o.enabled_error_codes {
 		o.disabled_error_codes.delete(code)
 	}
 }
@@ -1010,7 +1008,7 @@ pub fn (mut o Options) build_per_module_cache() {
 	mut wildcards := []string{}
 	mut concrete := []string{}
 
-	for key in o.per_module_options.keys() {
+	for key, _ in o.per_module_options {
 		if key[..key.len - 1].contains('*') {
 			unstructured_glob_keys << key
 		} else {
@@ -1136,14 +1134,13 @@ pub fn (o &Options) select_options_affecting_cache() (string, []string) {
 }
 
 fn (o &Options) get_error_codes_str(field string) string {
-	codes := if field == 'disabled_error_codes' {
+	mut codes := if field == 'disabled_error_codes' {
 		o.disabled_error_codes.keys()
 	} else {
 		o.enabled_error_codes.keys()
 	}
-	mut sorted := codes.clone()
-	sorted.sort()
-	return sorted.join(',')
+	codes.sort()
+	return codes.join(',')
 }
 
 fn (o &Options) get_field_str(field string) string {
