@@ -89,10 +89,15 @@ pub fn get_self_type(func CallableType, def_info TypeInfo) ?MypyTypeNode {
 
 // make_simplified_union creates a simplified union type
 pub fn make_simplified_union(items []MypyTypeNode, handle_recursive bool) MypyTypeNode {
-	// Simplified version — just creates UnionType
-	return UnionType{
-		items: items
+	if items.len == 0 {
+		return MypyTypeNode(UninhabitedType{})
 	}
+	if items.len == 1 {
+		return items[0]
+	}
+	return MypyTypeNode(UnionType{
+		items: items
+	})
 }
 
 // fill_typevars fills type variables for TypeInfo

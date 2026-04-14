@@ -1,6 +1,7 @@
 module classes
 
 import ast
+import base
 
 pub struct ClassMethodsHandler {}
 
@@ -126,41 +127,58 @@ pub fn (h ClassMethodsHandler) process_interface_methods(methods []ast.FunctionD
 		mut args := []string{}
 		mut all_args := method.args.posonlyargs.clone()
 		all_args << method.args.args
-			for arg in all_args {
+		for arg in all_args {
 			if arg.arg == 'self' || (is_m_classmethod && arg.arg == 'cls') {
 				continue
 			}
 			arg_name := sanitize_name(arg.arg, false)
 			mut a_type := 'int'
 			if ann := arg.annotation {
-				a_type = map_python_type(env.visit_expr_fn(ann), struct_name, false, mut env)
-				} else if arg_name in env.analyzer.type_map {
-					a_type = map_python_type(env.analyzer.type_map[arg_name], struct_name, false, mut env)
-				}
-			if is_v_class_type(a_type) {
-				a_type = '&${a_type}'
+				a_type = map_python_type(env.map_annotation_fn(ann), struct_name, false, mut env, arg_name)
+			} else if arg_name in env.analyzer.type_map {
+				a_type = map_python_type(env.analyzer.type_map[arg_name], struct_name, false, mut env, arg_name)
 			}
-			args << '${arg_name} ${a_type}'
+			
+			mut is_mut := false
+			p_key_mut := if struct_name.len > 0 {
+				'${struct_name}.${method.name}.${arg.arg}'
+			} else {
+				'${method.name}.${arg.arg}'
+			}
+			m_info := env.analyzer.get_mutability(p_key_mut)
+			is_mut = m_info.is_reassigned || m_info.is_mutated
+			
+			args << '${if is_mut { 'mut ' } else { '' }}${arg_name} ${a_type}'
 		}
 
 		mut ret_type := 'void'
 		if ret := method.returns {
-			ret_type = map_python_type(env.visit_expr_fn(ret), struct_name, true, mut env)
+			ret_type = map_python_type(env.map_annotation_fn(ret), struct_name, true, mut env, '${method.name}@return')
 		} else if '${method.name}@return' in env.analyzer.type_map {
 			ret_type = map_python_type(env.analyzer.type_map['${method.name}@return'], struct_name,
-				true, mut env)
-		}
-		if is_v_class_type(ret_type) {
-			ret_type = '&${ret_type}'
+				true, mut env, '${method.name}@return')
 		}
 		if m_name == 'next' && ret_type != 'void' && !ret_type.starts_with('?') {
 			ret_type = '?${ret_type}'
 		}
 
+		mut mut_pfx := ''
+		self_keys := [
+			'${struct_name}.${method.name}.self',
+			'${struct_name}.${base.to_camel_case(method.name)}.self'
+		]
+		for sk in self_keys {
+			m_info := env.analyzer.get_mutability(sk)
+			if m_info.is_mutated {
+				mut_pfx = 'mut '
+				break
+			}
+		}
+
 		if ret_type == 'void' {
-			interface_methods << '    ${m_name}(${args.join(", ")})'
+			interface_methods << '    ${mut_pfx}${m_name}(${args.join(", ")})'
 		} else {
-			interface_methods << '    ${m_name}(${args.join(", ")}) ${ret_type}'
+			interface_methods << '    ${mut_pfx}${m_name}(${args.join(", ")}) ${ret_type}'
 		}
 	}
 

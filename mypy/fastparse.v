@@ -92,7 +92,7 @@ fn (mut conv ASTConverter) visit_name(n AST) NameExpr {
 	return conv.set_line(e, n) as NameExpr
 }
 
-// visit_expr_stmt converts Expr (expression as statement)
+// visit_expr_stmt converts Expr (Expression as statement)
 fn (mut conv ASTConverter) visit_expr_stmt(n AST) ExpressionStmt {
 	val := n['value'] or { return ExpressionStmt{} }
 	match val {
@@ -180,7 +180,7 @@ fn (mut conv ASTConverter) set_line(node MypyNode, n AST) MypyNode {
 	return res
 }
 
-// translate_expr_list converts list of expressions
+// translate_expr_list converts list of Expressions
 pub fn (mut conv ASTConverter) translate_expr_list(l []AST) []Expression {
 	mut res := []Expression{}
 	for e in l {

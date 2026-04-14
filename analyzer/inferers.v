@@ -377,7 +377,7 @@ pub fn (mut a AliasInferer) analyze(tree ast.Module, mut utils TypeInferenceUtil
 	}
 
 	mut alias_usages := map[string][]string{}
-	for alias in aliases.keys() {
+	for alias, _ in aliases {
 		alias_usages[alias] = []string{}
 	}
 
@@ -606,7 +606,7 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 	mut explicit_abcs := map[string]bool{}
 	mut mixin_templates := map[string]bool{}
 
-	for cls_name in m.mixin_nodes.keys() {
+	for cls_name, _ in m.mixin_nodes {
 		bases := m.class_hierarchy[cls_name] or { []string{} }
 		mut has_abstract := false
 		mut has_concrete := false
@@ -644,7 +644,7 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 	mut changed := true
 	for changed {
 		changed = false
-		for cls_name in m.class_hierarchy.keys() {
+		for cls_name, _ in m.class_hierarchy {
 			if cls_name in explicit_abcs {
 				continue
 			}
@@ -683,18 +683,18 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 		}
 	}
 
-	for cls_name in m.class_hierarchy.keys() {
+	for cls_name, _ in m.class_hierarchy {
 		m.is_abc[cls_name] = cls_name in explicit_abcs
 	}
 
 	mut templates := map[string]bool{}
-	for name in explicit_abcs.keys() {
+	for name, _ in explicit_abcs {
 		templates[name] = true
 	}
-	for name in mixin_templates.keys() {
+	for name, _ in mixin_templates {
 		templates[name] = true
 	}
-	for cls_name in m.class_hierarchy.keys() {
+	for cls_name, _ in m.class_hierarchy {
 		if m.is_abc[cls_name] or { false } {
 			continue
 		}
@@ -727,6 +727,7 @@ pub mut:
 	reassigned_params     map[string]bool
 	scope_stack           []string
 	mutability_map        map[string]MutabilityInfo
+	seen_in_scope         map[string]bool
 }
 
 pub fn new_function_mutability_scanner() FunctionMutabilityScanner {
@@ -738,6 +739,29 @@ pub fn new_function_mutability_scanner() FunctionMutabilityScanner {
 		reassigned_params:     map[string]bool{}
 		scope_stack:           []string{}
 		mutability_map:        map[string]MutabilityInfo{}
+		seen_in_scope:         map[string]bool{}
+	}
+}
+
+fn (mut f FunctionMutabilityScanner) add_to_seen(node ast.Expression) {
+	match node {
+		ast.Name {
+			f.seen_in_scope[node.id] = true
+		}
+		ast.Tuple {
+			for elt in node.elements {
+				f.add_to_seen(elt)
+			}
+		}
+		ast.List {
+			for elt in node.elements {
+				f.add_to_seen(elt)
+			}
+		}
+		ast.Starred {
+			f.add_to_seen(node.value)
+		}
+		else {}
 	}
 }
 
@@ -753,13 +777,18 @@ fn (mut f FunctionMutabilityScanner) get_base_node(node ast.Expression) ast.Expr
 fn (mut f FunctionMutabilityScanner) mark_mutated(node ast.Expression) {
 	match node {
 		ast.Name {
-			if node.id in f.current_params {
-				f.mutated_params[node.id] = true
-			}
+			f.mutated_params[node.id] = true
 		}
 		ast.Attribute {
-			if node.value is ast.Name && node.value.id in f.current_params {
+			if node.value is ast.Name {
 				f.mutated_params[node.value.id] = true
+				if f.scope_stack.len > 0 && node.value.id in ["self", "cls"] {
+					prefix := f.scope_stack.join(".")
+					key := "${prefix}.${node.attr}"
+					mut info := f.mutability_map[key] or { MutabilityInfo{} }
+					info.is_mutated = true
+					f.mutability_map[key] = info
+				}
 			} else {
 				f.mark_mutated(node.value)
 			}
@@ -787,7 +816,7 @@ fn (mut f FunctionMutabilityScanner) mark_mutated(node ast.Expression) {
 fn (mut f FunctionMutabilityScanner) mark_reassigned(node ast.Expression) {
 	match node {
 		ast.Name {
-			if node.id in f.current_params {
+			if node.id in f.seen_in_scope || node.id in f.current_params {
 				f.reassigned_params[node.id] = true
 			}
 		}
@@ -815,6 +844,12 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 				attr := node.func
 				if is_mutating_method(attr.attr) {
 					f.mark_mutated(attr.value)
+				} else {
+					// Propagate mutability from called method (best effort without full types)
+					// We might not know obj_type here, so we check various possibilities
+					if attr.value is ast.Name {
+						// name.method()
+					}
 				}
 			}
 			if node.func is ast.Name {
@@ -824,6 +859,16 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 					for idx in mutated_indices {
 						if idx < node.args.len {
 							f.mark_mutated(node.args[idx])
+						}
+					}
+				} else {
+					// Check user-defined function for param mutability
+					for idx, _ in node.args {
+						p_key := '${func_name}.${idx}' // fallback index-based check
+						if m_info := f.mutability_map[p_key] {
+							if m_info.is_mutated || m_info.is_reassigned {
+								f.mark_mutated(node.args[idx])
+							}
 						}
 					}
 				}
@@ -941,6 +986,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			old_params := f.current_params.clone()
 			old_mutated := f.mutated_params.clone()
 			old_reassigned := f.reassigned_params.clone()
+			old_seen := f.seen_in_scope.clone()
 
 			f.current_func = node.name
 			mut params := []string{}
@@ -956,6 +1002,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			f.current_params = params
 			f.mutated_params = map[string]bool{}
 			f.reassigned_params = map[string]bool{}
+			f.seen_in_scope = map[string]bool{}
 
 			for stmt in node.body {
 				f.visit_stmt(stmt)
@@ -992,6 +1039,18 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 				f.func_param_mutability[func_qual_name] = mutated_indices.clone()
 			}
 
+			// Populate general mutability for all locals
+			for name, _ in f.mutated_params {
+				mut info := f.mutability_map[name] or { MutabilityInfo{} }
+				info.is_mutated = true
+				f.mutability_map[name] = info
+			}
+			for name, _ in f.reassigned_params {
+				mut info := f.mutability_map[name] or { MutabilityInfo{} }
+				info.is_reassigned = true
+				f.mutability_map[name] = info
+			}
+			f.seen_in_scope = old_seen.clone()
 			f.current_func = old_func
 			f.current_params = old_params
 			f.mutated_params = old_mutated.clone()
@@ -1000,9 +1059,11 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		ast.Assign {
 			for target in node.targets {
 				if target is ast.Subscript || target is ast.Attribute {
-					f.mark_mutated(f.get_base_node(target))
+					f.mark_mutated(target)
+					f.add_to_seen(target)
 				} else if target is ast.Name {
 					f.mark_reassigned(target)
+					f.add_to_seen(target)
 				}
 			}
 			f.visit_expr(node.value)
@@ -1012,17 +1073,20 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		}
 		ast.AugAssign {
 			if node.target is ast.Subscript || node.target is ast.Attribute {
-				f.mark_mutated(f.get_base_node(node.target))
+				f.mark_mutated(node.target)
+			f.add_to_seen(node.target)
 			} else if node.target is ast.Name {
 				f.mark_reassigned(node.target)
+			f.add_to_seen(node.target)
 			}
 			f.visit_expr(node.target)
 			f.visit_expr(node.value)
 		}
 		ast.Delete {
 			for target in node.targets {
-				if target is ast.Subscript {
-					f.mark_mutated(f.get_base_node(target.value))
+				if target is ast.Subscript || target is ast.Attribute {
+					f.mark_mutated(target)
+					f.add_to_seen(target)
 				}
 				f.visit_expr(target)
 			}
@@ -1045,6 +1109,8 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			}
 		}
 		ast.For {
+			f.mark_reassigned(node.target)
+			f.add_to_seen(node.target)
 			f.visit_expr(node.target)
 			f.visit_expr(node.iter)
 			for stmt in node.body {
@@ -1067,6 +1133,8 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			for item in node.items {
 				f.visit_expr(item.context_expr)
 				if optional_vars := item.optional_vars {
+					f.mark_reassigned(optional_vars)
+					f.add_to_seen(optional_vars)
 					f.visit_expr(optional_vars)
 				}
 			}
@@ -1146,6 +1214,15 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		ast.Break {}
 		ast.Continue {}
 		ast.AnnAssign {
+			if _ := node.value {
+				if node.target is ast.Subscript || node.target is ast.Attribute {
+					f.mark_mutated(node.target)
+			f.add_to_seen(node.target)
+				} else if node.target is ast.Name {
+					f.mark_reassigned(node.target)
+			f.add_to_seen(node.target)
+				}
+			}
 			f.visit_expr(node.target)
 			f.visit_expr(node.annotation)
 			if value := node.value {

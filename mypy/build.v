@@ -133,7 +133,7 @@ pub struct BuildResult {
 pub mut:
 	manager    BuildManager
 	graph      Graph
-	files      map[string]MypyFile
+	files      map[string]&MypyFile
 	types      map[string]MypyTypeNode
 	used_cache bool
 	errors     []string
@@ -267,7 +267,7 @@ pub fn topsort(deps map[string][]string) []string {
 	mut queue := []string{}
 
 	// Initialize in-degrees
-	for node in deps.keys() {
+	for node, _ in deps {
 		if node !in in_degree {
 			in_degree[node] = 0
 		}

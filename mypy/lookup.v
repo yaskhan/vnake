@@ -14,7 +14,7 @@ module mypy
 // ---------------------------------------------------------------------------
 
 // lookup_fully_qualified finds a symbol using its fully qualified name.
-pub fn lookup_fully_qualified(name string, modules map[string]MypyFile) ?SymbolTableNode {
+pub fn lookup_fully_qualified(name string, modules map[string]&MypyFile) ?SymbolTableNode {
 	// 1. Exclude the names of ad hoc instance intersections from step 2.
 	i := name.index('<subclass ') or { -1 }
 	mut head := if i == -1 { name } else { name[..i] }

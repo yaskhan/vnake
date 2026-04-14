@@ -142,7 +142,7 @@ pub fn (mut t NodeTraverser) visit_raise_stmt(mut o RaiseStmt) !AnyNode {
 	if mut e := o.expr {
 		expr_accept(mut e, mut t)!
 	}
-	if mut f := o.from {
+	if mut f := o.from_node {
 		expr_accept(mut f, mut t)!
 	}
 	return AnyNode(MypyNode(o))
@@ -240,7 +240,7 @@ pub fn (mut t NodeTraverser) visit_decorator(mut o Decorator) !AnyNode {
 	return AnyNode(MypyNode(o))
 }
 
-// --- expressions ---
+// --- Expressions ---
 pub fn (mut t NodeTraverser) visit_int_expr(mut o IntExpr) !AnyNode {
 	return AnyNode(MypyNode(o))
 }
@@ -570,6 +570,7 @@ pub fn (mut t NodeTraverser) visit_lvalue(mut o Lvalue) !AnyNode {
 		NameExpr { t.visit_name_expr(mut it_o)! }
 		StarExpr { t.visit_star_expr(mut it_o)! }
 		TupleExpr { t.visit_tuple_expr(mut it_o)! }
+		IndexExpr { t.visit_index_expr(mut it_o)! }
 	}
 	return AnyNode(string(''))
 }
@@ -691,3 +692,8 @@ pub fn pattern_accept(mut p PatternNode, mut v NodeVisitor) !AnyNode {
 		ClassPattern { v.visit_class_pattern(mut p)! }
 	}
 }
+
+
+
+
+

@@ -3,7 +3,7 @@
 
 module mypy
 
-// Truth values of expressions
+// Truth values of Expressions
 pub const always_true = 1
 pub const mypy_true = 2 // True in mypy, False in runtime
 pub const always_false = 3

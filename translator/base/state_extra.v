@@ -19,7 +19,7 @@ pub fn check_experimental_type(mut warnings []string, type_str string, line int,
 	}
 }
 
-// is_literal_string_expr checks if expression can be treated as LiteralString.
+// is_literal_string_expr checks if Expression can be treated as LiteralString.
 pub fn is_literal_string_expr_state(node ast.Expression, type_map map[string]string) bool {
 	if node is ast.Constant {
 		return node.token.typ == .string_tok || node.token.typ == .fstring_tok
@@ -94,4 +94,19 @@ pub fn infer_generator_types(gen ast.Comprehension, mut type_map map[string]stri
 			type_map[gen.target.id] = elt_type
 		}
 	}
+}
+
+// implements_interface checks if a class (or its ancestors) implements a given interface.
+pub fn (s &TranslatorState) implements_interface(v_cls string, interface_name string) bool {
+	clean_cls := v_cls.trim_left('?&').all_before_last('_Impl')
+	clean_iface := interface_name.trim_left('?&').all_before_last('_Impl')
+	
+	if clean_cls == clean_iface { return true }
+	
+	bases := s.class_hierarchy[clean_cls] or { return false }
+	for b in bases {
+		if b == clean_iface { return true }
+		if s.implements_interface(b, clean_iface) { return true }
+	}
+	return false
 }

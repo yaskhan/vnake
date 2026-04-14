@@ -70,15 +70,49 @@ pub fn (mut m ControlFlowModule) visit_while(node ast.While) {
 		m.emit('mut ${flag_name} := true')
 	}
 	m.push_loop_ctx(flag_name)
+	m.env.state.in_loop_count++
+	m.env.state.walrus_assignments = []string{}
 
 	test_expr := m.wrap_bool(node.test, false)
-	m.emit('for ${test_expr} {')
-	m.env.state.indent_level++
-	for stmt in node.body {
-		m.visit_stmt(stmt)
+
+	if m.env.state.walrus_assignments.len > 0 {
+		m.emit('for {')
+		m.env.state.indent_level++
+		for assign in m.env.state.walrus_assignments {
+			m.emit(assign)
+		}
+		m.emit('if !(${test_expr}) { break }')
+		for stmt in node.body {
+			m.visit_stmt(stmt)
+		}
+		m.env.state.indent_level--
+		m.emit('}')
+	} else {
+		m.emit('for ${test_expr} {')
+		m.env.state.indent_level++
+		
+		// Apply narrowing for while loop body
+		remaps := m.apply_flow_narrowing(node.body, node.test, true, '_while')
+		mut body_narrowed := []string{}
+		for var, _ in remaps {
+			body_narrowed << m.sanitize_name(var, false)
+		}
+		
+		for stmt in node.body {
+			m.visit_stmt(stmt)
+		}
+		
+		// Clean up narrowing
+		for var, orig in remaps {
+			if orig == '__NONE__' { m.env.state.name_remap.delete(var) }
+			else { m.env.state.name_remap[var] = orig }
+		}
+		for v in body_narrowed { m.env.state.narrowed_vars.delete(v) }
+		
+		m.env.state.indent_level--
+		m.emit('}')
 	}
-	m.env.state.indent_level--
-	m.emit('}')
+	m.env.state.in_loop_count--
 	m.pop_loop_ctx()
 
 	if node.orelse.len > 0 {
@@ -111,9 +145,28 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 		m.emit('mut ${flag_name} := true')
 	}
 	m.push_loop_ctx(flag_name)
+	m.env.state.in_loop_count++
 
+	m.env.state.walrus_assignments = []string{}
 	mut target := m.visit_expr(node.target)
 	mut iter_expr := m.visit_expr(node.iter)
+	for assign in m.env.state.walrus_assignments {
+		m.emit(assign)
+	}
+	m.env.state.walrus_assignments = []string{}
+	iter_type := m.guess_type(node.iter)
+	if iter_type.starts_with('PyGenerator') {
+		m.emit('for ${target} in ${iter_expr}.out {')
+		m.env.state.indent_level++
+		for stmt in node.body {
+			m.visit_stmt(stmt)
+		}
+		m.env.state.indent_level--
+		m.emit('}')
+		m.pop_loop_ctx()
+		m.emit_for_else(node, flag_name)
+		return
+	}
 
 	mut is_zip := false
 	mut is_range := false
@@ -187,6 +240,7 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			m.env.state.indent_level--
 			m.emit('}')
 			m.pop_loop_ctx()
+			m.emit_for_else(node, flag_name)
 			return
 		}
 	}
@@ -207,18 +261,26 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			m.env.state.indent_level--
 			m.emit('}')
 			m.pop_loop_ctx()
+			m.emit_for_else(node, flag_name)
 			return
 		}
 		start := if range_args.len == 2 { m.visit_expr(range_args[0]) } else { '0' }
-		stop := if range_args.len >= 2 { m.visit_expr(range_args[range_args.len - 1]) } else { m.visit_expr(range_args[0]) }
+		stop := if range_args.len >= 2 {
+			m.visit_expr(range_args[range_args.len - 1])
+		} else {
+			m.visit_expr(range_args[0])
+		}
 		iter_expr = '${start}..${stop}'
 	}
 
 	if is_enumerate && node.iter is ast.Call && node.iter.args.len > 0 {
+		if node.target is ast.Name {
+			m.emit('//##LLM@@ Enumerate used with a single target variable instead of unpacking. Please rewrite to unpack the index and value properly.')
+		}
 		iter_expr = m.visit_expr(node.iter.args[0])
 	}
 
-	if (is_dict_items || is_dict_keys || is_dict_values) {
+	if is_dict_items || is_dict_keys || is_dict_values {
 		it := node.iter
 		if it is ast.Call {
 			if it.func is ast.Attribute {
@@ -243,6 +305,7 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 			m.env.state.indent_level--
 			m.emit('}')
 			m.pop_loop_ctx()
+			m.emit_for_else(node, flag_name)
 			return
 		}
 	}
@@ -292,8 +355,13 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 	}
 	m.env.state.indent_level--
 	m.emit('}')
+	m.env.state.in_loop_count--
 	m.pop_loop_ctx()
 
+	m.emit_for_else(node, flag_name)
+}
+
+fn (mut m ControlFlowModule) emit_for_else(node ast.For, flag_name string) {
 	if node.orelse.len > 0 {
 		if flag_name.len > 0 {
 			m.emit('if ${flag_name} {')

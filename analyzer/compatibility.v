@@ -1,68 +1,360 @@
 module analyzer
 
-import regex
-
 pub struct CompatibilityLayer {
-pub mut:
-	re_tstring regex.RE
-	re_except  regex.RE
-	re_match   regex.RE
 }
 
 pub fn new_compatibility_layer() CompatibilityLayer {
-	return CompatibilityLayer{
-		re_tstring: regex.regex_opt(r'([a-zA-Z_][a-zA-Z0-9_]*)"((?:[^"\\]|\\.)*)"') or { panic(err) }
-		re_except:  regex.regex_opt(r'except\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+as\s+([a-zA-Z_][a-zA-Z0-9_]*)') or { panic(err) }
-		re_match:   regex.regex_opt(r'match\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*([a-zA-Z_][a-zA-Z0-9_ ,]*)\s*\]') or { panic(err) }
+	return CompatibilityLayer{}
+}
+
+pub fn (c CompatibilityLayer) preprocess_source(source string) string {
+	mut result := c.preprocess_tstrings(source)
+	result = c.preprocess_bracketless_except(result)
+	result = c.preprocess_generic_match(result)
+	return result
+}
+
+fn (c CompatibilityLayer) preprocess_tstrings(source string) string {
+	mut result := []u8{}
+	mut i := 0
+	for i < source.len {
+		if c.is_tstring_prefix_start(source, i) {
+			prefix_end, quote, quote_len, raw_prefix := c.scan_tstring_prefix(source, i)
+			if prefix_end > i {
+				if raw_prefix {
+					result << `r`
+				}
+				result << `f`
+				result << quote
+				if quote_len == 3 {
+					result << quote
+					result << quote
+				}
+				marker := if raw_prefix { '__py2v_rt__' } else { '__py2v_t__' }
+				result << marker.bytes()
+				i = prefix_end + quote_len
+				continue
+			}
+		}
+		result << source[i]
+		i++
+	}
+	return result.bytestr()
+}
+
+fn (c CompatibilityLayer) is_tstring_prefix_start(source string, index int) bool {
+	if index >= source.len {
+		return false
+	}
+	ch := source[index]
+	if ch != `t` && ch != `T` && ch != `r` && ch != `R` {
+		return false
+	}
+	if index > 0 {
+		prev := source[index - 1]
+		if !(prev.is_space() || prev == `=` || prev == `(` || prev == `[` || prev == `{`
+			|| prev == `,` || prev == `:` || prev == `!` || prev == `|` || prev == `&`) {
+			return false
+		}
+	}
+	return true
+}
+
+fn (c CompatibilityLayer) scan_tstring_prefix(source string, index int) (int, u8, int, bool) {
+	mut i := index
+	mut has_t := false
+	mut raw_prefix := false
+	for i < source.len {
+		ch := source[i]
+		if ch == `t` || ch == `T` {
+			has_t = true
+			i++
+			continue
+		}
+		if ch == `r` || ch == `R` {
+			raw_prefix = true
+			i++
+			continue
+		}
+		break
+	}
+	if !has_t || i >= source.len {
+		return index, 0, 0, false
+	}
+	quote := source[i]
+	if quote != `"` && quote != `'` {
+		return index, 0, 0, false
+	}
+	if i + 2 < source.len && source[i + 1] == quote && source[i + 2] == quote {
+		return i, quote, 3, raw_prefix
+	}
+	return i, quote, 1, raw_prefix
+}
+
+fn (c CompatibilityLayer) preprocess_bracketless_except(source string) string {
+	lines := source.split('\n')
+	mut result := []string{}
+	mut i := 0
+	for i < lines.len {
+		line := lines[i]
+		header := c.match_except_header(line)
+		if header.kind == '' {
+			result << line
+			i++
+			continue
+		}
+
+		full_header, j := c.collect_multiline_header(lines, i, header.rest)
+		colon_index := c.find_header_colon(full_header)
+		if colon_index == -1 {
+			result << line
+			i++
+			continue
+		}
+
+		clause := full_header[..colon_index]
+		suffix := full_header[colon_index + 1..]
+		rewritten_clause := c.wrap_bracketless_except_clause(clause)
+		result << '${header.indent}${header.kind}${rewritten_clause}:${suffix}'
+		i = j + 1
+	}
+	return result.join('\n')
+}
+
+struct ExceptHeader {
+	indent string
+	kind   string
+	rest   string
+}
+
+fn (c CompatibilityLayer) match_except_header(line string) ExceptHeader {
+	mut i := 0
+	for i < line.len && (line[i] == ` ` || line[i] == `\t`) {
+		i++
+	}
+	indent := line[..i]
+	if i + 6 > line.len {
+		return ExceptHeader{}
+	}
+	if line[i..].starts_with('except* ') {
+		return ExceptHeader{
+			indent: indent
+			kind:   'except* '
+			rest:   line[i + 8..]
+		}
+	}
+	if line[i..].starts_with('except ') {
+		return ExceptHeader{
+			indent: indent
+			kind:   'except '
+			rest:   line[i + 7..]
+		}
+	}
+	return ExceptHeader{}
+}
+
+fn (c CompatibilityLayer) find_header_colon(text string) int {
+	_, index := c.find_header_colon_with_depth(text, 0)
+	return index
+}
+
+fn (c CompatibilityLayer) find_header_colon_with_depth(text string, initial_depth int) (int, int) {
+	mut depth := initial_depth
+	for i := 0; i < text.len; i++ {
+		ch := text[i]
+		if ch == `(` || ch == `[` || ch == `{` {
+			depth++
+		} else if ch == `)` || ch == `]` || ch == `}` {
+			if depth > 0 {
+				depth--
+			}
+		} else if ch == `:` && depth == 0 {
+			return depth, i
+		}
+	}
+	return depth, -1
+}
+
+fn (c CompatibilityLayer) collect_multiline_header(lines []string, start_index int, initial_rest string) (string, int) {
+	depth, colon_index := c.find_header_colon_with_depth(initial_rest, 0)
+	if colon_index != -1 {
+		return initial_rest, start_index
+	}
+
+	mut current_depth := depth
+	mut full_header_parts := [initial_rest]
+	mut j := start_index
+	for j + 1 < lines.len {
+		j++
+		next_line := lines[j]
+		full_header_parts << '\n' + next_line
+		new_depth, next_colon_index := c.find_header_colon_with_depth('\n' + next_line, current_depth)
+		current_depth = new_depth
+		if next_colon_index != -1 {
+			break
+		}
+	}
+	return full_header_parts.join(''), j
+}
+
+fn (c CompatibilityLayer) wrap_bracketless_except_clause(clause string) string {
+	stripped := clause.trim_space()
+	if stripped.len == 0 || stripped.starts_with('(') {
+		return clause
+	}
+	head, as_clause := c.split_except_alias(clause)
+	if !c.has_top_level_comma(head) {
+		return clause
+	}
+	return '(${head.trim_space()})${as_clause}'
+}
+
+fn (c CompatibilityLayer) split_except_alias(clause string) (string, string) {
+	mut depth := 0
+	mut idx := 0
+	for idx < clause.len {
+		ch := clause[idx]
+		if ch == `(` || ch == `[` || ch == `{` {
+			depth++
+		} else if ch == `)` || ch == `]` || ch == `}` {
+			if depth > 0 {
+				depth--
+			}
+		} else if depth == 0 && idx + 4 <= clause.len && clause[idx..idx + 4] == ' as ' {
+			return clause[..idx], clause[idx..]
+		}
+		idx++
+	}
+	return clause, ''
+}
+
+fn (c CompatibilityLayer) has_top_level_comma(text string) bool {
+	mut depth := 0
+	for i := 0; i < text.len; i++ {
+		ch := text[i]
+		if ch == `(` || ch == `[` || ch == `{` {
+			depth++
+		} else if ch == `)` || ch == `]` || ch == `}` {
+			if depth > 0 {
+				depth--
+			}
+		} else if ch == `,` && depth == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+fn (c CompatibilityLayer) preprocess_generic_match(source string) string {
+	lines := source.split('\n')
+	mut result := []string{}
+	mut i := 0
+	for i < lines.len {
+		line := lines[i]
+		case_header := c.match_case_header(line)
+		if case_header.kind == '' {
+			result << line
+			i++
+			continue
+		}
+
+		full_case, j := c.collect_multiline_header(lines, i, case_header.rest)
+		colon_index := c.find_header_colon(full_case)
+		if colon_index == -1 {
+			result << line
+			i++
+			continue
+		}
+
+		pattern := full_case[..colon_index]
+		rest := full_case[colon_index + 1..]
+		mangled := c.mangle_recursive(pattern)
+		result << '${case_header.indent}case ${mangled}:${rest}'
+		i = j + 1
+	}
+	return result.join('\n')
+}
+
+struct CaseHeader {
+	indent string
+	kind   string
+	rest   string
+}
+
+fn (c CompatibilityLayer) match_case_header(line string) CaseHeader {
+	mut i := 0
+	for i < line.len && (line[i] == ` ` || line[i] == `\t`) {
+		i++
+	}
+	if i + 5 > line.len || !line[i..].starts_with('case ') {
+		return CaseHeader{}
+	}
+	return CaseHeader{
+		indent: line[..i]
+		kind:   'case '
+		rest:   line[i + 5..]
 	}
 }
 
-pub fn (mut c CompatibilityLayer) preprocess_source(source string) string {
-	mut res := source
-	res = c.preprocess_tstrings(res)
-	res = c.preprocess_bracketless_except(res)
-	res = c.preprocess_generic_match(res)
-	return res
-}
-
-fn (mut c CompatibilityLayer) preprocess_tstrings(source string) string {
-	// PEP 750: Tagged Strings (t"..." or html"...")
-	// We convert t"content" to t_tag__py2v_gen("content") for easier parsing.
-	// This is for V-based AST parser.
-	return source
-}
-
-fn (mut c CompatibilityLayer) preprocess_bracketless_except(source string) string {
-	// Python 2 style 'except Type, var' -> 'except Type as var'
-	mut pattern := regex.regex_opt(r'except\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)') or { return source }
-	return pattern.replace(source, 'except \\1 as \\2')
-}
-
-fn (mut c CompatibilityLayer) preprocess_generic_match(source string) string {
-	// case Box[int](x): -> case Box__py2v_gen_L__int__py2v_gen_R__(x):
-	mut pattern := regex.regex_opt(r'case\s+([a-zA-Z_][a-zA-Z0-9_.]*)\[(.*?)\]') or { return source }
-	mut res := source
-	matches := pattern.find_all(source)
-	for i := 0; i < matches.len; i += 2 {
-		start := matches[i]
-		end := matches[i+1]
-		m := source[start..end]
-		if m.starts_with('case ') {
-			mut parts := m[5..].split('[')
-			if parts.len >= 2 {
-				cls := parts[0]
-				mut args_str := parts[1..].join('[')
-				if args_str.ends_with(']') {
-					args_str = args_str[..args_str.len - 1]
+fn (c CompatibilityLayer) mangle_recursive(text string) string {
+	mut current := text
+	for {
+		mut changed := false
+		mut depth := 0
+		mut i := 0
+		for i < current.len {
+			ch := current[i]
+			if ch == `[` {
+				if depth == 0 {
+					mut left := i
+					for left > 0 {
+						prev := current[left - 1]
+						if prev.is_letter() || prev.is_digit() || prev == `_` || prev == `.` {
+							left--
+						} else {
+							break
+						}
+					}
+					if left < i {
+						end := c.find_matching_bracket(current, i)
+						if end != -1 {
+							name := current[left..i]
+							args := current[i + 1..end]
+							mangled_args := c.mangle_recursive(args).replace(', ', '__py2v_gen_C__').replace(',', '__py2v_gen_C__').replace(' ', '')
+							replacement := '${name}__py2v_gen_L__${mangled_args}__py2v_gen_R__'
+							current = current[..left] + replacement + current[end + 1..]
+							changed = true
+							break
+						}
+					}
 				}
-				mangled := c.mangle_generic_name(args_str)
-				res = res.replace(m, 'case ${cls}__py2v_gen_L__${mangled}__py2v_gen_R__')
+				depth++
+			} else if ch == `]` {
+				if depth > 0 {
+					depth--
+				}
+			}
+			i++
+		}
+		if !changed {
+			break
+		}
+	}
+	return current
+}
+
+fn (c CompatibilityLayer) find_matching_bracket(text string, start int) int {
+	mut depth := 0
+	for i := start; i < text.len; i++ {
+		ch := text[i]
+		if ch == `[` {
+			depth++
+		} else if ch == `]` {
+			depth--
+			if depth == 0 {
+				return i
 			}
 		}
 	}
-	return res
-}
-
-fn (c CompatibilityLayer) mangle_generic_name(name string) string {
-	return name.replace('[', '__py2v_gen_L__').replace(']', '__py2v_gen_R__').replace(',', '__py2v_gen_C__').replace(' ', '')
+	return -1
 }

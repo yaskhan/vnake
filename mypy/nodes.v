@@ -1,13 +1,13 @@
-// nodes.v — Abstract syntax tree node classes
+// nodes.v вЂ” Abstract syntax tree node classes
 // Translated from mypy/nodes.py to V 0.5.x
 //
 // Key translation decisions:
-//   Python class hierarchy  → V structs + interface Node
-//   Optional fields (X|None) → ?X  (V option type)
-//   ClassVar / Final         → module-level const
-//   @abstractmethod          → interface method
-//   Multiple inheritance     → embedded structs + interfaces
-//   isinstance()             → V match on sum-type or `is` operator
+//   Python class hierarchy  в†’ V structs + interface Node
+//   Optional fields (X|None) в†’ ?X  (V option type)
+//   ClassVar / Final         в†’ module-level const
+//   @abstractmethod          в†’ interface method
+//   Multiple inheritance     в†’ embedded structs + interfaces
+//   isinstance()             в†’ V match on sum-type or `is` operator
 
 module mypy
 
@@ -26,10 +26,11 @@ pub const reveal_type = 0
 pub const reveal_locals = 1
 
 // ---------------------------------------------------------------------------
-// Context — base source-location carrier
+// Context вЂ” base source-location carrier
 // Replaces Python class Context with __slots__
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct Context {
 pub mut:
 	line       int = -1
@@ -63,7 +64,7 @@ pub fn (mut c Context) set_line_int(line int, column ?int) {
 }
 
 // ---------------------------------------------------------------------------
-// Node — base for all non-type parse-tree nodes
+// Node вЂ” base for all non-type parse-tree nodes
 // ---------------------------------------------------------------------------
 
 // Node is the common interface every AST node must satisfy.
@@ -96,6 +97,7 @@ pub fn (t TypeVarLikeExpr) default_() MypyTypeNode {
 	}
 }
 
+@[heap]
 pub struct NodeBase {
 pub mut:
 	line       int = -1
@@ -106,7 +108,7 @@ pub mut:
 }
 
 pub fn (n NodeBase) str() string {
-	return 'Node(...)'
+	return 'Node'
 }
 
 pub fn (n NodeBase) get_context() Context {
@@ -118,6 +120,7 @@ pub fn (n NodeBase) get_context() Context {
 // ---------------------------------------------------------------------------
 
 // import foo [as bar], import baz
+@[heap]
 pub struct Import {
 pub mut:
 	base NodeBase
@@ -128,6 +131,7 @@ pub mut:
 	is_mypy_only   bool
 }
 
+@[heap]
 pub struct ImportAlias {
 pub:
 	name  string
@@ -143,6 +147,7 @@ pub fn (mut n Import) accept(mut v NodeVisitor) !AnyNode {
 }
 
 // from foo import bar [as baz]
+@[heap]
 pub struct ImportFrom {
 pub mut:
 	base           NodeBase
@@ -163,6 +168,7 @@ pub fn (mut n ImportFrom) accept(mut v NodeVisitor) !AnyNode {
 }
 
 // from foo import *
+@[heap]
 pub struct ImportAll {
 pub mut:
 	base           NodeBase
@@ -271,6 +277,15 @@ pub type MypyNode = AssertStmt
 	| MappingPattern
 	| ClassPattern
 
+pub fn (n MypyNode) str() string {
+	if e := n.as_expression() {
+		return e.str()
+	}
+	if n is Var {
+		return n.name
+	}
+	return 'Node'
+}
 
 pub fn (mut n MypyNode) is_statement() bool {
 	match n {
@@ -324,8 +339,17 @@ pub fn (n MypyNode) as_statement() ?Statement {
 		ReturnStmt, TryStmt, TypeAliasStmt, WhileStmt, WithStmt {
 			return Statement(n)
 		}
-		else { return none }
+		else {
+			return none
+		}
 	}
+}
+
+pub fn (e Expression) as_name_expr() ?NameExpr {
+	if e is NameExpr {
+		return e
+	}
+	return none
 }
 
 pub fn (n MypyNode) as_expression() ?Expression {
@@ -340,7 +364,9 @@ pub fn (n MypyNode) as_expression() ?Expression {
 		YieldFromExpr {
 			return Expression(n)
 		}
-		else { return none }
+		else {
+			return none
+		}
 	}
 }
 
@@ -357,7 +383,8 @@ pub fn (n MypyNode) get_context() Context {
 		RevealExpr, SetComprehension, SetExpr, SliceExpr, StarExpr, StrExpr, SuperExpr, TempNode,
 		TemplateStrExpr, TupleExpr, TypeAliasExpr, TypeApplication, TypeVarExpr, TypeVarTupleExpr,
 		TypedDictExpr, UnaryExpr, AssertTypeExpr, YieldExpr, YieldFromExpr, Var, TypeInfo,
-		Argument, MypyFile, TypeAlias, TypeParam, AsPattern, OrPattern, ValuePattern, SingletonPattern, SequencePattern, StarredPattern, MappingPattern, ClassPattern {
+		Argument, MypyFile, TypeAlias, TypeParam, AsPattern, OrPattern, ValuePattern,
+		SingletonPattern, SequencePattern, StarredPattern, MappingPattern, ClassPattern {
 			n.get_context()
 		}
 	}
@@ -376,12 +403,14 @@ pub fn (mut n MypyNode) accept(mut v NodeVisitor) !AnyNode {
 		RevealExpr, SetComprehension, SetExpr, SliceExpr, StarExpr, StrExpr, SuperExpr, TempNode,
 		TemplateStrExpr, TupleExpr, TypeAliasExpr, TypeApplication, TypeVarExpr, TypeVarTupleExpr,
 		TypedDictExpr, UnaryExpr, AssertTypeExpr, YieldExpr, YieldFromExpr, Var, TypeInfo,
-		Argument, MypyFile, TypeAlias, TypeParam, AsPattern, OrPattern, ValuePattern, SingletonPattern, SequencePattern, StarredPattern, MappingPattern, ClassPattern {
+		Argument, MypyFile, TypeAlias, TypeParam, AsPattern, OrPattern, ValuePattern,
+		SingletonPattern, SequencePattern, StarredPattern, MappingPattern, ClassPattern {
 			n.accept(mut v)!
 		}
 	}
 }
 
+@[heap]
 pub struct Block {
 pub mut:
 	base           NodeBase
@@ -400,6 +429,7 @@ pub fn (n Block) get_context() Context {
 pub fn (mut n Block) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_block(mut n)!
 }
+
 // Block & basic statements
 // ---------------------------------------------------------------------------
 
@@ -436,14 +466,7 @@ pub fn (s Statement) str() string {
 }
 
 pub fn (s Statement) get_context() Context {
-	return match s {
-		AssertStmt, AssignmentStmt, Block, BreakStmt, ClassDef, ContinueStmt, Decorator, DelStmt,
-		ExpressionStmt, ForStmt, FuncDef, GlobalDecl, IfStmt, Import, ImportAll, ImportFrom,
-		MatchStmt, NonlocalDecl, OperatorAssignmentStmt, OverloadedFuncDef, PassStmt, RaiseStmt,
-		ReturnStmt, TryStmt, TypeAliasStmt, WhileStmt, WithStmt {
-			s.get_context()
-		}
-	}
+	return Node(s).get_context()
 }
 
 pub fn (mut s Statement) accept(mut v NodeVisitor) !AnyNode {
@@ -456,7 +479,6 @@ pub fn (mut s Statement) accept(mut v NodeVisitor) !AnyNode {
 		}
 	}
 }
-
 
 // Expression sum-type
 pub type Expression = AssignmentExpr
@@ -506,7 +528,30 @@ pub type Expression = AssignmentExpr
 	| YieldExpr
 	| YieldFromExpr
 
-pub type Lvalue = ListExpr | MemberExpr | NameExpr | StarExpr | TupleExpr
+pub fn (e Expression) str() string {
+	return match e {
+		NameExpr { e.name }
+		MemberExpr { e.expr.str() + '.' + e.name }
+		IntExpr { e.value.str() }
+		StrExpr { e.value }
+		CallExpr { e.callee.str() + '(...)' }
+		IndexExpr { e.base_.str() + '[' + e.index.str() + ']' }
+		else { 'Expression' }
+	}
+}
+
+pub type Lvalue = ListExpr | MemberExpr | NameExpr | StarExpr | TupleExpr | IndexExpr
+
+pub fn (l Lvalue) as_expression() Expression {
+	return match l {
+		ListExpr { Expression(l) }
+		MemberExpr { Expression(l) }
+		NameExpr { Expression(l) }
+		StarExpr { Expression(l) }
+		TupleExpr { Expression(l) }
+		IndexExpr { Expression(l) }
+	}
+}
 
 pub fn (e Expression) as_lvalue() ?Lvalue {
 	return match e {
@@ -515,24 +560,26 @@ pub fn (e Expression) as_lvalue() ?Lvalue {
 		NameExpr { Lvalue(e) }
 		StarExpr { Lvalue(e) }
 		TupleExpr { Lvalue(e) }
+		IndexExpr { Lvalue(e) }
 		else { none }
 	}
 }
 
 pub fn (e Expression) get_context() Context {
-	return match e {
+	match e {
 		AssignmentExpr, AwaitExpr, BytesExpr, CallExpr, CastExpr, ComparisonExpr, ComplexExpr,
 		ConditionalExpr, DictExpr, DictionaryComprehension, EllipsisExpr, EnumCallExpr, FloatExpr,
 		FormatStringExpr, GeneratorExpr, IndexExpr, IntExpr, LambdaExpr, ListComprehension,
 		ListExpr, MemberExpr, NameExpr, NamedTupleExpr, NewTypeExpr, OpExpr, ParamSpecExpr,
 		PromoteExpr, RevealExpr, SetComprehension, SetExpr, SliceExpr, StarExpr, StrExpr,
 		SuperExpr, TempNode, TemplateStrExpr, TupleExpr, TypeAliasExpr, TypeApplication,
-		TypeVarExpr, TypeVarTupleExpr, TypedDictExpr, UnaryExpr, AssertTypeExpr, YieldExpr,
-		YieldFromExpr {
-			e.get_context()
+		TypeVarExpr, TypeVarTupleExpr, TypedDictExpr, UnaryExpr, YieldExpr, YieldFromExpr,
+		AssertTypeExpr {
+			return e.get_context()
 		}
 	}
 }
+
 pub fn (e Expression) as_ref_expr() ?RefExpr {
 	return match e {
 		NameExpr { RefExpr(e) }
@@ -559,8 +606,12 @@ pub fn (mut e Expression) accept(mut v NodeVisitor) !AnyNode {
 pub fn (lval Lvalue) accept(mut v NodeVisitor) !AnyNode {
 	mut it_lval := lval
 	return match mut it_lval {
-		NameExpr { v.visit_name_expr(mut it_lval)! }
-		MemberExpr { v.visit_member_expr(mut it_lval)! }
+		NameExpr {
+			v.visit_name_expr(mut it_lval)!
+		}
+		MemberExpr {
+			v.visit_member_expr(mut it_lval)!
+		}
 		TupleExpr {
 			for mut item in it_lval.items {
 				if mut l := item.as_lvalue() {
@@ -583,9 +634,13 @@ pub fn (lval Lvalue) accept(mut v NodeVisitor) !AnyNode {
 			}
 			return AnyNode(string(''))
 		}
+		IndexExpr {
+			return v.visit_index_expr(mut it_lval)
+		}
 	}
 }
 
+@[heap]
 pub struct ExpressionStmt {
 pub mut:
 	base NodeBase
@@ -600,6 +655,7 @@ pub fn (mut n ExpressionStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_expression_stmt(mut n)!
 }
 
+@[heap]
 pub struct AssignmentStmt {
 pub mut:
 	base    NodeBase
@@ -619,6 +675,7 @@ pub fn (mut n AssignmentStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_assignment_stmt(mut n)!
 }
 
+@[heap]
 pub struct OperatorAssignmentStmt {
 pub mut:
 	base   NodeBase
@@ -635,6 +692,7 @@ pub fn (mut n OperatorAssignmentStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_operator_assignment_stmt(mut n)!
 }
 
+@[heap]
 pub struct WhileStmt {
 pub mut:
 	base      NodeBase
@@ -651,14 +709,15 @@ pub fn (mut n WhileStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_while_stmt(mut n)!
 }
 
+@[heap]
 pub struct ForStmt {
 pub mut:
-	base      NodeBase
-	index     Expression
-	expr      Expression
-	body      Block
-	else_body ?Block
-	is_async  bool
+	base       NodeBase
+	index      Expression
+	expr       Expression
+	body       Block
+	else_body  ?Block
+	is_async   bool
 	index_type ?MypyTypeNode
 }
 
@@ -670,6 +729,7 @@ pub fn (mut n ForStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_for_stmt(mut n)!
 }
 
+@[heap]
 pub struct ReturnStmt {
 pub mut:
 	base NodeBase
@@ -684,6 +744,7 @@ pub fn (mut n ReturnStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_return_stmt(mut n)!
 }
 
+@[heap]
 pub struct IfStmt {
 pub mut:
 	base      NodeBase
@@ -700,6 +761,7 @@ pub fn (mut n IfStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_if_stmt(mut n)!
 }
 
+@[heap]
 pub struct BreakStmt {
 pub mut:
 	base NodeBase
@@ -713,6 +775,7 @@ pub fn (mut n BreakStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_break_stmt(mut n)!
 }
 
+@[heap]
 pub struct ContinueStmt {
 pub mut:
 	base NodeBase
@@ -726,6 +789,7 @@ pub fn (mut n ContinueStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_continue_stmt(mut n)!
 }
 
+@[heap]
 pub struct PassStmt {
 pub mut:
 	base NodeBase
@@ -739,11 +803,12 @@ pub fn (mut n PassStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_pass_stmt(mut n)!
 }
 
+@[heap]
 pub struct RaiseStmt {
 pub mut:
-	base NodeBase
-	expr ?Expression
-	from ?Expression
+	base      NodeBase
+	expr      ?Expression
+	from_node ?Expression
 }
 
 pub fn (n RaiseStmt) get_context() Context {
@@ -754,6 +819,7 @@ pub fn (mut n RaiseStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_raise_stmt(mut n)!
 }
 
+@[heap]
 pub struct TryStmt {
 pub mut:
 	base NodeBase
@@ -775,6 +841,7 @@ pub fn (mut n TryStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_try_stmt(mut n)!
 }
 
+@[heap]
 pub struct WithStmt {
 pub mut:
 	base     NodeBase
@@ -792,6 +859,7 @@ pub fn (mut n WithStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_with_stmt(mut n)!
 }
 
+@[heap]
 pub struct DelStmt {
 pub mut:
 	base NodeBase
@@ -806,6 +874,7 @@ pub fn (mut n DelStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_del_stmt(mut n)!
 }
 
+@[heap]
 pub struct GlobalDecl {
 pub mut:
 	base  NodeBase
@@ -820,6 +889,7 @@ pub fn (mut n GlobalDecl) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_global_decl(mut n)!
 }
 
+@[heap]
 pub struct NonlocalDecl {
 pub mut:
 	base  NodeBase
@@ -834,6 +904,7 @@ pub fn (mut n NonlocalDecl) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_nonlocal_decl(mut n)!
 }
 
+@[heap]
 pub struct AssertStmt {
 pub mut:
 	base NodeBase
@@ -849,6 +920,7 @@ pub fn (mut n AssertStmt) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_assert_stmt(mut n)!
 }
 
+@[heap]
 pub struct TypeAliasStmt {
 pub mut:
 	base      NodeBase
@@ -869,6 +941,7 @@ pub fn (mut n TypeAliasStmt) accept(mut v NodeVisitor) !AnyNode {
 // Match statement (Python 3.10+)
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct MatchStmt {
 pub mut:
 	base     NodeBase
@@ -903,6 +976,7 @@ pub fn (k ArgKind) is_optional() bool {
 	return k == .arg_opt || k == .arg_named_opt
 }
 
+@[heap]
 pub struct Argument {
 pub mut:
 	base            NodeBase
@@ -921,13 +995,14 @@ pub fn (mut n Argument) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_argument(mut n)!
 }
 
+@[heap]
 pub struct TypeParam {
 pub mut:
-	name         string
-	kind         int // 0=TypeVar, 1=ParamSpec, 2=TypeVarTuple
-	upper_bound  ?MypyTypeNode
-	default_     ?MypyTypeNode
-	values       []MypyTypeNode
+	name        string
+	kind        int // 0=TypeVar, 1=ParamSpec, 2=TypeVarTuple
+	upper_bound ?MypyTypeNode
+	default_    ?MypyTypeNode
+	values      []MypyTypeNode
 }
 
 pub fn (n TypeParam) get_context() Context {
@@ -941,34 +1016,34 @@ pub fn (mut n TypeParam) accept(mut v NodeVisitor) !AnyNode {
 @[heap]
 pub struct FuncDef {
 pub mut:
-	base                 NodeBase
-	name                 string // unqualified name
-	arguments            []Argument
-	arg_names            []string
-	arg_kinds            []ArgKind
-	body                 Block
-	type_                ?MypyTypeNode // full callable type if known
-	is_overload          bool
-	is_generator         bool
-	is_coroutine         bool
-	is_async_generator   bool
-	is_decorated         bool
-	is_stub              bool
-	is_final             bool
-	is_class             bool // @classmethod
-	is_static            bool // @staticmethod
-	is_property          bool
-	is_settable_property bool
-	is_explicit_override bool
-	type_params          []TypeParam
-	fullname             string
-	abstract_status      int // 0=concrete, 1=abstract, 2=implicitly_abstract
-	info                 ?&TypeInfo
-	is_mypy_only         bool
-	is_unreachable       bool
-	is_conditional       bool
-	def_or_infer_vars    bool
-	max_pos              int
+	base                     NodeBase
+	name                     string // unqualified name
+	arguments                []Argument
+	arg_names                []string
+	arg_kinds                []ArgKind
+	body                     Block
+	type_                    ?MypyTypeNode // full callable type if known
+	is_overload              bool
+	is_generator             bool
+	is_coroutine             bool
+	is_async_generator       bool
+	is_decorated             bool
+	is_stub                  bool
+	is_final                 bool
+	is_class                 bool // @classmethod
+	is_static                bool // @staticmethod
+	is_property              bool
+	is_settable_property     bool
+	is_explicit_override     bool
+	type_params              []TypeParam
+	fullname                 string
+	abstract_status          int // 0=concrete, 1=abstract, 2=implicitly_abstract
+	info                     ?&TypeInfo
+	is_mypy_only             bool
+	is_unreachable           bool
+	is_conditional           bool
+	def_or_infer_vars        bool
+	max_pos                  int
 	dataclass_transform_spec ?&DataclassTransformSpec
 }
 
@@ -1017,7 +1092,8 @@ pub fn (mut n Decorator) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_decorator(mut n)!
 }
 
-// Var — a variable / field / parameter
+// Var вЂ” a variable / field / parameter
+@[heap]
 pub struct Var {
 pub mut:
 	base                    NodeBase
@@ -1047,6 +1123,10 @@ pub fn (n Var) get_context() Context {
 
 pub fn (mut n Var) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_var(mut n)!
+}
+
+pub fn (n Var) str() string {
+	return n.name
 }
 
 @[heap]
@@ -1082,6 +1162,7 @@ pub fn (mut n ClassDef) accept(mut v NodeVisitor) !AnyNode {
 // Expression nodes
 // ---------------------------------------------------------------------------
 
+@[heap]
 pub struct IntExpr {
 pub mut:
 	base  NodeBase
@@ -1096,6 +1177,7 @@ pub fn (mut n IntExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_int_expr(mut n)!
 }
 
+@[heap]
 pub struct StrExpr {
 pub mut:
 	base  NodeBase
@@ -1110,6 +1192,7 @@ pub fn (mut n StrExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_str_expr(mut n)!
 }
 
+@[heap]
 pub struct BytesExpr {
 pub mut:
 	base  NodeBase
@@ -1124,6 +1207,7 @@ pub fn (mut n BytesExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_bytes_expr(mut n)!
 }
 
+@[heap]
 pub struct FloatExpr {
 pub mut:
 	base  NodeBase
@@ -1138,6 +1222,7 @@ pub fn (mut n FloatExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_float_expr(mut n)!
 }
 
+@[heap]
 pub struct ComplexExpr {
 pub mut:
 	base NodeBase
@@ -1153,6 +1238,7 @@ pub fn (mut n ComplexExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_complex_expr(mut n)!
 }
 
+@[heap]
 pub struct EllipsisExpr {
 pub mut:
 	base NodeBase
@@ -1166,6 +1252,7 @@ pub fn (mut n EllipsisExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_ellipsis(mut n)!
 }
 
+@[heap]
 pub struct StarExpr {
 pub mut:
 	base NodeBase
@@ -1202,6 +1289,10 @@ pub fn (mut n NameExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_name_expr(mut n)!
 }
 
+pub fn (n NameExpr) str() string {
+	return n.name
+}
+
 @[heap]
 pub struct MemberExpr {
 pub mut:
@@ -1222,6 +1313,11 @@ pub fn (mut n MemberExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_member_expr(mut n)!
 }
 
+pub fn (n MemberExpr) str() string {
+	return n.expr.str() + '.' + n.name
+}
+
+@[heap]
 pub struct YieldFromExpr {
 pub mut:
 	base NodeBase
@@ -1236,6 +1332,7 @@ pub fn (mut n YieldFromExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_yield_from_expr(mut n)!
 }
 
+@[heap]
 pub struct YieldExpr {
 pub mut:
 	base NodeBase
@@ -1271,6 +1368,7 @@ pub fn (mut n CallExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_call_expr(mut n)!
 }
 
+@[heap]
 pub struct IndexExpr {
 pub mut:
 	base  NodeBase
@@ -1320,6 +1418,7 @@ pub fn (mut n ComparisonExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_comparison_expr(mut n)!
 }
 
+@[heap]
 pub struct UnaryExpr {
 pub mut:
 	base NodeBase
@@ -1335,6 +1434,7 @@ pub fn (mut n UnaryExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_unary_expr(mut n)!
 }
 
+@[heap]
 pub struct CastExpr {
 pub mut:
 	base NodeBase
@@ -1350,6 +1450,7 @@ pub fn (mut n CastExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_cast_expr(mut n)!
 }
 
+@[heap]
 pub struct AssertTypeExpr {
 pub mut:
 	base NodeBase
@@ -1365,6 +1466,7 @@ pub fn (mut n AssertTypeExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_assert_type_expr(mut n)!
 }
 
+@[heap]
 pub struct RevealExpr {
 pub mut:
 	base  NodeBase
@@ -1381,6 +1483,7 @@ pub fn (mut n RevealExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_reveal_expr(mut n)!
 }
 
+@[heap]
 pub struct SuperExpr {
 pub mut:
 	base NodeBase
@@ -1396,6 +1499,7 @@ pub fn (mut n SuperExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_super_expr(mut n)!
 }
 
+@[heap]
 pub struct AssignmentExpr {
 pub mut:
 	base   NodeBase
@@ -1411,6 +1515,7 @@ pub fn (mut n AssignmentExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_assignment_expr(mut n)!
 }
 
+@[heap]
 pub struct ListExpr {
 pub mut:
 	base  NodeBase
@@ -1425,12 +1530,14 @@ pub fn (mut n ListExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_list_expr(mut n)!
 }
 
+@[heap]
 pub struct DictEntry {
 pub mut:
 	key   ?Expression
 	value Expression
 }
 
+@[heap]
 pub struct DictExpr {
 pub mut:
 	base  NodeBase
@@ -1445,6 +1552,7 @@ pub fn (mut n DictExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_dict_expr(mut n)!
 }
 
+@[heap]
 pub struct TemplateStrExpr {
 pub mut:
 	base  NodeBase
@@ -1459,6 +1567,7 @@ pub fn (mut n TemplateStrExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_template_str_expr(mut n)!
 }
 
+@[heap]
 pub struct FormatStringExpr {
 pub mut:
 	base  NodeBase
@@ -1471,9 +1580,10 @@ pub fn (n FormatStringExpr) get_context() Context {
 
 pub fn (mut n FormatStringExpr) accept(mut v NodeVisitor) !AnyNode {
 	// visit_format_string_expr might not exist yet, using visit_template_str_expr or adding it
-	return v.visit_template_str_expr(mut TemplateStrExpr{base: n.base, parts: [n.value]})! 
+	return v.visit_template_str_expr(mut TemplateStrExpr{ base: n.base, parts: [n.value] })!
 }
 
+@[heap]
 pub struct TupleExpr {
 pub mut:
 	base  NodeBase
@@ -1488,6 +1598,7 @@ pub fn (mut n TupleExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_tuple_expr(mut n)!
 }
 
+@[heap]
 pub struct SetExpr {
 pub mut:
 	base  NodeBase
@@ -1502,7 +1613,8 @@ pub fn (mut n SetExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_set_expr(mut n)!
 }
 
-// GeneratorExpr covers both generator expressions and all comprehension types.
+// GeneratorExpr covers both generator Expressions and all comprehension types.
+@[heap]
 pub struct GeneratorExpr {
 pub mut:
 	base      NodeBase
@@ -1521,6 +1633,7 @@ pub fn (mut n GeneratorExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_generator_expr(mut n)!
 }
 
+@[heap]
 pub struct ListComprehension {
 pub mut:
 	base      NodeBase
@@ -1535,6 +1648,7 @@ pub fn (mut n ListComprehension) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_list_comprehension(mut n)!
 }
 
+@[heap]
 pub struct SetComprehension {
 pub mut:
 	base      NodeBase
@@ -1549,6 +1663,7 @@ pub fn (mut n SetComprehension) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_set_comprehension(mut n)!
 }
 
+@[heap]
 pub struct DictionaryComprehension {
 pub mut:
 	base      NodeBase
@@ -1568,6 +1683,7 @@ pub fn (mut n DictionaryComprehension) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_dictionary_comprehension(mut n)!
 }
 
+@[heap]
 pub struct ConditionalExpr {
 pub mut:
 	base      NodeBase
@@ -1584,6 +1700,7 @@ pub fn (mut n ConditionalExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_conditional_expr(mut n)!
 }
 
+@[heap]
 pub struct TypeApplication {
 pub mut:
 	base  NodeBase
@@ -1599,6 +1716,7 @@ pub fn (mut n TypeApplication) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_type_application(mut n)!
 }
 
+@[heap]
 pub struct LambdaExpr {
 pub mut:
 	base         NodeBase
@@ -1618,7 +1736,8 @@ pub fn (mut n LambdaExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_lambda_expr(mut n)!
 }
 
-// Type variable / special-form expression nodes
+// Type variable / special-form Expression nodes
+@[heap]
 pub struct TypeVarExpr {
 pub mut:
 	base        NodeBase
@@ -1639,6 +1758,7 @@ pub fn (mut n TypeVarExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_type_var_expr(mut n)!
 }
 
+@[heap]
 pub struct ParamSpecExpr {
 pub mut:
 	base        NodeBase
@@ -1657,6 +1777,7 @@ pub fn (mut n ParamSpecExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_paramspec_expr(mut n)!
 }
 
+@[heap]
 pub struct TypeVarTupleExpr {
 pub mut:
 	base        NodeBase
@@ -1675,6 +1796,7 @@ pub fn (mut n TypeVarTupleExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_type_var_tuple_expr(mut n)!
 }
 
+@[heap]
 pub struct TypeAliasExpr {
 pub mut:
 	base NodeBase
@@ -1689,6 +1811,7 @@ pub fn (mut n TypeAliasExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_type_alias_expr(mut n)!
 }
 
+@[heap]
 pub struct NamedTupleExpr {
 pub mut:
 	base          NodeBase
@@ -1704,6 +1827,7 @@ pub fn (mut n NamedTupleExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_namedtuple_expr(mut n)!
 }
 
+@[heap]
 pub struct TypedDictExpr {
 pub mut:
 	base NodeBase
@@ -1718,6 +1842,7 @@ pub fn (mut n TypedDictExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_typeddict_expr(mut n)!
 }
 
+@[heap]
 pub struct EnumCallExpr {
 pub mut:
 	base   NodeBase
@@ -1734,6 +1859,7 @@ pub fn (mut n EnumCallExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_enum_call_expr(mut n)!
 }
 
+@[heap]
 pub struct PromoteExpr {
 pub mut:
 	base  NodeBase
@@ -1748,12 +1874,13 @@ pub fn (mut n PromoteExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_promote_expr(mut n)!
 }
 
+@[heap]
 pub struct NewTypeExpr {
 pub mut:
 	base     NodeBase
 	name     string
 	old_type ?MypyTypeNode
-	info     ?TypeInfo
+	info     ?&TypeInfo
 }
 
 pub fn (n NewTypeExpr) get_context() Context {
@@ -1764,6 +1891,7 @@ pub fn (mut n NewTypeExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_newtype_expr(mut n)!
 }
 
+@[heap]
 pub struct AwaitExpr {
 pub mut:
 	base NodeBase
@@ -1778,6 +1906,7 @@ pub fn (mut n AwaitExpr) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_await_expr(mut n)!
 }
 
+@[heap]
 pub struct SliceExpr {
 pub mut:
 	base  NodeBase
@@ -1795,6 +1924,7 @@ pub fn (mut n SliceExpr) accept(mut v NodeVisitor) !AnyNode {
 }
 
 // TempNode is a placeholder node created during semantic analysis
+@[heap]
 pub struct TempNode {
 pub mut:
 	base    NodeBase
@@ -1829,10 +1959,11 @@ pub mut:
 	imports                 []ImportBase
 	is_bom                  bool
 	plugin_deps             map[string]bool
+	future_import_flags     map[string]bool
 	ignored_lines           []int
 }
 
-pub fn (f &MypyFile) is_package_init_file() bool {
+pub fn (f MypyFile) is_package_init_file() bool {
 	return f.path.ends_with('__init__.py') || f.path.ends_with('__init__.pyi')
 }
 
@@ -1855,6 +1986,7 @@ pub fn (mut n MypyFile) accept(mut v NodeVisitor) !AnyNode {
 
 // Use constants from line 18-21
 
+@[heap]
 pub struct SymbolTableNode {
 pub mut:
 	kind             int
@@ -1867,13 +1999,14 @@ pub mut:
 	cross_ref        ?string
 }
 
+@[heap]
 pub struct SymbolTable {
 pub mut:
 	symbols map[string]SymbolTableNode
 }
 
 // ---------------------------------------------------------------------------
-// TypeInfo — the semantic representation of a class (stub only here;
+// TypeInfo вЂ” the semantic representation of a class (stub only here;
 // full detail lives in the type-checker layer)
 // ---------------------------------------------------------------------------
 
@@ -1890,24 +2023,27 @@ pub mut:
 	is_named_tuple          bool
 	is_enum                 bool
 	is_newtype              bool
+	is_dataclass            bool
+	has_post_init           bool
 	has_type_var_tuple_type bool
 	names                   SymbolTable
 	defn                    ?&ClassDef
 	// mro: method resolution order (list of TypeInfo components)
 	mro []&TypeInfo
 
-	type_vars           []MypyTypeNode
-	bases               []Instance
-	promote_types       []MypyTypeNode // Added for join.v
-	abstract_attributes []string
-	typeddict_type      ?MypyTypeNode
-	declared_metaclass  ?Instance
-	is_final            bool
-	tuple_type          ?&TupleType
-	metaclass_type      ?&Instance
+	type_vars                []MypyTypeNode
+	bases                    []Instance
+	promote_types            []MypyTypeNode // Added for join.v
+	abstract_attributes      []string
+	typeddict_type           ?MypyTypeNode
+	declared_metaclass       ?Instance
+	is_final                 bool
+	tuple_type               ?&TupleType
+	metaclass_type           ?&Instance
 	dataclass_transform_spec ?&DataclassTransformSpec
 }
 
+@[heap]
 pub struct DataclassTransformSpec {
 pub:
 	eq_default       bool
@@ -1925,7 +2061,8 @@ pub fn (mut n TypeInfo) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_type_info(mut n)!
 }
 
-// TypeAlias — a type alias node in the symbol table
+// TypeAlias вЂ” a type alias node in the symbol table
+@[heap]
 pub struct TypeAlias {
 pub mut:
 	base        NodeBase
@@ -1957,7 +2094,7 @@ pub fn (i TypeInfo) has_base(fullname string) bool {
 	return false
 }
 
-// PlaceholderNode — for names not yet fully resolved during semanal
+// PlaceholderNode вЂ” for names not yet fully resolved during semanal
 @[heap]
 pub struct PlaceholderNode {
 pub mut:
@@ -2018,27 +2155,45 @@ pub fn (n SymbolNodeRef) as_mypy_node() MypyNode {
 		TypeAlias { MypyNode(n) }
 		TypeInfo { MypyNode(n) }
 		Var { MypyNode(n) }
-		else { panic('unreachable') }
+		else { panic('unreachable as_mypy_node for ' + typeof(n).name) }
 	}
 }
 
 pub fn (n SymbolNodeRef) fullname() string {
 	match n {
-		ClassDef { return n.fullname }
-		Decorator { return n.func.fullname }
-		FuncDef { return n.fullname }
-		MypyFile { return n.fullname }
+		ClassDef {
+			return n.fullname
+		}
+		Decorator {
+			return n.func.fullname
+		}
+		FuncDef {
+			return n.fullname
+		}
+		MypyFile {
+			return n.fullname
+		}
 		OverloadedFuncDef {
 			if n.items.len > 0 {
 				return n.items[0].fullname
 			}
 			return ''
 		}
-		TypeAlias { return n.fullname }
-		TypeInfo { return n.fullname }
-		Var { return n.fullname }
-		PlaceholderNode { return n.fullname }
-		else { return '' }
+		TypeAlias {
+			return n.fullname
+		}
+		TypeInfo {
+			return n.fullname
+		}
+		Var {
+			return n.fullname
+		}
+		PlaceholderNode {
+			return n.fullname
+		}
+		else {
+			return ''
+		}
 	}
 	return ''
 }
@@ -2089,17 +2244,11 @@ pub type VarNode = Var | FuncDef
 pub type RefExpr = MemberExpr | NameExpr
 
 pub fn (n RefExpr) get_context() Context {
-	return match n {
-		MemberExpr, NameExpr { n.get_context() }
-	}
+	return Node(n).get_context()
 }
 
 pub fn (mut n RefExpr) accept(mut v NodeVisitor) !AnyNode {
 	return match mut n {
 		MemberExpr, NameExpr { n.accept(mut v)! }
 	}
-}
-
-pub fn (e Expression) str() string {
-	return 'Expression(...)'
 }

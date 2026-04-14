@@ -13,6 +13,11 @@ pub mut:
 	is_deleter      bool
 	is_deprecated   bool
 	deprecated_msg  string
+	is_generator    bool
+	cache_wrapper_needed bool
+	implementation_name  string
+	injected_start  []string
+	injected_end    []string
 }
 
 pub struct FunctionsOverloadHandler {}
@@ -39,7 +44,7 @@ fn get_factory_name_fn(class_name string) string { return class_name } // stub
 fn mangle_name_fn(name string, class_name string) string { return name } // stub
 fn is_exported_fn(name string) bool { return true } // stub
 fn get_source_info_fn(node ast.Statement) string { return '' } // stub
-fn extract_implicit_generics_fn(node &ast.FunctionDef, variance map[string]bool, defaults map[string]bool, current []string, sanitize fn(string, bool) string) []string { return []string{} } // stub
+fn extract_implicit_generics_fn(node &ast.FunctionDef, variance map[string]bool, p_vars map[string]bool, defaults map[string]bool, current []string, sanitize fn(string, bool) string) []string { return []string{} } // stub
 fn get_generic_map_fn(generics []string, scopes []map[string]string) map[string]string { return map[string]string{} } // stub
 fn get_all_active_v_generics_fn(scopes []map[string]string) []string { return []string{} } // stub
 fn get_generics_with_variance_str_fn(generics []string, variance map[string]string, defaults map[string]string, variance_map map[string]string) string { return '' } // stub
@@ -67,8 +72,9 @@ pub mut:
 	visit_expr_fn     fn (ast.Expression) string = unsafe { nil }
 	emit_fn           fn (string) = unsafe { nil }
 	emit_constant_fn  fn (string) = unsafe { nil }
+	emit_function_fn  fn (string) = unsafe { nil }
 	indent_fn         fn () string = unsafe { nil }
-	push_scope_fn     fn () = unsafe { nil }
+	push_scope_fn     fn (string) = unsafe { nil }
 	pop_scope_fn      fn () = unsafe { nil }
 	declare_local_fn  fn (string) = unsafe { nil }
 	map_annotation_fn fn (ast.Expression) string = unsafe { nil }
@@ -83,8 +89,9 @@ pub fn new_function_visit_env(
 	visit_expr_fn fn (ast.Expression) string,
 	emit_fn fn (string),
 	emit_constant_fn fn (string),
+	emit_function_fn fn (string),
 	indent_fn fn () string,
-	push_scope_fn fn (),
+	push_scope_fn fn (string),
 	pop_scope_fn fn (),
 	declare_local_fn fn (string),
 	map_annotation_fn fn (ast.Expression) string,
@@ -98,6 +105,7 @@ pub fn new_function_visit_env(
 		visit_expr_fn:     visit_expr_fn
 		emit_fn:           emit_fn
 		emit_constant_fn:  emit_constant_fn
+		emit_function_fn:  emit_function_fn
 		indent_fn:         indent_fn
 		push_scope_fn:     push_scope_fn
 		pop_scope_fn:      pop_scope_fn

@@ -4,6 +4,13 @@ import analyzer
 import ast
 import base
 
+pub struct AssignedVar {
+pub:
+	name   string
+	target ast.Expression
+	value  ?ast.Expression
+}
+
 pub struct ControlFlowVisitEnv {
 pub mut:
 	state                &base.TranslatorState
@@ -15,6 +22,7 @@ pub mut:
 	declare_local_fn     ?fn (string)
 	is_declared_local_fn ?fn (string) bool
 	guess_type_fn        ?fn (ast.Expression) string
+	map_annotation_fn    ?fn (ast.Expression) string
 }
 
 pub struct ControlFlowModule {
@@ -43,6 +51,7 @@ pub fn new_control_flow_visit_env(
 	declare_local_fn fn (string),
 	is_declared_local_fn fn (string) bool,
 	guess_type_fn fn (ast.Expression) string,
+	map_annotation_fn fn (ast.Expression) string,
 ) ControlFlowVisitEnv {
 	return ControlFlowVisitEnv{
 		state:                state
@@ -54,6 +63,7 @@ pub fn new_control_flow_visit_env(
 		declare_local_fn:     declare_local_fn
 		is_declared_local_fn: is_declared_local_fn
 		guess_type_fn:        guess_type_fn
+		map_annotation_fn:    map_annotation_fn
 	}
 }
 
@@ -71,6 +81,7 @@ pub fn new_control_flow_module() ControlFlowModule {
 			declare_local_fn:     none
 			is_declared_local_fn: none
 			guess_type_fn:        none
+			map_annotation_fn:    none
 		}
 		loop_flag_stack: []string{}
 		loop_depth_stack: []int{}
@@ -113,6 +124,13 @@ pub fn (mut m ControlFlowModule) guess_type(node ast.Expression) string {
 	return 'Any'
 }
 
+pub fn (mut m ControlFlowModule) map_annotation(node ast.Expression) string {
+	if f := m.env.map_annotation_fn {
+		return f(node)
+	}
+	return ''
+}
+
 pub fn (mut m ControlFlowModule) declare_local(name string) {
 	if f := m.env.declare_local_fn {
 		f(name)
@@ -147,12 +165,13 @@ pub fn (m &ControlFlowModule) map_python_type(type_str string, is_return bool) s
 	}
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: m.env.state.imported_symbols
-		scc_files:        m.env.state.scc_files.keys()
+		scc_files:        m.env.state.scc_files
 		used_builtins:    m.env.state.used_builtins
 		warnings:         m.env.state.warnings
-		config:           m.env.state.config
+		include_all_symbols: m.env.state.include_all_symbols
+		strict_exports:      m.env.state.strict_exports
 	}
-	return base.map_type(type_str, opts, mut ctx, fn (_ string) string { return '' },
+	return base.map_type(type_str, opts, mut ctx, fn (_ string, _ string) string { return '' },
 		fn (_ []string) string { return '' }, fn (_ string) string { return '' })
 }
 
@@ -166,40 +185,65 @@ pub fn (m &ControlFlowModule) register_sum_type(types_str string) string {
 	}
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols: m.env.state.imported_symbols
-		scc_files:        m.env.state.scc_files.keys()
+		scc_files:        m.env.state.scc_files
 		used_builtins:    m.env.state.used_builtins
 		warnings:         m.env.state.warnings
-		config:           m.env.state.config
+		include_all_symbols: m.env.state.include_all_symbols
+		strict_exports:      m.env.state.strict_exports
 	}
 	mut st := m.env.state
-	return base.map_type(types_str, opts, mut ctx, fn [mut st] (name string) string {
-		st.generated_sum_types[name] = ''
-		return name
+	return base.map_type(types_str, opts, mut ctx, fn [mut st] (name string, def string) string {
+		if name.len > 0 {
+			st.generated_sum_types[name] = def
+			return name
+		}
+		return ''
 	}, fn (_ []string) string { return '' }, fn (_ string) string { return '' })
 }
 
-pub fn (m &ControlFlowModule) collect_assigned_vars(nodes []ast.Statement) map[string]bool {
-	mut vars := map[string]bool{}
+pub fn (m &ControlFlowModule) collect_assigned_vars(nodes []ast.Statement) []AssignedVar {
+	mut vars := []AssignedVar{}
+	mut seen := map[string]bool{}
 	for node in nodes {
 		if node is ast.Assign {
 			for target in node.targets {
 				if target is ast.Name {
-					vars[target.id] = true
+					if target.id !in seen {
+						vars << AssignedVar{target.id, target, node.value}
+						seen[target.id] = true
+					}
+				} else if target is ast.Attribute {
+					if target.value is ast.Name {
+						id := target.value.id + '.' + target.attr
+						if id !in seen {
+							vars << AssignedVar{id, target, node.value}
+							seen[id] = true
+						}
+					}
 				}
 			}
 		} else if node is ast.AnnAssign {
 			if node.target is ast.Name {
-				vars[node.target.id] = true
+				if node.target.id !in seen {
+					vars << AssignedVar{node.target.id, node.target, node.value}
+					seen[node.target.id] = true
+				}
 			}
 		} else if node is ast.For {
 			if node.target is ast.Name {
-				vars[node.target.id] = true
+				if node.target.id !in seen {
+					vars << AssignedVar{node.target.id, node.target, none}
+					seen[node.target.id] = true
+				}
 			}
 		} else if node is ast.With {
 			for item in node.items {
 				if opt := item.optional_vars {
 					if opt is ast.Name {
-						vars[opt.id] = true
+						if opt.id !in seen {
+							vars << AssignedVar{opt.id, opt, none}
+							seen[opt.id] = true
+						}
 					}
 				}
 			}

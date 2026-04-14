@@ -1,7 +1,6 @@
 @@in# "struct Point {"
 @@in# "x int"
 @@in# "y int = 5"
-@@in# "Point{x: 1}"
-@@or# "Point{x: 1}"
+@@in# "new_point(1"
 @@notin# "z int"
 @@notin# "c int"

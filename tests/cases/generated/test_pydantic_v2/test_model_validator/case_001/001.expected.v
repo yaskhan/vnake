@@ -1,0 +1,5 @@
+@@in# "fn (mut m MyModel) validate() ! {"
+@@in# "m = fn (mut self MyModel) !MyModel {"
+@@in# "if self.x + self.y > 100 {"
+@@in# "return error('sum too large')"
+@@in# "}(mut m) !"

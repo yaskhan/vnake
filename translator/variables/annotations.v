@@ -33,7 +33,12 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		if annotation_str == 'LiteralString' || annotation_str == 'typing.LiteralString'
 			|| annotation_str == 'typing_extensions.LiteralString' {
 			if !m.is_literal_string_expr(value_expr) {
-				m.emit("//##LLM@@ LiteralString variable '${target_expr}' receives non-literal value.")
+				msg := if value_expr is ast.Call && value_expr.func is ast.Name && value_expr.func.id == 'input' {
+					"LiteralString variable '${target_expr}' receives value from input()"
+				} else {
+					"LiteralString variable '${target_expr}' receives non-literal value."
+				}
+				m.emit("//##LLM@@ ${msg}")
 			}
 		}
 
@@ -131,7 +136,7 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		if m.state.in_main && node.target is ast.Name && node.target.id.is_upper()
 			&& m.is_compile_time_evaluable(value_expr) {
 			pub_prefix := if m.is_exported(node.target.id) { 'pub ' } else { '' }
-			m.emitter.add_constant('${pub_prefix}${m.to_snake_case(node.target.id)} = ${m.visit_expr(value_expr)}')
+			m.emitter.add_constant('${pub_prefix}const ${m.to_snake_case(node.target.id)} = ${m.visit_expr(value_expr)}')
 			return
 		}
 
@@ -154,8 +159,43 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 			return
 		}
 
-		if m.state.in_main && node.target is ast.Name && node.target.id in m.state.global_vars {
-			m.emitter.add_init_statement('${target_expr} = ${rhs}')
+		if m.state.in_main && node.target is ast.Name {
+			if node.target.id in m.state.global_vars {
+				m.emitter.add_init_statement('${target_expr} = ${rhs}')
+				return
+			}
+			
+			mut v_type_for_global := v_type
+			if v_type_for_global == 'unknown' || v_type_for_global == 'Any' {
+				v_type_for_global = m.guess_type(value_expr, true)
+			}
+			if v_type_for_global == 'unknown' { v_type_for_global = 'Any' }
+			
+			m.emitter.add_global('__global ${target_expr} ${v_type_for_global}')
+			m.emit('${target_expr} = ${rhs}')
+			m.local_vars_in_scope[target_expr] = true
+			return
+		}
+
+		// For Optional/union types, declare with the optional type so None can be assigned later
+		is_optional_annotation := v_type.starts_with('?')
+		// Also check raw annotation string for Optional[...]
+		if !is_optional_annotation {
+			is_optional_annotation = annotation_str.starts_with('Optional[') || 
+				annotation_str.starts_with('typing.Optional[')
+		}
+		
+		if is_optional_annotation {
+			mut opt_type := if v_type.starts_with('?') { v_type } else { '?${v_type}' }
+			mut init_rhs := rhs
+			// Wrap with optional type for non-none values
+			if init_rhs != 'none' && !init_rhs.starts_with('?') {
+				init_rhs = '${opt_type}(${rhs})'
+			}
+			is_mut := m.is_mutable_target(node.target, target_expr)
+			mut_prefix := if is_mut { 'mut ' } else { '' }
+			m.emit('${mut_prefix}${target_expr} := ${init_rhs}')
+			m.local_vars_in_scope[target_expr] = true
 			return
 		}
 

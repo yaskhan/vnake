@@ -6,22 +6,24 @@ fn (m &ControlFlowModule) unmangle_generic_name(name string) string {
 	if !name.contains('__py2v_gen') {
 		return m.map_python_type(name, false)
 	}
-	res := name.replace('__py2v_gen_L__', '[').replace('__py2v_gen_R__', ']').replace('__py2v_gen_C__', ', ')
-		.replace('_py2v_gen_L_', '[').replace('_py2v_gen_R_', ']').replace('_py2v_gen_C_', ', ')
+	res := name.replace('__py2v_gen_L__', '[').replace('__py2v_gen_R__', ']').replace('__py2v_gen_C__',
+		', ')
+		.replace('_py2v_gen_L_', '[').replace('_py2v_gen_R_', ']').replace('_py2v_gen_C_',
+		', ')
 	return m.map_python_type(res, false)
 }
 
-fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr string) (string, []string) {
-	mut bindings := []string{}
-
+fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr string) (string, map[string]string) {
+	mut bindings := map[string]string{}
+	// m.env.state.warnings << 'COMPILE_PATTERN START Type:' + typeof(pattern).name
+	
 	if pattern is ast.MatchValue {
 		return '${subject_expr} == ${m.visit_expr(pattern.value)}', bindings
 	}
 	if pattern is ast.MatchSingleton {
-		if pattern.value.value == 'None' {
-			return '${subject_expr} is none', bindings
-		}
-		return '${subject_expr} == ${pattern.value.value.to_lower()}', bindings
+		// m.env.state.warnings << 'PATTERN: MatchSingleton'
+		val := if pattern.value.value == 'None' { 'none' } else { pattern.value.value.to_lower() }
+		return '${subject_expr} == ${val}', bindings
 	}
 	if pattern is ast.MatchSequence {
 		mut array_types := ['[]int', '[]f64', '[]string', '[]bool', '[]Any']
@@ -53,19 +55,27 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 						t := array_types[0]
 						num_trailing := pattern.patterns.len - 1 - i
 						end_expr := '((${subject_expr} as ${t}).len - ${num_trailing})'
-						slice_expr := if num_trailing == 0 { '[${i}..]' } else { '[${i}..${end_expr}]' }
+						slice_expr := if num_trailing == 0 {
+							'[${i}..]'
+						} else {
+							'[${i}..${end_expr}]'
+						}
 						extract = 'Any((${subject_expr} as ${t})${slice_expr})'
 					} else {
 						mut branches := []string{}
 						for t in array_types {
 							num_trailing := pattern.patterns.len - 1 - i
 							end_expr := '((${subject_expr} as ${t}).len - ${num_trailing})'
-							slice_expr := if num_trailing == 0 { '[${i}..]' } else { '[${i}..${end_expr}]' }
+							slice_expr := if num_trailing == 0 {
+								'[${i}..]'
+							} else {
+								'[${i}..${end_expr}]'
+							}
 							branches << '${subject_expr} is ${t} { Any((${subject_expr} as ${t})${slice_expr}) }'
 						}
 						extract = 'if ${branches.join(' else if ')} else { Any(0) }'
 					}
-					bindings << '${name} := ${extract}'
+					bindings[name] = extract
 				}
 				continue
 			}
@@ -95,15 +105,25 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 			}
 
 			sub_cond, sub_binds := m.compile_pattern(p, sub_expr)
-			checks << '(${sub_cond})'
-			bindings << sub_binds
+			if sub_cond != 'true' {
+				checks << '(${sub_cond})'
+			}
+			for k, v in sub_binds {
+				bindings[k] = v
+			}
 		}
 
 		type_len_condition := '(' + or_parts.join(' || ') + ')'
-		full_condition := if checks.len > 0 { '${type_len_condition} && ${checks.join(' && ')}' } else { type_len_condition }
+		full_condition := if checks.len > 0 {
+			'${type_len_condition} && ${checks.join(' && ')}'
+		} else {
+			type_len_condition
+		}
 		return full_condition, bindings
 	}
+
 	if pattern is ast.MatchMapping {
+		// m.env.state.warnings << 'PATTERN: MatchMapping'
 		map_types := ['map[string]int', 'map[string]string', 'map[string]Any']
 		mut or_parts := []string{}
 		for t in map_types {
@@ -123,7 +143,9 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 			extract := 'if ${branches.join(' else if ')} else { Any(0) }'
 			sub_cond, sub_binds := m.compile_pattern(p, extract)
 			cond += ' && (${sub_cond})'
-			bindings << sub_binds
+			for k, v in sub_binds {
+				bindings[k] = v
+			}
 		}
 		if rest := pattern.rest {
 			m.env.state.used_builtins['py_dict_residual'] = true
@@ -133,24 +155,30 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 				branches << '${subject_expr} is ${t} { Any(py_dict_residual((${subject_expr} as ${t}), ${exclude})) }'
 			}
 			extract := 'if ${branches.join(' else if ')} else { Any(map[string]Any{}) }'
-			bindings << '${rest} := ${extract}'
+			bindings[rest] = extract
 		}
 		return cond, bindings
 	}
 	if pattern is ast.MatchClass {
-		cls_name_expr := m.visit_expr(pattern.cls)
+		// m.env.state.warnings << 'PATTERN: MatchClass'
+		cls_name_expr := m.map_annotation(pattern.cls)
+		// m.env.state.warnings << 'PATTERN: MatchClass cls_name_expr=' + cls_name_expr
 		mut cls_name := m.unmangle_generic_name(cls_name_expr)
 		if cls_name.len > 0 && !cls_name[0].is_capital() && !cls_name.contains('[') {
 			cls_name = cls_name[0].ascii_str().to_upper() + cls_name[1..]
 		}
 		mut cond := '(${subject_expr} is ${cls_name})'
-		match_args := m.env.state.dataclasses[cls_name] or { m.env.state.dataclasses[cls_name_expr] or { []string{} } }
+		match_args := m.env.state.dataclasses[cls_name] or {
+			m.env.state.dataclasses[cls_name_expr] or { []string{} }
+		}
 		for i, sub in pattern.patterns {
 			attr := if i < match_args.len { match_args[i] } else { 'py_${i}' }
 			val_expr := 'Any((${subject_expr} as ${cls_name}).${attr})'
 			sub_cond, sub_binds := m.compile_pattern(sub, val_expr)
 			cond += ' && (${sub_cond})'
-			bindings << sub_binds
+			for k, v in sub_binds {
+				bindings[k] = v
+			}
 		}
 		for i in 0 .. pattern.kwd_attrs.len {
 			attr := pattern.kwd_attrs[i]
@@ -158,46 +186,70 @@ fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr s
 			val_expr := 'Any((${subject_expr} as ${cls_name}).${attr})'
 			sub_cond, sub_binds := m.compile_pattern(sub, val_expr)
 			cond += ' && (${sub_cond})'
-			bindings << sub_binds
+			for k, v in sub_binds {
+				bindings[k] = v
+			}
 		}
 		return cond, bindings
 	}
 	if pattern is ast.MatchOr {
 		mut parts := []string{}
+		mut branch_conds := []string{}
+		mut all_branch_binds := []map[string]string{}
+		mut all_vars := map[string]bool{}
+
 		for sub in pattern.patterns {
 			sub_cond, sub_binds := m.compile_pattern(sub, subject_expr)
 			parts << '(${sub_cond})'
-			// Simplified bindings for OR: only keep if all alternatives have them
-			if bindings.len == 0 { bindings << sub_binds }
+			branch_conds << sub_cond
+			all_branch_binds << sub_binds
+			for k, _ in sub_binds {
+				all_vars[k] = true
+			}
+		}
+		for var_name, _ in all_vars {
+			mut if_parts := []string{}
+			for i, cond_str in branch_conds {
+				if_parts << '(${cond_str}) { ${all_branch_binds[i][var_name] or { 'Any(0)' }} }'
+			}
+			mut if_expr := 'if ' + if_parts.join(' else if ') + ' else { Any(0) }'
+			bindings[var_name] = if_expr
 		}
 		return parts.join(' || '), bindings
 	}
 	if pattern is ast.MatchAs {
+		// m.env.state.warnings << 'PATTERN: MatchAs name=' + (pattern.name or { 'none' })
 		mut cond := 'true'
 		mut val_expr := subject_expr
 		if sub := pattern.pattern {
+			// m.env.state.warnings << 'PATTERN: MatchAs SUB-PATTERN: ' + typeof(sub).name
 			sc, sb := m.compile_pattern(sub, subject_expr)
 			cond = sc
-			bindings << sb
+			for k, v in sb {
+				bindings[k] = v
+			}
 			if sub is ast.MatchClass {
-				cn_expr := m.visit_expr(sub.cls)
+				cn_expr := m.map_annotation(sub.cls)
 				mut cn := m.unmangle_generic_name(cn_expr)
-				if cn.len > 0 && !cn[0].is_capital() { cn = cn[0].ascii_str().to_upper() + cn[1..] }
+				if cn.len > 0 && !cn[0].is_capital() {
+					cn = cn[0].ascii_str().to_upper() + cn[1..]
+				}
 				val_expr = '(${subject_expr} as ${cn})'
 			}
 		}
 		if name := pattern.name {
-			bindings << '${name} := ${val_expr}'
+			bindings[name] = val_expr
 		}
 		return cond, bindings
 	}
 	if pattern is ast.MatchStar {
 		if name := pattern.name {
-			bindings << '${name} := ${subject_expr}'
+			bindings[name] = subject_expr
 		}
 		return 'true', bindings
 	}
-	return 'false', bindings
+	m.env.state.warnings << 'UNKNOWN PATTERN TYPE: ' + typeof(pattern).name
+	return 'true', bindings
 }
 
 pub fn (mut m ControlFlowModule) visit_match(node ast.Match) {
@@ -209,6 +261,13 @@ pub fn (mut m ControlFlowModule) visit_match(node ast.Match) {
 	found_var := 'py_match_found_${match_id}'
 
 	m.emit('// Match statement lowered to if blocks')
+	for case in node.cases {
+		p := case.pattern
+		if p is ast.MatchClass || p is ast.MatchAs || p is ast.MatchValue || p is ast.MatchSingleton || p is ast.MatchSequence || p is ast.MatchMapping || p is ast.MatchStar || p is ast.MatchOr {
+			continue
+		}
+		m.env.state.warnings << 'UNSUPPORTED CASE PATTERN TYPE: ' + typeof(p).name
+	}
 	m.emit('${subject_var} := ${subject}')
 	m.emit('${subject_any} := Any(${subject_var})')
 	m.emit('mut ${found_var} := false')
@@ -236,17 +295,23 @@ pub fn (mut m ControlFlowModule) visit_match(node ast.Match) {
 			m.emit('if !${found_var} && (${cond}) {')
 		}
 		m.env.state.indent_level++
-		for binding in bindings { m.emit(binding) }
+		for name, val in bindings {
+			m.emit('${name} := ${val}')
+		}
 		if guard := case.guard {
 			guard_expr := m.visit_expr(guard)
 			m.emit('if (${guard_expr}) {')
 			m.env.state.indent_level++
-			for stmt in case.body { m.visit_stmt(stmt) }
+			for stmt in case.body {
+				m.visit_stmt(stmt)
+			}
 			m.emit('${found_var} = true')
 			m.env.state.indent_level--
 			m.emit('}')
 		} else {
-			for stmt in case.body { m.visit_stmt(stmt) }
+			for stmt in case.body {
+				m.visit_stmt(stmt)
+			}
 			m.emit('${found_var} = true')
 		}
 		m.env.state.indent_level--

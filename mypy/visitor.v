@@ -4,6 +4,14 @@ module mypy
 // AnyNode — sum type for visitor return values (analysis or transformation)
 pub type AnyNode = MypyNode | PatternNode | string
 
+pub fn (a AnyNode) str() string {
+	match a {
+		MypyNode { return a.str() }
+		string { return a }
+		else { return 'Node' }
+	}
+}
+
 pub fn (a AnyNode) as_mypy_node() ?MypyNode {
 	if a is MypyNode {
 		return a

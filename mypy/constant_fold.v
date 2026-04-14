@@ -1,5 +1,5 @@
 // Work in progress by Cline. Started: 2026-03-22 14:29
-// constant_fold.v — Constant folding of expressions
+// constant_fold.v — Constant folding of Expressions
 // Translated from mypy/constant_fold.py
 //
 // ---------------------------------------------------------------------------
@@ -9,7 +9,7 @@ module mypy
 // ConstantValue — type of constant folding result
 pub type ConstantValue = bool | f64 | i64 | string
 
-// constant_fold_expr returns the constant value of an expression for supported operations
+// constant_fold_expr returns the constant value of an Expression for supported operations
 pub fn constant_fold_expr(expr Expression, cur_mod_id string) ?ConstantValue {
 	if expr is IntExpr {
 		return expr.value

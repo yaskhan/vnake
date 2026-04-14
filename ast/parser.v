@@ -1,5 +1,7 @@
 module ast
 
+import strings
+
 // ==================== PARSER ====================
 
 // Operator precedence levels
@@ -341,10 +343,13 @@ fn (mut p Parser) parse_type_params() []TypeParam {
 			tok := p.current_token
 			mut kind := TypeParamKind.typevar
 
-			if p.current_is(.operator) && p.current_token.value == '*' {
+			if p.current_is(.operator) && (p.current_token.value == '*' || p.current_token.value == '**') {
+				is_double := p.current_token.value == '**'
 				p.advance()
-				if p.current_is(.operator) && p.current_token.value == '*' {
+				if !is_double && p.current_is(.operator) && p.current_token.value == '*' {
 					p.advance()
+					kind = .paramspec
+				} else if is_double {
 					kind = .paramspec
 				} else {
 					kind = .typevartuple
@@ -751,7 +756,9 @@ fn (mut p Parser) parse_try() ?Statement {
 		mut typ := ?Expression(none)
 		mut hname := ?string(none)
 		if !p.current_is(.colon) {
-			typ = p.parse_expression()
+			p.lexer.grouping_level++
+			typ = p.parse_expression_list(false, true)
+			p.lexer.grouping_level--
 			if p.current_is_keyword('as') {
 				p.advance()
 				hname = p.current_token.value
@@ -1360,12 +1367,38 @@ fn (mut p Parser) parse_binary_expr(precedence int, allow_in bool, allow_ternary
 		}
 
 		op_tok := op
-		right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
-		left = BinaryOp{
-			token: op_tok
-			left:  left
-			op:    op_tok
-			right: right
+		if op_tok.value in ['and', 'or'] {
+			right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
+			mut values := [left]
+			values << right
+			// Collect chained bool ops
+			for {
+				next_prec2 := token_precedence(p.current_token)
+				if next_prec2 <= next_prec {
+					break
+				}
+				mut next_op := p.current_token
+				if next_op.value in ['and', 'or'] {
+					p.advance()
+					next_right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
+					values << next_right
+				} else {
+					break
+				}
+			}
+			left = BoolOp{
+				token: op_tok
+				op:    op_tok
+				values: values
+			}
+		} else {
+			right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
+			left = BinaryOp{
+				token: op_tok
+				left:  left
+				op:    op_tok
+				right: right
+			}
 		}
 	}
 	return left
@@ -1474,24 +1507,24 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 
 	if !has_fstring {
 		if has_bytes {
-			mut val := ''
+			mut sb := strings.new_builder(parts.len * 10)
 			for part in parts {
 				if part is Constant {
 					v := part.value
 					if v.starts_with("b'") || v.starts_with('b"') {
-						val += v[2..v.len - 1]
+						sb.write_string(v[2..v.len - 1])
 					} else {
-						val += v
+						sb.write_string(v)
 					}
 				}
 			}
 			return Constant{
 				token: tok
-				value: "b'${val}'"
+				value: "b'${sb.str()}'"
 			}
 		}
 		// Concatenate all constant parts into one
-		mut val := ''
+		mut sb := strings.new_builder(parts.len * 10)
 		mut is_t := false
 		for part in parts {
 			if part is Constant {
@@ -1502,14 +1535,14 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 					start_idx = 2
 				}
 				if v.len >= 2 {
-					val += v[start_idx..v.len - 1]
+					sb.write_string(v[start_idx..v.len - 1])
 				}
 			}
 		}
 		prefix := if is_t { 't' } else { '' }
 		return Constant{
 			token: tok
-			value: "${prefix}${val}"
+			value: "${prefix}${sb.str()}"
 		}
 	}
 
@@ -1617,7 +1650,7 @@ fn (mut p Parser) parse_joined_str(tok Token) ?[]Expression {
 			mut sub_parser := new_parser(sub_lexer)
 			parsed_expr := sub_parser.parse_expression() or {
 				p.errors << ParseError{
-					message: 'failed to parse f-string expression: ${expr_str}'
+					message: 'failed to parse f-string Expression: ${expr_str}'
 					token:   tok
 				}
 				return none
@@ -1759,7 +1792,7 @@ fn (mut p Parser) parse_primary_expr(allow_in bool, allow_ternary bool) ?Express
 		}
 		else {
 			p.errors << ParseError{
-				message: 'unexpected token in expression: ${tok.value}'
+				message: 'unexpected token in Expression: ${tok.value}'
 				token:   tok
 			}
 			return none
@@ -1780,7 +1813,7 @@ fn (mut p Parser) parse_paren_expr(allow_in bool, allow_ternary bool) ?Expressio
 	}
 	expr := p.parse_expression_limited(allow_in, allow_ternary) or { return none }
 
-	// Generator expression
+	// Generator Expression
 	if p.current_is_keyword('for') {
 		gens := p.parse_comprehensions()
 		p.expect(.rparen)
@@ -2203,15 +2236,20 @@ fn (mut p Parser) parse_pattern_atom() Pattern {
 
 	// Capture variable
 	if p.current_is(.identifier) {
-		name := tok.value
+		mut cls := Expression(Name{
+			token: tok
+			id:    tok.value
+			ctx:   .load
+		})
 		p.advance()
+
+		// Handle generic class pattern: Box[int](...)
+		if p.current_is(.lbracket) {
+			cls = p.parse_subscript(cls)
+		}
+
 		// Class pattern: Name(...)
 		if p.current_is(.lparen) {
-			cls := Name{
-				token: tok
-				id:    name
-				ctx:   .load
-			}
 			p.advance()
 			mut patterns := []Pattern{}
 			mut kwd_attrs := []string{}
@@ -2245,7 +2283,7 @@ fn (mut p Parser) parse_pattern_atom() Pattern {
 		if p.current_is(.dot) {
 			mut expr := Expression(Name{
 				token: tok
-				id:    name
+				id:    tok.value
 				ctx:   .load
 			})
 			for p.current_is(.dot) {
@@ -2267,7 +2305,7 @@ fn (mut p Parser) parse_pattern_atom() Pattern {
 		return MatchAs{
 			token:   tok
 			pattern: none
-			name:    name
+			name:    tok.value
 		}
 	}
 

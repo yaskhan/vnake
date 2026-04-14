@@ -83,6 +83,7 @@ fn (mut m StdLibMapper) init_mappings() {
 		'exit': 'exit'
 		'argv': 'os.args'
 		'platform': 'os.user_os'
+		'version_info': 'sys_version_info'
 	}
 
 	// IO
@@ -94,7 +95,7 @@ fn (mut m StdLibMapper) init_mappings() {
 	m.mappings['os'] = {
 		'environ': 'os.environ'
 		'getcwd': 'os.getwd'
-		'system': 'os.system'
+		'system': 'py_os_system'
 		'getenv': 'os.getenv'
 		'mkdir': 'os.mkdir'
 		'makedirs': 'os.mkdir_all'
@@ -137,6 +138,8 @@ fn (mut m StdLibMapper) init_mappings() {
 
 	// Logging
 	m.mappings['logging'] = {
+		'getLogger': 'py_get_logger'
+		'get_logger': 'py_get_logger'
 		'info': 'log.info'
 		'warning': 'log.warn'
 		'error': 'log.error'
@@ -193,6 +196,18 @@ fn (mut m StdLibMapper) init_mappings() {
 		'and_': 'py_op_and'
 		'or_': 'py_op_or'
 		'xor': 'py_op_xor'
+	}
+
+	// Logging
+	m.mappings['logging'] = {
+		'getLogger': 'py_get_logger'
+		'get_logger': 'py_get_logger'
+		'info': 'log.info'
+		'error': 'log.error'
+		'warning': 'log.warn'
+		'warn': 'log.warn'
+		'debug': 'log.debug'
+		'critical': 'log.error'
 	}
 
 	// Threading
@@ -355,6 +370,7 @@ fn (mut m StdLibMapper) init_mappings() {
 
 // init_imports initializes imports
 fn (mut m StdLibMapper) init_imports() {
+	m.v_imports['logging'] = ['log']
 	m.v_imports['math'] = ['math']
 	m.v_imports['random'] = ['rand']
 	m.v_imports['json'] = ['json']

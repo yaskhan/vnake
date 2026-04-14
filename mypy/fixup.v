@@ -6,7 +6,7 @@
 module mypy
 
 // fixup_module fixes various things after deserialization
-pub fn fixup_module(mut tree MypyFile, modules map[string]MypyFile, allow_missing bool) {
+pub fn fixup_module(mut tree MypyFile, modules map[string]&MypyFile, allow_missing bool) {
 	mut node_fixer := NodeFixer{
 		modules:       modules
 		allow_missing: allow_missing
@@ -18,14 +18,14 @@ pub fn fixup_module(mut tree MypyFile, modules map[string]MypyFile, allow_missin
 // NodeFixer — node fixer
 pub struct NodeFixer {
 pub mut:
-	modules       map[string]MypyFile
+	modules       map[string]&MypyFile
 	allow_missing bool
 	current_info  ?&TypeInfo
 	type_fixer    TypeFixer
 }
 
 // new_node_fixer creates a new NodeFixer
-pub fn new_node_fixer(modules map[string]MypyFile, allow_missing bool) NodeFixer {
+pub fn new_node_fixer(modules map[string]&MypyFile, allow_missing bool) NodeFixer {
 	return NodeFixer{
 		modules:       modules
 		allow_missing: allow_missing
@@ -80,12 +80,12 @@ pub fn (mut nf NodeFixer) visit_symbol_table(mut symtab SymbolTable, table_fulln
 // TypeFixer — type fixer
 pub struct TypeFixer {
 pub mut:
-	modules       map[string]MypyFile
+	modules       map[string]&MypyFile
 	allow_missing bool
 }
 
 // new_type_fixer creates a new TypeFixer
-pub fn new_type_fixer(modules map[string]MypyFile, allow_missing bool) TypeFixer {
+pub fn new_type_fixer(modules map[string]&MypyFile, allow_missing bool) TypeFixer {
 	return TypeFixer{
 		modules:       modules
 		allow_missing: allow_missing
@@ -202,7 +202,7 @@ pub fn (mut tf TypeFixer) visit_type_list(t &TypeList) !MypyTypeNode {
 }
 
 // lookup_fully_qualified_typeinfo finds TypeInfo by fully qualified name
-pub fn lookup_fully_qualified_typeinfo(modules map[string]MypyFile, name string, allow_missing bool) ?&TypeInfo {
+pub fn lookup_fully_qualified_typeinfo(modules map[string]&MypyFile, name string, allow_missing bool) ?&TypeInfo {
 	_ = allow_missing
 	stnode := lookup_fully_qualified(name, modules)
 	if st := stnode {
@@ -216,7 +216,7 @@ pub fn lookup_fully_qualified_typeinfo(modules map[string]MypyFile, name string,
 }
 
 // lookup_fully_qualified_alias finds TypeAlias by fully qualified name
-pub fn lookup_fully_qualified_alias(modules map[string]MypyFile, name string, allow_missing bool) ?&TypeAlias {
+pub fn lookup_fully_qualified_alias(modules map[string]&MypyFile, name string, allow_missing bool) ?&TypeAlias {
 	_ = allow_missing
 	stnode := lookup_fully_qualified(name, modules)
 	if st := stnode {

@@ -133,14 +133,18 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 			struct_lines << '// Config: ${config_bits.join(", ")}'
 		}
 	} else if configs.len > 0 {
-		mut config_comment := []string{}
-		for key in configs.keys() {
+		mut config_keys := []string{cap: configs.len}
+		for k, _ in configs {
+			config_keys << k
+		}
+		config_keys.sort()
+		mut config_comment := []string{cap: configs.len}
+		for key in config_keys {
 			config_comment << '${key}=${configs[key]}'
 		}
 		struct_lines << '// ConfigDict: ${config_comment.join(", ")}'
 	}
 
-	struct_lines << '@[params]'
 	struct_lines << '${export}struct ${struct_name} {'
 	if env.state.is_exported(node.name) {
 		if !config.allow_mutation {
@@ -295,13 +299,13 @@ fn (p PydanticModelProcessor) generate_validate_method(
 		}
 	}
 
+	// Model/Field validators
 	for validator in validators {
-		if validator.is_model_validator {
-			code << '    // validator: ${validator.name}'
-		} else {
-			code << '    // field validator: ${validator.name} (${validator.fields.join(", ")})'
+		mut logic := p.generate_validator_logic(validator, struct_name, fields, mut env)
+		if logic.len > 0 {
+			code << logic
+			has_validation = true
 		}
-		has_validation = true
 	}
 
 	if !has_validation && !config.validate_all {
@@ -310,6 +314,97 @@ fn (p PydanticModelProcessor) generate_validate_method(
 
 	code << '}'
 	return code.join('\n')
+}
+
+fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorInfo, struct_name string, fields []PydanticFieldInfo, mut env PydanticVisitEnv) []string {
+	node := v_info.node
+	mut res := []string{}
+	
+	// Temporarily capture output for validator body
+	old_output := env.state.output
+	env.state.output = []string{}
+	
+	if v_info.is_model_validator {
+		res << '    m = fn (mut self ${struct_name}) !${struct_name} {'
+		prev_in_v := env.state.in_pydantic_validator
+		env.state.in_pydantic_validator = true
+		env.state.output = []string{}
+		for stmt in node.body {
+			env.visit_stmt_fn(stmt)
+		}
+		env.state.in_pydantic_validator = prev_in_v
+		for line in env.state.output {
+			res << '        ' + line
+		}
+		
+		// Only add return self if the body doesn't already end with a return
+		mut has_return := false
+		if node.body.len > 0 {
+			last_stmt := node.body.last()
+			if last_stmt is ast.Return {
+				has_return = true
+			}
+		}
+		if !has_return && env.state.output.len > 0 {
+			if env.state.output.last().trim_space().starts_with('return ') {
+				has_return = true
+			}
+		}
+		
+		if !has_return && env.state.output.len > 0 {
+			if env.state.output.last().trim_space().starts_with('return ') {
+				has_return = true
+			}
+		}
+		
+		if !has_return {
+			res << '        return self'
+		}
+		res << '    }(mut m) !'
+	} else {
+		for f_name in v_info.fields {
+			mut f_type := 'Any'
+			for f in fields {
+				if f.name == f_name {
+					f_type = f.type_str
+					break
+				}
+			}
+			res << '    m.${f_name} = fn (v ${f_type}) !${f_type} {'
+			prev_in_v := env.state.in_pydantic_validator
+			env.state.in_pydantic_validator = true
+			env.state.output = []string{}
+			for stmt in node.body {
+				env.visit_stmt_fn(stmt)
+			}
+			env.state.in_pydantic_validator = prev_in_v
+			for line in env.state.output {
+				res << '        ' + line
+			}
+			
+			// Only add return v if the body doesn't already end with a return
+			mut has_return_v := false
+			if node.body.len > 0 {
+				last_stmt := node.body.last()
+				if last_stmt is ast.Return {
+					has_return_v = true
+				}
+			}
+			if !has_return_v && env.state.output.len > 0 {
+				if env.state.output.last().trim_space().starts_with('return ') {
+					has_return_v = true
+				}
+			}
+
+			if !has_return_v {
+				res << '        return v'
+			}
+			res << '    }(m.${f_name}) !'
+		}
+	}
+	
+	env.state.output = old_output
+	return res
 }
 
 fn (p PydanticModelProcessor) generate_factory(

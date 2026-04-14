@@ -6,7 +6,8 @@ struct SourceTokenCarrier {
 	token ast.Token
 }
 
-struct ExportConfigLike {
+pub struct ExportConfigLike {
+pub:
 	include_all_symbols bool
 }
 
@@ -26,7 +27,9 @@ pub mut:
 	coroutine_handler   voidptr
 	emitter             voidptr
 	mapper              voidptr
-	config              voidptr
+	include_all_symbols bool
+	strict_exports      bool
+	omit_builtins       bool
 
 	output                       []string
 	tail                         []string
@@ -52,6 +55,7 @@ pub mut:
 	used_delete_many             bool
 	used_insert_many             bool
 	used_dict_merge              bool
+	used_set_create              bool
 	used_string_format           bool
 	dataclasses                  map[string][]string
 	generated_sum_types          map[string]string
@@ -59,6 +63,7 @@ pub mut:
 	generated_tuple_structs      map[string]string
 	literal_enum_values          map[string]map[voidptr]string
 	global_vars                  map[string]bool
+	global_var_types             map[string]string
 	renamed_functions            map[string]string
 	name_remap                   map[string]string
 	walrus_assignments           []string
@@ -75,6 +80,7 @@ pub mut:
 	overloaded_signatures        map[string][]map[string]string
 	type_params_map              map[string][]string
 	generic_variance             map[string]string
+	abstract_methods             map[string][]string
 	generic_defaults             map[string]string
 	finally_stack                []voidptr
 	loop_stack                   []map[string]voidptr
@@ -91,19 +97,54 @@ pub mut:
 	warnings                     []string
 	pending_llm_call_comments    []string
 	type_vars                    map[string]bool
+	paramspec_vars               map[string]bool
 	scope_names                  []string
 	constrained_typevars         map[string]bool
 	current_function_return_type string
 	current_assignment_type      string
+	current_assignment_lhs       string
+	current_ann_raw              string
 	in_pydantic_validator        bool
 	in_init                      bool
 	in_assignment_lhs            bool
 	current_node                 voidptr
 	readonly_fields              map[string]map[string]bool
 	cond_optional_var_type       map[string]string
+	narrowed_vars                map[string]bool
 	typed_dicts                  map[string]bool
 	class_hierarchy_initialized  bool
+	cached_indents               []string
+	is_full_module               bool
+	dataclass_init_vars          map[string]map[string]string
+	dataclass_defaults           map[string]map[string]string
+	in_loop_count                int
+	in_generator                 bool
+	has_yield                    bool
 }
+
+pub const cached_indents = [
+	'',
+	'    ',
+	'        ',
+	'            ',
+	'                ',
+	'                    ',
+	'                        ',
+	'                            ',
+	'                                ',
+	'                                    ',
+	'                                        ',
+	'                                            ',
+	'                                                ',
+	'                                                    ',
+	'                                                        ',
+	'                                                            ',
+	'                                                                ',
+	'                                                                    ',
+	'                                                                        ',
+	'                                                                            ',
+	'                                                                                ',
+]
 
 // new_translator_state creates a new TranslatorState instance
 pub fn new_translator_state() &TranslatorState {
@@ -114,7 +155,8 @@ pub fn new_translator_state() &TranslatorState {
 		coroutine_handler:            unsafe { nil }
 		emitter:                      unsafe { nil }
 		mapper:                       unsafe { nil }
-		config:                       unsafe { nil }
+		include_all_symbols:          false
+		strict_exports:               false
 		output:                       []string{}
 		known_v_types:                map[string]string{}
 		indent_level:                 0
@@ -144,6 +186,7 @@ pub fn new_translator_state() &TranslatorState {
 		generated_tuple_structs:      map[string]string{}
 		literal_enum_values:          map[string]map[voidptr]string{}
 		global_vars:                  map[string]bool{}
+		global_var_types:             map[string]string{}
 		renamed_functions:            {
 			'main': 'py_main'
 		}
@@ -152,6 +195,7 @@ pub fn new_translator_state() &TranslatorState {
 		imported_modules:             map[string]string{}
 		imported_symbols:             map[string]string{}
 		single_dispatch_functions:    map[string]map[string]string{}
+		abstract_methods:             map[string][]string{}
 		known_interfaces:             map[string]bool{}
 		class_hierarchy:              map[string][]string{}
 		main_to_mixins:               map[string][]string{}
@@ -186,13 +230,24 @@ pub fn new_translator_state() &TranslatorState {
 		current_node:                 unsafe { nil }
 		readonly_fields:              map[string]map[string]bool{}
 		cond_optional_var_type:       map[string]string{}
+		narrowed_vars:                map[string]bool{}
 		typed_dicts:                  map[string]bool{}
 		class_hierarchy_initialized:  false
+		cached_indents:               cached_indents.clone()
+		is_full_module:               false
+		dataclass_init_vars:          map[string]map[string]string{}
+		dataclass_defaults:           map[string]map[string]string{}
+		in_generator:                 false
+		has_yield:                    false
 	}
 }
 
-// indent returns indentation string
+// indent returns indentation string.
+// This is optimized to use precomputed indentation strings for common levels.
 pub fn (s &TranslatorState) indent() string {
+	if s.indent_level >= 0 && s.indent_level < s.cached_indents.len {
+		return s.cached_indents[s.indent_level]
+	}
 	return '    '.repeat(s.indent_level)
 }
 
@@ -222,7 +277,7 @@ pub fn (mut s TranslatorState) update_class_hierarchy() {
 		return
 	}
 
-	for class_name in s.defined_classes.keys() {
+	for class_name, _ in s.defined_classes {
 		if class_name !in s.class_hierarchy {
 			s.class_hierarchy[class_name] = []string{}
 		}
@@ -257,19 +312,41 @@ pub fn (s &TranslatorState) is_top_level_symbol(name string) bool {
 	return true
 }
 
+// is_compile_time_evaluable checks if Expression is compile-time evaluable
+pub fn is_compile_time_evaluable(node ast.Expression) bool {
+	if node is ast.Constant {
+		return true
+	}
+	if node is ast.UnaryOp {
+		return is_compile_time_evaluable(node.operand)
+	}
+	if node is ast.List {
+		if node.elements.len == 0 { return true }
+	}
+	return false
+}
+
 // is_exported checks if symbol should be public
 pub fn (s &TranslatorState) is_exported(name string) bool {
-	if s.config == unsafe { nil } {
-		return false
-	}
-	cfg := unsafe { &ExportConfigLike(s.config) }
-	if cfg.include_all_symbols {
+	if s.include_all_symbols {
 		return true
+	}
+	if name.starts_with('_') {
+		return false
 	}
 	if s.module_all.len > 0 {
 		return name in s.module_all
 	}
-	return !name.starts_with('_')
+	return false
+}
+
+pub fn (s &TranslatorState) is_declared_local(name string) bool {
+	for scope in s.scope_stack {
+		if name in scope {
+			return true
+		}
+	}
+	return false
 }
 
 // collect_assigned_vars collects names of all assigned variables
@@ -285,6 +362,36 @@ pub fn (s &TranslatorState) collect_assigned_nodes(nodes []voidptr) map[string]b
 		}
 	}
 	return assigned
+}
+
+// is_v_class_type checks if v_type is a class type that should be passed by reference.
+// It correctly handles generic types by checking the current state.
+pub fn (s &TranslatorState) is_v_class_type(v_type string) bool {
+	clean := v_type.trim_left('?&')
+	if clean.len == 0 {
+		return false
+	}
+	if !clean[0].is_capital() {
+		return false
+	}
+	if clean in ['Any', 'LiteralString', 'Self', 'NoneType', 'TaskState'] {
+		return false
+	}
+	if clean.starts_with('SumType_') || clean.starts_with('LiteralEnum_') || clean.starts_with('TupleStruct_') {
+		return false
+	}
+	if clean.ends_with('Protocol') {
+		return false
+	}
+	if clean in s.type_vars {
+		return false
+	}
+	for g in s.current_class_generics {
+		if clean == g {
+			return false
+		}
+	}
+	return true
 }
 
 

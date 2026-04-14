@@ -512,6 +512,24 @@ pub fn extract_type_var_id(t MypyTypeNode) ?TypeVarId {
 	}
 }
 
+pub fn (t MypyTypeNode) str() string {
+	return match t {
+		AnyType { 'Any' }
+		Instance { t.type_name }
+		UnboundType { t.name }
+		NoneType { 'None' }
+		UnionType { 
+			mut parts := []string{}
+			for item in t.items {
+				parts << item.str()
+			}
+			parts.join(' | ')
+		}
+		CallableType { 'Callable' }
+		else { 'Any' }
+	}
+}
+
 pub fn (t MypyTypeNode) type_str() string {
 	return t.str()
 }
@@ -558,3 +576,4 @@ pub fn new_unification_variable(t MypyTypeNode) MypyTypeNode {
 		}
 	}
 }
+

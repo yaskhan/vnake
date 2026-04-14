@@ -1,0 +1,8 @@
+@@in# "struct User {"
+@@in# "id int"
+@@in# "name string [json: 'userName']"
+@@in# "age int = 18"
+@@in# "is_active bool = true"
+@@in# "fn (mut m User) validate() ! {"
+@@in# "if m.name.len > 50 { return error("Validation Error: name length must be <= 50")"
+@@in# "if m.age <= 0 { return error("Validation Error: age must be greater than 0")"

@@ -39,7 +39,9 @@ pub fn (h ClassDecoratorHandler) process_decorators(
 			}
 		}
 
-		decorators << '// @${dec_str}'
+		if dec_str != 'deprecated' && !dec_str.starts_with('deprecated(') && !dec_str.starts_with('warnings.deprecated(') && !dec_str.starts_with('dataclass') && !dec_str.starts_with('dataclasses.dataclass') && dec_str != 'disjoint_base' && dec_str != 'typing.disjoint_base' {
+			decorators << '// @${dec_str}'
+		}
 		if dec_str.starts_with('dataclass') || dec_str.starts_with('dataclasses.dataclass') {
 			is_dataclass = true
 		}

@@ -6,7 +6,7 @@ module mypy
 
 // analyze_type_alias analyzes the right side of a type alias definition
 // Returns the type and the set of alias names it depends on
-pub fn analyze_type_alias(typ MypyTypeNode, api SemanticAnalyzerCoreInterface, tvar_scope TypeVarLikeScope, plugin Plugin, options Options, cur_mod_node MypyFile, is_typeshed_stub bool, allow_placeholder bool, in_dynamic_func bool, global_scope bool, allowed_alias_tvars []TypeVarLikeType, alias_type_params_names []string, python_3_12_type_alias bool) !(MypyTypeNode, map[string]bool) {
+pub fn analyze_type_alias(typ MypyTypeNode, api SemanticAnalyzerCoreInterface, tvar_scope TypeVarLikeScope, plugin Plugin, options Options, cur_mod_node &MypyFile, is_typeshed_stub bool, allow_placeholder bool, in_dynamic_func bool, global_scope bool, allowed_alias_tvars []TypeVarLikeType, alias_type_params_names []string, python_3_12_type_alias bool) !(MypyTypeNode, map[string]bool) {
 	mut analyzer := TypeAnalyser{
 		api:                     api
 		tvar_scope:              tvar_scope
@@ -30,6 +30,7 @@ pub fn analyze_type_alias(typ MypyTypeNode, api SemanticAnalyzerCoreInterface, t
 // TypeAnalyser — semantic analyzer for types
 // Converts unbound types to bound types
 pub struct TypeAnalyser {
+	cur_mod_node                       &MypyFile
 pub mut:
 	api                                SemanticAnalyzerCoreInterface
 	fail_func                          fn (string, Context, &ErrorCode) = unsafe { nil }
@@ -51,7 +52,6 @@ pub mut:
 	report_invalid_types               bool
 	plugin                             Plugin
 	options                            Options
-	cur_mod_node                       MypyFile
 	is_typeshed_stub                   bool
 	aliases_used                       map[string]bool
 	prohibit_self_type                 ?string
@@ -361,7 +361,7 @@ pub fn (mut ta TypeAnalyser) anal_array(a []MypyTypeNode) ![]MypyTypeNode {
 }
 
 // lookup_qualified looks up a qualified name
-fn (ta TypeAnalyser) lookup_qualified(name string, ctx Context) ?&SymbolTableNode {
+fn (mut ta TypeAnalyser) lookup_qualified(name string, ctx Context) ?&SymbolTableNode {
 	return ta.api.lookup_qualified(name, ctx, false)
 }
 

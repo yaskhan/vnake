@@ -66,48 +66,41 @@ pub fn (h ClassBasesHandler) process_bases(node ast.ClassDef, struct_name string
 				continue
 			}
 			
-			if b_name !in env.analyzer.mixin_to_main {
-				type_str := env.visit_expr_fn(base_expr)
-				v_type := map_python_type(type_str, struct_name, false, mut env)
-				if !v_type.starts_with('[]') && !v_type.starts_with('map[') {
-					if !b_name.ends_with('Mixin') {
-						is_split := b_name in env.state.known_interfaces
-						sanitized_base := sanitize_name(b_name, true)
-						if is_split {
-							fields << FieldDefInfo{
-								name: ''
-								def:  '    ${v_type.replace(sanitized_base, sanitized_base + "_Impl")}'
-								is_mutated: false
-							}
-						} else {
-							fields << FieldDefInfo{
-								name: ''
-								def:  '    ${v_type}'
-								is_mutated: false
-							}
-						}
+			type_str := env.map_annotation_fn(base_expr)
+			v_type := map_python_type(type_str, struct_name, false, mut env, '')
+			env.state.current_class_generic_bases[b_name] = v_type
+			if !v_type.starts_with('[]') && !v_type.starts_with('map[') {
+				is_split := b_name in env.state.known_interfaces
+				sanitized_base := sanitize_name(b_name, true)
+				if is_split {
+					fields << FieldDefInfo{
+						name: '${b_name}_Impl'
+						def:  '    ${v_type.replace(sanitized_base, sanitized_base + "_Impl")}'
+						is_mutated: false
+					}
+				} else {
+					fields << FieldDefInfo{
+						name: '${b_name}'
+						def:  '    ${v_type}'
+						is_mutated: false
 					}
 				}
 			}
 			current_class_bases << b_name
 		} else if b_name.len > 0 && b_name != 'object' && b_name != 'ABC' {
-			if b_name.ends_with('Mixin') {
-				// skip
+			is_split := b_name in env.state.known_interfaces
+			sanitized_base := sanitize_name(b_name, true)
+			if is_split {
+				fields << FieldDefInfo{
+					name: '${b_name}_Impl'
+					def:  '    ${sanitized_base}_Impl'
+					is_mutated: false
+				}
 			} else {
-				is_split := b_name in env.state.known_interfaces
-				sanitized_base := sanitize_name(b_name, true)
-				if is_split {
-					fields << FieldDefInfo{
-						name: ''
-						def:  '    ${sanitized_base}_Impl'
-						is_mutated: false
-					}
-				} else if b_name !in env.analyzer.mixin_to_main {
-					fields << FieldDefInfo{
-						name: ''
-						def:  '    ${sanitized_base}'
-						is_mutated: false
-					}
+				fields << FieldDefInfo{
+					name: '${b_name}'
+					def:  '    ${sanitized_base}'
+					is_mutated: false
 				}
 			}
 			current_class_bases << b_name
@@ -132,6 +125,11 @@ pub fn (h ClassBasesHandler) is_descendant_of(cls_name string, target string, en
 }
 
 pub fn (h ClassBasesHandler) is_abstract_base_class(node ast.ClassDef, struct_name string, env &ClassVisitEnv) bool {
+	if struct_name in env.state.abstract_methods {
+		if env.state.abstract_methods[struct_name].len > 0 {
+			return true
+		}
+	}
 	for b in node.bases {
 		name := env.visit_expr_fn(b)
 		if name in ['ABC', 'abc.ABC'] { return true }

@@ -7,7 +7,7 @@ module mypy
 pub struct Scope {
 pub mut:
 	module    ?string
-	classes   []TypeInfo
+	classes   []&TypeInfo
 	function  ?FuncItem
 	functions []FuncItem
 	ignored   int
@@ -17,7 +17,7 @@ pub mut:
 pub fn new_scope() Scope {
 	return Scope{
 		module:    none
-		classes:   []TypeInfo{}
+		classes:   []&TypeInfo{}
 		function:  none
 		functions: []FuncItem{}
 		ignored:   0
@@ -32,7 +32,7 @@ pub fn (mut s Scope) enter_module(fullname string) Scope {
 }
 
 // class_scope enters a class scope
-pub fn (mut s Scope) class_scope(info TypeInfo) {
+pub fn (mut s Scope) class_scope(info &TypeInfo) {
 	s.classes << info
 }
 
@@ -42,7 +42,7 @@ pub fn (mut s Scope) class_scope_leave() {
 }
 
 // current_class returns the current TypeInfo
-pub fn (s &Scope) current_class() ?TypeInfo {
+pub fn (s &Scope) current_class() ?&TypeInfo {
 	if s.classes.len > 0 {
 		return s.classes.last()
 	}
@@ -162,7 +162,7 @@ pub fn (mut s Scope) enter_function(func FuncItem) Scope {
 
 pub fn (mut s Scope) enter_class(info &TypeInfo) Scope {
 	prev := s.save()
-	s.classes << *info
+	s.classes << info
 	return prev
 }
 

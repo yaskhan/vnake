@@ -206,20 +206,34 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 		base_v_type = v_type[2..]
 	} else if v_type.starts_with('?[]') {
 		base_v_type = v_type[3..]
+	} else if v_type.starts_with('[]?') {
+		// Already has optional marker
+		base_v_type = v_type[3..]
 	}
 	if base_v_type.len > 0 && base_v_type in m.state.known_interfaces {
 		is_interface_array = true
 	}
 
-	if is_interface_array && node.value is ast.List && node.value.elements.len > 0 {
-		if !m.state.in_main && lhs in m.local_vars_in_scope {
-			m.emit('${lhs} = ${v_type}{}')
+	if is_interface_array && node.value is ast.List {
+		if node.value.elements.len > 0 {
+			// Use explicit initialization for interface arrays
+			if !m.state.in_main && lhs in m.local_vars_in_scope {
+				m.emit('${lhs} = ${v_type}{len: ${node.value.elements.len}, init: none}')
+			} else {
+				m.emit('mut ${lhs} := ${v_type}{len: ${node.value.elements.len}, init: none}')
+				if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
+			}
+			for i, elt in node.value.elements {
+				m.emit('${lhs}[${i}] = ${m.visit_expr(elt)}')
+			}
 		} else {
-			m.emit('mut ${lhs} := ${v_type}{}')
-			if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
-		}
-		for elt in node.value.elements {
-			m.emit('${lhs} << ${m.visit_expr(elt)}')
+			// Empty list - use explicit initialization
+			if !m.state.in_main && lhs in m.local_vars_in_scope {
+				m.emit('${lhs} = ${v_type}{len: 0, init: none}')
+			} else {
+				m.emit('mut ${lhs} := ${v_type}{len: 0, init: none}')
+				if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
+			}
 		}
 		return
 	}
@@ -229,7 +243,7 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 
 	if is_void_call {
 		m.emit(m.visit_expr(node.value))
-		rhs = 'Any(NoneType{})'
+		rhs = 'none'
 	} else {
 		prev_type := m.state.current_assignment_type
 		m.state.current_assignment_type = v_type
@@ -237,14 +251,55 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 		m.state.current_assignment_type = prev_type
 	}
 
+	// For Any or none types with None assignment, use Any(NoneType{})
+	if rhs == 'none' && (v_type == 'Any' || v_type == 'none') {
+		rhs = 'Any(NoneType{})'
+	}
+
 	if m.state.in_main {
-		if lhs in m.state.global_vars {
-			m.emitter.add_init_statement('${lhs} = ${rhs}')
+		if target is ast.Name && target.id.is_upper() && base.is_compile_time_evaluable(node.value) {
+			v_id := base.to_snake_case(target.id)
+			pub_prefix := if m.is_exported(target.id) { 'pub ' } else { '' }
+			// Sanitize ord/chr calls for compile-time constants
+			// Use V's native .u32() / rune().str() which work with constants
+			mut sanitized_rhs := rhs
+			if sanitized_rhs.starts_with('ord(') && sanitized_rhs.ends_with(')') {
+				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
+				sanitized_rhs = 'int(${inner}[0])'
+			} else if sanitized_rhs.starts_with('chr(') && sanitized_rhs.ends_with(')') {
+				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
+				sanitized_rhs = 'rune(int(${inner})).str()'
+			} else if sanitized_rhs.contains('.u32(') && sanitized_rhs.contains(')') {
+				// Already converted ord call like u32('A') - leave it as is
+				for i := 0; i < sanitized_rhs.len - 4; i++ {
+					if sanitized_rhs[i..i+5] == 'u32(' {
+						close_idx := -1
+						depth := 1
+						for j := i + 5; j < sanitized_rhs.len; j++ {
+							if sanitized_rhs[j] == `[` || sanitized_rhs[j] == `(` { depth++ }
+							if sanitized_rhs[j] == `]` || sanitized_rhs[j] == `)` { depth-- }
+							if depth == 0 { close_idx = j; break }
+						}
+						if close_idx > 0 {
+							// Already converted ord call like u32('A') - leave it as is
+							break
+						}
+					}
+				}
+			}
+			m.emitter.add_constant('${pub_prefix}const ${v_id} = ${sanitized_rhs}')
 			return
 		}
-		if target is ast.Name && target.id.is_upper() && m.is_compile_time_evaluable(node.value) {
+		// For UPPER_CASE names that are not compile-time evaluable, use 'mut' variable
+		if target is ast.Name && target.id.is_upper() {
 			pub_prefix := if m.is_exported(target.id) { 'pub ' } else { '' }
-			m.emitter.add_constant('${pub_prefix}${m.to_snake_case(target.id)} = ${rhs}')
+			v_id := base.to_snake_case(target.id)
+			m.emit('${pub_prefix}mut ${v_id} := ${rhs}')
+			m.local_vars_in_scope[v_id] = true
+			return
+		}
+		if lhs in m.state.global_vars {
+			m.emitter.add_init_statement('${lhs} = ${rhs}')
 			return
 		}
 	}
@@ -252,6 +307,23 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 	is_mut := m.is_mutable_target(target, lhs)
 	if is_mut && m.is_clonable_collection(v_type) && !rhs.contains('.clone()') && !rhs.starts_with('[') && !rhs.starts_with('map[') {
 		rhs = '${rhs}.clone()'
+	}
+
+	// For Optional[SomeClass] assignments with a concrete value, use the optional type
+	if v_type.starts_with('?') && rhs != 'none' && !rhs.contains('unsafe { nil }') {
+		if v_type in m.local_vars_in_scope {
+			m.emit('${lhs} = ${v_type}(${rhs})')
+		} else {
+			m.emit('mut ${lhs} := ${v_type}(${rhs})')
+			m.local_vars_in_scope[lhs] = true
+		}
+		return
+	}
+
+	// If variable was already declared with an optional type, wrap the new value
+	if !m.state.in_main && lhs in m.local_vars_in_scope && v_type.starts_with('?') {
+		m.emit('${lhs} = ${v_type}(${rhs})')
+		return
 	}
 
 	if !m.state.in_main && lhs in m.local_vars_in_scope {

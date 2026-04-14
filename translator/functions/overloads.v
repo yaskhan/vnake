@@ -22,7 +22,7 @@ pub fn generate_overload_variants(
 	mangle_name_fn fn (string, string) string,
 	is_exported_c fn (string) bool,
 	get_source_info_fn fn (ast.Statement) string,
-	extract_implicit_generics_fn fn (&ast.FunctionDef, map[string]bool, map[string]bool, []string, fn (string, bool) string) []string,
+	extract_implicit_generics_fn fn (&ast.FunctionDef, map[string]bool, map[string]bool, map[string]bool, []string, fn (string, bool) string) []string,
 	get_generic_map_fn fn ([]string, []map[string]string) map[string]string,
 	get_all_active_v_generics_fn fn ([]map[string]string) []string,
 	get_generics_with_variance_str_fn fn ([]string, map[string]string, map[string]string, map[string]string) string,
@@ -64,7 +64,7 @@ pub fn generate_overload_variants(
 		
 		
 		// Extract implicit generics for this signature
-		mut func_generics := extract_implicit_generics(node, state.type_vars, map[string]bool{},
+		mut func_generics := extract_implicit_generics(node, state.type_vars, state.paramspec_vars, map[string]bool{},
 			state.current_class_generics, sanitize_fn)
 		
 		v_gen_map := base.get_generic_map(func_generics, [state.current_class_generic_map])
@@ -107,7 +107,7 @@ pub fn generate_overload_variants(
 		pub_pfx_final := if is_operator { '' } else { pub_pfx }
 		
 		mut sig_ret := sig['return']
-		if (is_operator || dec_info.is_classmethod || dec_info.is_staticmethod) && sig_ret.len > 0 && sig_ret[0].is_capital() && sig_ret !in ['Any', 'LiteralString', 'bool', 'int', 'f64'] {
+		if (dec_info.is_classmethod || dec_info.is_staticmethod) && sig_ret.len > 0 && sig_ret[0].is_capital() && sig_ret !in ['Any', 'LiteralString', 'bool', 'int', 'f64'] {
 			if !sig_ret.starts_with('&') {
 				sig_ret = '&' + sig_ret
 			}
@@ -126,6 +126,11 @@ pub fn generate_overload_variants(
 		state.indent_level++
 		for stmt in node.body {
 			env.visit_stmt_fn(stmt)
+		}
+
+		if sig_ret != 'void' && sig_ret != 'none' && sig_ret != '' && !ends_with_return(node.body) {
+			default_val := base.get_v_default_value(sig_ret, v_gens_to_declare)
+			emit_fn('${indent_fn()}return ${default_val}')
 		}
 		state.indent_level--
 		

@@ -13,6 +13,19 @@ pub mut:
 	guess_type_handler fn (ast.Expression, models.TypeGuessingContext) string = unsafe { nil }
 }
 
+fn sanitize_field_name(name string) string {
+	mut res := ''
+	for i := 0; i < name.len; i++ {
+		ch := name[i]
+		if ch.is_capital() && i > 0 {
+			res += '_' + ch.ascii_str().to_lower()
+		} else {
+			res += ch.ascii_str().to_lower()
+		}
+	}
+	return res
+}
+
 pub fn new_type_inference_visitor_mixin() TypeInferenceVisitorMixin {
 	return TypeInferenceVisitorMixin{
 		TypeInferenceUtilsMixin: new_type_inference_utils_mixin()
@@ -23,8 +36,8 @@ fn (t &TypeInferenceVisitorMixin) type_ctx() models.TypeGuessingContext {
 	return models.TypeGuessingContext{
 		type_map:           t.type_map
 		location_map:       t.location_map
-		known_v_types:      map[string]string{}
-		name_remap:         map[string]string{}
+		known_v_types:      t.empty_v_types_cache
+		name_remap:         t.empty_name_remap_cache
 		defined_classes:    t.defined_classes_for_guessing()
 		explicit_any_types: t.explicit_any_types
 		analyzer:           t.analyzer_ptr
@@ -32,11 +45,7 @@ fn (t &TypeInferenceVisitorMixin) type_ctx() models.TypeGuessingContext {
 }
 
 fn (t &TypeInferenceVisitorMixin) defined_classes_for_guessing() map[string]map[string]bool {
-	mut classes := map[string]map[string]bool{}
-	for class_name in t.class_hierarchy.keys() {
-		classes[class_name] = map[string]bool{}
-	}
-	return classes
+	return t.defined_classes_cache
 }
 
 fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string {
@@ -65,16 +74,70 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 		ast.UnaryOp {
 			return t.guess_expr_type(node.operand)
 		}
-		ast.Name { res := t.get_type(node.id); return if res == 'Any' { 'int' } else { res } }
+		ast.BinaryOp {
+			if node.op.value == '|' {
+				left := t.guess_expr_type(node.left)
+				right := t.guess_expr_type(node.right)
+				if (left == 'none' || left == 'NoneType') && right != 'Any' { return '?' + right }
+				if (right == 'none' || right == 'NoneType') && left != 'Any' { return '?' + left }
+				return left + ' | ' + right
+			}
+			return t.guess_expr_type(node.left)
+		}
+		ast.Name { 
+			res := t.get_type(node.id)
+			if res == 'Any' && node.id.len > 0 && node.id[0].is_capital() {
+				return node.id
+			}
+			return if res == 'Any' { 'int' } else { res }
+		}
 		ast.Call {
 			if node.func is ast.Name {
 				fid := node.func.id
+				if fid == 'cast' && node.args.len >= 2 {
+					return t.expr_to_name(node.args[0])
+				}
 				if fid.len > 0 && fid[0].is_capital() {
+					if fid in t.class_hierarchy {
+						return '&' + fid
+					}
 					return fid
 				}
 				if fid.starts_with('new_') {
 					return fid[4..]
 				}
+				if sig := t.get_call_signature(fid) {
+					return sig.return_type
+				}
+			} else if node.func is ast.Attribute {
+				mut attr := node.func
+				rec_type := t.guess_expr_type(attr.value)
+				if rec_type != 'Any' {
+					sig_key := rec_type.trim_left('?&') + '.' + attr.attr
+					if sig := t.get_call_signature(sig_key) {
+						return sig.return_type
+					}
+				}
+			}
+			return 'Any'
+		}
+		ast.Attribute {
+			val_type := t.guess_expr_type(node.value)
+			if val_type != 'Any' && val_type != 'int' {
+				attr_type := t.get_type(val_type.trim_left('?&') + '.' + node.attr)
+				if attr_type != 'Any' {
+					return attr_type
+				}
+			}
+			return 'Any'
+		}
+		ast.Subscript {
+			val_type := t.guess_expr_type(node.value)
+			if val_type.starts_with('[]') {
+				return val_type[2..]
+			}
+			if val_type.starts_with('map[') && val_type.contains(']') {
+				return val_type.all_after(']')
 			}
 			return 'Any'
 		}
@@ -87,20 +150,17 @@ fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 	if name.len == 0 || typ.len == 0 {
 		return
 	}
-	if !t.has_type(name) || (t.raw_type_map[name] == 'map[string]Any' && typ.starts_with('map[')) || (t.raw_type_map[name] == '[]Any' && typ.starts_with('[]')) {
-		t.raw_type_map[name] = typ
+	eprintln('DEBUG: analyzer.store_type ${name} = ${typ} (in ${t.scope_names.join("/")})')
+	if t.scope_names.len == 0 {
+		t.type_map[name] = typ
 	}
-	t.type_map[name] = typ
 	if !name.contains('.') && !name.contains('@') {
 		qualified := t.get_qualified_name(name)
 		if qualified != name {
 			t.type_map[qualified] = typ
 		}
 	} else if name.contains('.') {
-		short := name.all_after_last('.')
-		if short.len > 0 && (!t.has_type(short) || t.get_type(short) == 'Any') {
-			t.type_map[short] = typ
-		}
+		// Do not auto-store into unqualified map to avoid cross-class contamination
 	}
 }
 
@@ -144,12 +204,17 @@ fn (mut t TypeInferenceVisitorMixin) store_explicit_any(name string, loc string)
 	}
 }
 
+fn (mut t TypeInferenceVisitorMixin) mark_reassigned(name string) {
+	qual := t.get_qualified_name(name)
+	mut info := t.mutability_map[qual] or { MutabilityInfo{} }
+	info.is_reassigned = true
+	t.mutability_map[qual] = info
+}
+
 fn (mut t TypeInferenceVisitorMixin) mark_reassigned_expr(node ast.Expression) {
 	match node {
 		ast.Name {
-			mut info := t.get_mutability(node.id)
-			info.is_reassigned = true
-			t.set_mutability(node.id, info)
+			t.mark_reassigned(node.id)
 		}
 		ast.Attribute {
 			t.mark_reassigned_expr(node.value)
@@ -174,12 +239,17 @@ fn (mut t TypeInferenceVisitorMixin) mark_reassigned_expr(node ast.Expression) {
 	}
 }
 
+fn (mut t TypeInferenceVisitorMixin) mark_mutated(name string) {
+	qual := t.get_qualified_name(name)
+	mut info := t.mutability_map[qual] or { MutabilityInfo{} }
+	info.is_mutated = true
+	t.mutability_map[qual] = info
+}
+
 fn (mut t TypeInferenceVisitorMixin) mark_mutated_expr(node ast.Expression) {
 	match node {
 		ast.Name {
-			mut info := t.get_mutability(node.id)
-			info.is_mutated = true
-			t.set_mutability(node.id, info)
+			t.mark_mutated(node.id)
 		}
 		ast.Attribute {
 			t.mark_mutated_expr(node.value)
@@ -457,6 +527,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_expr(node ast.Expression) {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_module(node ast.Module) {
+	eprintln('DEBUG: visit_module body_len=${node.body.len}')
 	for stmt in node.body {
 		t.visit_stmt(stmt)
 	}
@@ -546,6 +617,12 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 		t.mark_mutated_expr(node.value)
 	}
 	
+	val_type := t.guess_expr_type(node.value)
+	if val_type != 'Any' && val_type != 'int' {
+		loc_key := '${node.token.line}:${node.token.column}'
+		t.location_map[loc_key] = val_type.trim_left('?&')
+	}
+
 	// TypedDict tracking for read access
 	dict_name := t.expr_to_name(node.value)
 	if dict_name.len > 0 {
@@ -828,7 +905,7 @@ fn (mut t TypeInferenceVisitorMixin) infer_return_type(stmts []ast.Statement) st
 	mut found_types := map[string]bool{}
 	has_return_value := t.collect_return_types(stmts, mut found_types)
 	if found_types.len == 1 {
-		return found_types.keys()[0]
+		for k, _ in found_types { return k }
 	}
 	if found_types.len > 1 || has_return_value {
 		return 'Any'
@@ -932,9 +1009,9 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 		mut py_type := 'Any'
 		if annotation := param.annotation {
 			py_type = t.expr_to_type_string(annotation)
-		}
-		if py_type == 'Any' || py_type == 'typing.Any' || py_type == 'typing_extensions.Any' {
-			t.store_explicit_any(param.arg, '${param.token.line}:${param.token.column}')
+			if py_type == 'Any' || py_type == 'typing.Any' || py_type == 'typing_extensions.Any' {
+				t.store_explicit_any(param.arg, '${param.token.line}:${param.token.column}')
+			}
 		}
 		v_type := map_python_type_to_v(py_type)
 		if v_type == 'LiteralString' {
@@ -972,6 +1049,14 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 			cls := t.scope_names[t.scope_names.len - 2]
 			if cls.len > 0 && cls[0].is_capital() {
 				t.store_type(s_arg, cls)
+				// If it's a method (not @property), mark self as mutated to match Translator's forcing of 'mut self'
+				mut is_property := false
+				for decorator in node.decorator_list {
+					if t.render_expr(decorator) == 'property' { is_property = true; break }
+				}
+				if !is_property && s_arg == 'self' {
+					t.mark_mutated(s_arg)
+				}
 			}
 		}
 	}
@@ -1138,27 +1223,67 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 					t.mark_reassigned_expr(target)
 				}
 				current := t.get_type(target.id)
+				qual_cur := t.get_qualified_name(target.id)
+				is_scoped_match := qual_cur in t.type_map
+				
 				is_cap := target.id.len > 0 && target.id[0].is_capital()
 				if value_type != 'Any' {
-					if current in ['Any', 'none', 'int'] || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
-						t.store_type(target.id, value_type)
+					mut target_type := value_type
+					if current.starts_with('?') && !target_type.starts_with('?') && current[1..] == target_type {
+						target_type = current
 					}
+					if !is_scoped_match || (current in ['Any', 'none', 'int'] && value_type != 'none') || current == 'Any' || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
+						t.store_type(target.id, target_type)
+					}
+				} else if node.value is ast.Name {
+					// Propagate type from RHS if it's a name even if value_type is Any
+					rhs_type := t.get_type(node.value.id)
+					if rhs_type != 'Any' && rhs_type != 'int' {
+						t.store_type(target.id, rhs_type)
+					}
+				}
+				if value_type == 'none' && current != '' && current != 'Any' && current != 'none' && !current.starts_with('?') {
+					t.store_type(target.id, '?' + current)
+				}
+				if node.value is ast.Lambda {
+					t.register_lambda_signature(target.id, node.value)
 				}
 			}
 			ast.Attribute {
 				t.mark_mutated_expr(target)
-				obj_name := t.render_expr(target.value)
-				if obj_name.len > 0 {
-					full_attr := '${obj_name}.${target.attr}'
-					current := t.get_type(full_attr)
-					if current in ['Any', 'unknown', 'none'] {
-						t.store_type(full_attr, value_type)
+				mut obj_key := t.guess_expr_type(target.value)
+				obj_key = obj_key.trim_left('?&')
+				if obj_key in ['Any', 'int', 'unknown'] {
+					obj_key = t.render_expr(target.value)
+				}
+				attr_name := target.attr
+				if obj_key.len > 0 {
+					full_attr := "${obj_key}.${attr_name}"
+					curr_attr_type := t.get_type(full_attr)
+					mut target_type := value_type
+					if curr_attr_type.starts_with('?') && !target_type.starts_with('?') && curr_attr_type[1..] == target_type {
+						target_type = curr_attr_type
+					}
+					if value_type != 'none' && value_type != 'Any' {
+						t.store_type(full_attr, target_type)
 					}
 				}
 				if target.value is ast.Name && target.value.id == 'self' {
-					current := t.get_type(target.attr)
-					if current in ['Any', 'unknown', 'none'] {
-						t.store_type(target.attr, value_type)
+					// Field assignment: self.attr = value
+					// Find the nearest class scope
+					mut cls_name := ''
+					for i := t.scope_names.len - 1; i >= 0; i-- {
+						s := t.scope_names[i]
+						if s.len > 0 && s[0].is_capital() {
+							cls_name = s
+							break
+						}
+					}
+					
+					if value_type != 'none' && value_type != 'Any' {
+						if cls_name.len > 0 {
+							t.type_map['${cls_name}.${target.attr}'] = value_type
+						}
 					}
 				}
 			}
@@ -1248,6 +1373,15 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 		v_type = 'string'
 	}
 	
+	mut value_type := 'Any'
+	if n_val := node.value {
+		value_type = t.guess_expr_type(n_val)
+	}
+
+	if (v_type == 'Any' || v_type == 'Final') && value_type != 'Any' {
+		v_type = value_type
+	}
+
 	if annotation_str.starts_with('Literal[') || annotation_str.starts_with('typing.Literal[') {
 		if node.target is ast.Name {
 			// Extract literal value
@@ -1276,10 +1410,19 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 			is_self_attr = true
 		}
 	}
-
+	
 	if target_name.len > 0 {
 		if is_self_attr {
-			t.store_type('self.${target_name}', v_type)
+			t.type_map['self.${target_name}'] = v_type
+			// Also store with class prefix if we can find it
+			for i := t.scope_names.len - 1; i >= 0; i-- {
+				s := t.scope_names[i]
+				if s.len > 0 && s[0].is_capital() {
+					t.type_map['${s}.${target_name}'] = v_type
+					eprintln('DEBUG: analyzer visit_ann_assign STORED ${s}.${target_name} = ${v_type}')
+					break
+				}
+			}
 		}
 		if t.scope_names.len > 0 {
 			curr_scope := t.scope_names[t.scope_names.len - 1]
@@ -1292,7 +1435,6 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 		} else {
 			t.store_type(target_name, v_type)
 		}
-		
 	}
 
 	if value_expr := node.value {
@@ -1351,7 +1493,19 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 		// Check for method-based mutability if object is a parameter
 		obj_name := t.expr_to_name(attr.value)
 		if obj_name.len > 0 {
-			// This part usually handled by FunctionMutabilityScanner but let's double check
+			obj_type := t.guess_expr_type(attr.value).trim_left('?&')
+			mut_keys := [
+				'${obj_type}.${attr.attr}.self',
+				'${obj_type}.${to_camel_case(attr.attr)}.self'
+			]
+			for mk in mut_keys {
+				if m_info := t.mutability_map[mk] {
+					if m_info.is_mutated {
+						t.mark_mutated(obj_name)
+						break
+					}
+				}
+			}
 		}
 	}
 	if node.func is ast.Name {
@@ -1432,4 +1586,48 @@ fn (mut t TypeInferenceVisitorMixin) visit_pattern(node ast.Pattern) {
 		ast.MatchOr { t.visit_match_or(node) }
 		else {}
 	}
+}
+
+pub fn (mut t TypeInferenceVisitorMixin) register_lambda_signature(name string, lambda_node ast.Lambda) {
+	mut args := []string{}
+	mut arg_names := []string{}
+	mut defaults := map[string]string{}
+	
+	mut all_py_args := []ast.Parameter{}
+	all_py_args << lambda_node.args.posonlyargs
+	all_py_args << lambda_node.args.args
+	all_py_args << lambda_node.args.kwonlyargs
+	
+	for p in all_py_args {
+		if d := p.default_ {
+			if d is ast.Name && d.id == p.arg {
+				continue
+			}
+		}
+		arg_names << p.arg
+		mut py_type := 'Any'
+		if ann := p.annotation {
+			py_type = t.render_expr(ann)
+		}
+		args << map_python_type_to_v(py_type)
+		if d := p.default_ {
+			defaults[p.arg] = t.render_expr(d)
+		}
+	}
+	
+	mut return_type := 'Any'
+	py_ret := t.guess_expr_type(lambda_node.body)
+	return_type = map_python_type_to_v(py_ret)
+
+	sig := CallSignature{
+		args:        args
+		arg_names:   arg_names
+		defaults:    defaults
+		return_type: return_type
+		is_class:    false
+		has_init:    false
+		has_vararg:  lambda_node.args.vararg != none
+		has_kwarg:   lambda_node.args.kwarg != none
+	}
+	t.store_call_signature(name, sig)
 }

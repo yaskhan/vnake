@@ -1,10 +1,21 @@
 module expressions
 
 import ast
+import strings
+import base
+
+// Local wrappers for base module functions
+fn is_collection_type(v_type string) bool {
+	return base.is_collection_type(v_type)
+}
+
+fn is_numeric_type(v_type string) bool {
+	return base.is_numeric_type(v_type)
+}
 
 fn is_none_expr(node ast.Expression) bool {
 	return (node is ast.Constant && node.value == 'None')
-		|| (node is ast.Name && node.id in ['None', 'none'])
+		|| (node is ast.Name && node.id in ['None', 'none', 'NoneType'])
 		|| node is ast.NoneExpr
 }
 
@@ -22,13 +33,113 @@ fn (eg &ExprGen) is_explicit_any(node ast.Expression, typ string) bool {
 }
 
 fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
-	if typ.starts_with('?') { return false }
-	if typ.starts_with('SumType_') { return true }
-	if typ.starts_with('map[') && typ.ends_with(']Any') { return true }
-	if typ == 'Any' {
-		return eg.is_explicit_any(node, typ)
+	if typ.starts_with('?') {
+		return false
 	}
-	return false
+	// Interface variables should use `== none`
+	pure := typ.trim_left('?&[]').all_before('[')
+	if pure in eg.state.known_interfaces || pure in eg.state.class_to_impl {
+		return false
+	}
+	return true
+}
+
+
+
+
+fn (mut eg ExprGen) map_python_percent_to_v_interpolation(fmt_str string, right ast.Expression) ?string {
+	mut args := []ast.Expression{}
+	if right is ast.Tuple {
+		args = right.elements.clone()
+	} else {
+		args << right
+	}
+
+	mut res := strings.new_builder(fmt_str.len * 2)
+	res.write_byte(`"`)
+	mut i := 0
+	mut arg_idx := 0
+	for i < fmt_str.len {
+		if fmt_str[i] == `%` {
+			if i + 1 < fmt_str.len && fmt_str[i+1] == `%` {
+				res.write_u8(`%`)
+				i += 2
+				continue
+			}
+
+			// Parse format specifier
+			mut j := i + 1
+			// Skip flags (only 0 is commonly supported in V interpolation)
+			mut flag_zero := false
+			for j < fmt_str.len && (fmt_str[j] == `0` || fmt_str[j] == `-` || fmt_str[j] == `+` || fmt_str[j] == ` `) {
+				if fmt_str[j] == `0` { flag_zero = true }
+				j++
+			}
+
+			// Width
+			mut width_start := j
+			for j < fmt_str.len && fmt_str[j].is_digit() { j++ }
+			width_str := fmt_str[width_start..j]
+
+			// Precision
+			mut precision_str := ""
+			if j < fmt_str.len && fmt_str[j] == `.` {
+				j++
+				mut prec_start := j
+				for j < fmt_str.len && fmt_str[j].is_digit() { j++ }
+				precision_str = "." + fmt_str[prec_start..j]
+			}
+
+			if j < fmt_str.len {
+				spec := fmt_str[j]
+				if arg_idx < args.len {
+					arg_expr := args[arg_idx]
+					arg_idx++
+					arg_v := eg.visit(arg_expr)
+
+					res.write_byte(`$`)
+					res.write_byte(`{`)
+					if spec == `r` {
+						eg.state.used_builtins['py_repr'] = true
+						res.write_string("py_repr(${arg_v})")
+					} else {
+						res.write_string(arg_v)
+						if width_str.len > 0 || precision_str.len > 0 || spec in [`f`, `x`, `X`] {
+							res.write_byte(`:`)
+							if flag_zero && width_str.len > 0 {
+								res.write_byte(`0`)
+							}
+							res.write_string(width_str)
+							res.write_string(precision_str)
+							if spec in [`f`, `x`, `X`] {
+								res.write_byte(spec)
+							}
+						}
+					}
+					res.write_byte(`}`)
+					i = j + 1
+					continue
+				} else {
+					return none
+				}
+			}
+		}
+		if fmt_str[i] == `$` {
+			res.write_string("\\$")
+		} else if fmt_str[i] == `"` {
+			res.write_string("\\\"")
+		} else {
+			res.write_u8(fmt_str[i])
+		}
+		i++
+	}
+	res.write_byte(`"`)
+
+	if arg_idx != args.len {
+		return none
+	}
+
+	return res.str()
 }
 
 fn (mut eg ExprGen) format_percent_call(left string, right ast.Expression) string {
@@ -63,7 +174,21 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	token := node.get_token()
 	loc_key := '${token.line}:${token.column}'
 	if loc_key in eg.analyzer.location_map {
-		op_type = eg.analyzer.location_map[loc_key]
+		mut raw_op_type := eg.analyzer.location_map[loc_key]
+		// Sanitize union types like 'int | int' to 'int'
+		if raw_op_type.contains(' | ') {
+			mut parts := raw_op_type.split(' | ').map(it.trim_space())
+			parts.sort()
+			mut unique_parts := []string{}
+			for p in parts { if p !in unique_parts { unique_parts << p } }
+			if unique_parts.len == 1 {
+				op_type = unique_parts[0]
+			} else {
+				op_type = raw_op_type
+			}
+		} else {
+			op_type = raw_op_type
+		}
 	}
 
 	// Support for string and array repetition
@@ -99,8 +224,13 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	mut left := eg.visit(node.left)
 	mut right := eg.visit(node.right)
 
+	// Bitwise and shift operators should always use numeric types
+	if op in ['&', '|', '^', '<<', '>>'] && op_type == 'void' {
+		op_type = 'int'
+	}
+
 	// Type-Directed Operator Overloading
-	if op_type in ['int', 'f64', 'i64'] {
+	if op_type in ['int', 'f64', 'i64', 'u8', 'byte', 'u16', 'u32', 'u64'] {
 		l_base := eg.guess_type_no_loc(node.left)
 		r_base := eg.guess_type_no_loc(node.right)
 		if l_base == 'Any' || l_base.starts_with('SumType_') {
@@ -127,6 +257,12 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	}
 
 	match op {
+		'|' {
+			if left_type.starts_with('map[') && right_type.starts_with('map[') {
+				eg.state.used_dict_merge = true
+				return "py_dict_merge(${left}, ${right})"
+			}
+		}
 		'@' { return "${left}.matmul(${right})" }
 		'**' {
 			eg.state.used_builtins['math.pow'] = true
@@ -147,7 +283,8 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 		}
 		'//' {
 			eg.state.used_builtins['math.floor'] = true
-			if left_type == 'int' && right_type == 'int' {
+			eg.state.used_builtins['math'] = true
+			if left_type in ['int', 'i64'] || right_type in ['int', 'i64'] {
 				return "i64(math.floor(f64(${left}) / f64(${right})))"
 			}
 			return "math.floor(${left} / ${right})"
@@ -164,8 +301,9 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 				if node.left is ast.Constant {
 					fmt_str := node.left.value.trim('\'"')
 					if !fmt_str.contains('%%') && !fmt_str.contains('%(') && fmt_str.count('%') > 0 {
-						// Simple positional format
-						// TODO: full mapping
+						if mapped := eg.map_python_percent_to_v_interpolation(fmt_str, node.right) {
+							return mapped
+						}
 					}
 				}
 				return eg.format_percent_call(left, node.right)
@@ -192,14 +330,21 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) string {
 	left_type := eg.guess_type(node.left)
 	right_type := eg.guess_type(node.right)
+	
+	l_val := eg.visit(node.left)
+	r_val := eg.visit(node.right)
+	
+	// Idiomatic V 'or' block for Optional types
+	if !is_and && (left_type.starts_with('?') || (left_type == 'Any' && l_val.contains(' as '))) {
+		return "${l_val} or { ${r_val} }"
+	}
+
 	if left_type == 'bool' && right_type == 'bool' {
 		l := eg.wrap_bool(node.left, false)
 		r := eg.wrap_bool(node.right, false)
 		return if is_and { "${l} && ${r}" } else { "${l} || ${r}" }
 	}
 	l_cond := eg.wrap_bool(node.left, false)
-	l_val := eg.visit(node.left)
-	r_val := eg.visit(node.right)
 	
 	mut l_expr := l_val
 	mut r_expr := r_val
@@ -216,6 +361,58 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 	else { return "if ${l_cond} { ${l_expr} } else { ${r_expr} }" }
 }
 
+// build_truthiness_for_or builds the truthiness check for or/and Expressions
+// with proper none handling, matching the mature pythontovlang transpiler.
+fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) string {
+	v_type := eg.guess_type(node)
+	expr := eg.visit(node)
+	
+	// For Any type (sum type), use is NoneType check for proper none detection
+	if v_type == 'Any' {
+		return "(${expr} !is NoneType && ${expr} != 0)"
+	}
+	
+	// For optional types
+	if v_type.starts_with('?') {
+		inner := v_type[1..]
+		if is_collection_type(inner) {
+			return "(${expr} != none && ${expr}!.len > 0)"
+		}
+		if is_numeric_type(inner) {
+			return "(${expr} != none && ${expr}! != 0)"
+		}
+		if inner == 'string' || inner == 'LiteralString' {
+			return "(${expr} != none && ${expr}!.len > 0)"
+		}
+		return "${expr} != none"
+	}
+	
+	// For simple identifiers in `or` context, use proper check based on type
+	if node is ast.Name {
+		if v_type == 'Any' || v_type.starts_with('SumType_') {
+			return "(${expr} !is NoneType && ${expr} != 0)"
+		}
+		if v_type.starts_with('?') {
+			return "${expr} != none"
+		}
+	}
+	
+	// For strings and collections
+	if is_collection_type(v_type) {
+		return "${expr}.len > 0"
+	}
+	if is_numeric_type(v_type) {
+		return "${expr} != 0"
+	}
+	if v_type == 'bool' {
+		return expr
+	}
+	
+	// Fallback to py_bool for unknown types
+	eg.state.used_builtins['py_bool'] = true
+	return "py_bool(${expr})"
+}
+
 fn (mut eg ExprGen) format_repeated_list_literal(list_node ast.List, len_node ast.Expression) string {
 	len_expr := eg.visit(len_node)
 	if list_node.elements.len == 0 {
@@ -223,18 +420,19 @@ fn (mut eg ExprGen) format_repeated_list_literal(list_node ast.List, len_node as
 	}
 	init_node := list_node.elements[0]
 	init_val := eg.visit(init_node)
-	mut elem_type := eg.guess_type(init_node)
 	
 	mut final_init := init_val
 	if is_none_expr(init_node) {
 		final_init = 'none'
 		expected := eg.state.current_assignment_type
-		if expected.starts_with('[]') {
-			elem_type = expected[2..]
-			if !elem_type.starts_with('?') { elem_type = '?${elem_type}' }
-		} else {
-			elem_type = '?Any'
+		mut elem_t := if expected.starts_with('[]') { expected[2..] } else { 'Any' }
+
+		if eg.should_use_is_none_type(elem_t, init_node) {
+			return "[]${elem_t}{len: ${len_expr}, init: NoneType{}}"
 		}
+
+		if !elem_t.starts_with('?') { elem_t = '?${elem_t}' }
+		return "[]${elem_t}{len: ${len_expr}, init: none}"
 	}
 
 	match init_node {
@@ -244,22 +442,118 @@ fn (mut eg ExprGen) format_repeated_list_literal(list_node ast.List, len_node as
 		}
 		else {}
 	}
-	return "[]${elem_type}{len: ${len_expr}, init: ${final_init}}"
+	v_list := eg.visit_list(list_node)
+	return '(${v_list}).repeat(${len_expr})'
 }
 
 pub fn (mut eg ExprGen) visit_unary_op(node ast.UnaryOp) string {
 	if node.op.value == 'not' {
 		return eg.wrap_bool(node.operand, true)
 	}
-	operand := eg.visit(node.operand)
-	return "${node.op.value}${operand}"
+
+	mut operand := eg.visit(node.operand)
+	op := node.op.value
+
+	// Type-Directed Operator Overloading for Unary Ops
+	token := node.get_token()
+	loc_key := "${token.line}:${token.column}"
+	mut op_type := 'void'
+	if loc_key in eg.analyzer.location_map {
+		mut raw_op_type := eg.analyzer.location_map[loc_key]
+		if raw_op_type.contains(' | ') {
+			mut parts := raw_op_type.split(' | ').map(it.trim_space())
+			parts.sort()
+			mut unique_parts := []string{}
+			for p in parts {
+				if p !in unique_parts {
+					unique_parts << p
+				}
+			}
+			if unique_parts.len == 1 {
+				op_type = unique_parts[0]
+			} else {
+				op_type = raw_op_type
+			}
+		} else {
+			op_type = raw_op_type
+		}
+	}
+
+	if op_type in ['int', 'f64', 'i64'] {
+		operand_type := eg.guess_type(node.operand)
+		operand_base := eg.guess_type_no_loc(node.operand)
+		if operand_base == 'Any' || operand_base.starts_with('SumType_') {
+			if !operand.contains(' as ') {
+				operand = "(${operand} as ${op_type})"
+			}
+		} else if operand_type != op_type && operand_type != 'unknown' {
+			operand = "${op_type}(${operand})"
+		}
+	}
+
+	return "${op}${operand}"
 }
 
-pub fn (mut eg ExprGen) visit_bool_op(node ast.Expression) string {
-	if node is ast.BinaryOp && node.op.value in ['and', 'or'] {
-		return eg.build_pythonic_bool_op(node, node.op.value == 'and')
+pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
+	if node.values.len < 2 {
+		if node.values.len == 1 {
+			return eg.visit(node.values[0])
+		}
+		return 'true'
 	}
-	return eg.visit(node)
+	
+	op := node.op.value
+	is_and := op == 'and'
+	
+	// Handle 2-value case
+	if node.values.len == 2 {
+		mut left := eg.visit(node.values[0])
+		mut right := eg.visit(node.values[1])
+		left_type := eg.guess_type(node.values[0])
+		right_type := eg.guess_type(node.values[1])
+		
+		if left_type == 'bool' && right_type == 'bool' {
+			return if is_and { "${left} && ${right}" } else { "${left} || ${right}" }
+		}
+		
+		// Use build_truthiness_for_or for proper none handling
+		l_cond := eg.build_truthiness_for_or(node.values[0], !is_and)
+		mut l_val := left
+		mut r_val := right
+		
+		if eg.state.current_assignment_type == 'Any' {
+			if !l_val.starts_with('Any(') && left_type != 'Any' {
+				l_val = if left_type.starts_with('?') { "Any(${l_val}!)" } else { "Any(${l_val})" }
+			}
+			if !r_val.starts_with('Any(') && right_type != 'Any' {
+				r_val = if right_type.starts_with('?') { "Any(${r_val}!)" } else { "Any(${r_val})" }
+			}
+		}
+		
+		if is_and { return "(if ${l_cond} { ${r_val} } else { ${l_val} })" }
+		else { return "(if ${l_cond} { ${l_val} } else { ${r_val} })" }
+	}
+	
+	// Handle 3+ values using short-circuit pattern
+	mut result := eg.visit(node.values[node.values.len - 1])
+	for i := node.values.len - 2; i >= 0; i-- {
+		v := node.values[i]
+		// Use build_truthiness_for_or for proper none handling
+		cond := eg.build_truthiness_for_or(v, !is_and)
+		mut v_val := eg.visit(v)
+		if eg.state.current_assignment_type == 'Any' {
+			v_type := eg.guess_type(v)
+			if !v_val.starts_with('Any(') && v_type != 'Any' {
+				v_val = if v_type.starts_with('?') { "Any(${v_val}!)" } else { "Any(${v_val})" }
+			}
+		}
+		if is_and {
+			result = "(if ${cond} { ${result} } else { ${v_val} })"
+		} else {
+			result = "(if ${cond} { ${v_val} } else { ${result} })"
+		}
+	}
+	return result
 }
 
 pub fn (mut eg ExprGen) visit_compare(node ast.Compare) string {
@@ -318,6 +612,12 @@ fn (mut eg ExprGen) translate_single_comparison(left string, op string, right st
 			if right_type.starts_with('map[') { return "${prefix}(none in ${right})" }
 			return "${prefix}${right}.any(it == none)"
 		}
+
+		if right_type == 'string' || right_type == 'LiteralString' {
+			return "${prefix}${right}.contains(${left})"
+		}
+
+		if op == 'not in' { return '!(${left} in ${right})' }
 		return "${left} ${op} ${right}"
 	}
 
@@ -334,6 +634,7 @@ fn (mut eg ExprGen) translate_single_comparison(left string, op string, right st
 	v_op := match op {
 		'is' { '==' }
 		'is not' { '!=' }
+		'not in' { return '!(${left} in ${right})' }
 		else { op }
 	}
 	return "${left} ${v_op} ${right}"

@@ -1,24 +1,34 @@
 module ast
 
+import strings
+
 // ==================== AST PRINTER ====================
 // Matches Python's ast.dump(..., indent=2) style
 
 pub struct Printer {
 pub mut:
-	indent_level int
-	output       string
+	indent_level   int
+	output         strings.Builder
+	cached_indents []string
 }
 
 fn (mut p Printer) indent() string {
-	return '  '.repeat(p.indent_level)
+	if p.indent_level < p.cached_indents.len {
+		return p.cached_indents[p.indent_level]
+	}
+	for p.cached_indents.len <= p.indent_level {
+		p.cached_indents << '  '.repeat(p.cached_indents.len)
+	}
+	return p.cached_indents[p.indent_level]
 }
 
 fn (mut p Printer) write(s string) {
-	p.output += s
+	p.output.write_string(s)
 }
 
 fn (mut p Printer) writeln(s string) {
-	p.output += s + '\n'
+	p.output.write_string(s)
+	p.output.write_string('\n')
 }
 
 pub fn (mut p Printer) visit_module(node &Module) {
@@ -352,6 +362,24 @@ fn op_to_ast(tok Token) string {
 		'not in' { return 'NotIn()' }
 		else { return 'UnknownOp()' }
 	}
+}
+
+fn (mut p Printer) visit_bool_op(node &BoolOp) {
+	p.write('BoolOp(\n')
+	p.indent_level++
+	p.write(p.indent() + 'op=${node.op.value}(),\n')
+	p.write(p.indent() + 'values=[\n')
+	p.indent_level++
+	for i, v in node.values {
+		p.write(p.indent())
+		walk_expr(mut p, v)
+		if i < node.values.len - 1 {
+			p.write(',\n')
+		}
+	}
+	p.indent_level--
+	p.write('\n' + p.indent() + '])')
+	p.indent_level--
 }
 
 fn (mut p Printer) visit_binary_op(node &BinaryOp) {

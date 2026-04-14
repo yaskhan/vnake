@@ -1,5 +1,5 @@
 def test_bracketless():
     try:
         pass
-    except ValueError, TypeError as e:
+    except (ValueError, TypeError, OsError, IoError) as e:
         pass

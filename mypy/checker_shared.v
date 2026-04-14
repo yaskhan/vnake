@@ -49,51 +49,63 @@ pub mut:
 	second OptionalTypeMap
 }
 
+pub struct ScopeItem {
+pub mut:
+	info ?&TypeInfo
+	func ?FuncItem
+	file ?&MypyFile
+}
+
 // CheckerScope — scope for type checker
 pub struct CheckerScope {
 pub mut:
-	stack []TypeInfoOrFuncItemOrMypyFile
+	stack []ScopeItem
 }
 
-// TypeInfoOrFuncItemOrMypyFile — sum-type for stack
-pub type TypeInfoOrFuncItemOrMypyFile = TypeInfo | FuncItem | MypyFile
-
 // new_checker_scope creates a new CheckerScope
-pub fn new_checker_scope(mod MypyFile) CheckerScope {
+pub fn new_checker_scope(mod &MypyFile) CheckerScope {
 	return CheckerScope{
-		stack: [TypeInfoOrFuncItemOrMypyFile(mod)]
+		stack: [ScopeItem{
+			file: mod
+		}]
 	}
 }
 
 // current_function returns the current function
 pub fn (mut cs CheckerScope) current_function() ?FuncItem {
-	_ = cs
-	return none
-}
-
-// top_level_function returns the top-level function (not lambda)
-pub fn (mut cs CheckerScope) top_level_function() ?FuncItem {
-	_ = cs
-	return none
-}
-
-// active_class returns the active class (if we are inside a class)
-pub fn (mut cs CheckerScope) active_class() ?TypeInfo {
-	if cs.stack.len > 0 {
-		last := cs.stack[cs.stack.len - 1]
-		if last is TypeInfo {
-			return last as TypeInfo
+	for i := cs.stack.len - 1; i >= 0; i-- {
+		if f := cs.stack[i].func {
+			return f
 		}
 	}
 	return none
 }
 
+// top_level_function returns the top-level function (not lambda)
+pub fn (mut cs CheckerScope) top_level_function() ?FuncItem {
+	for i := cs.stack.len - 1; i >= 0; i-- {
+		if f := cs.stack[i].func {
+			return f
+		}
+	}
+	return none
+}
+
+// active_class returns the active class (if we are inside a class)
+pub fn (mut cs CheckerScope) active_class() ?&TypeInfo {
+	if cs.stack.len > 0 {
+		last := cs.stack[cs.stack.len - 1]
+		return last.info
+	}
+	return none
+}
+
 // enclosing_class returns the class directly enclosing the function
-pub fn (mut cs CheckerScope) enclosing_class(func ?FuncItem) ?TypeInfo {
+pub fn (mut cs CheckerScope) enclosing_class(func ?FuncItem) ?&TypeInfo {
 	_ = func
 	for i := cs.stack.len - 1; i >= 1; i-- {
-		if cs.stack[i] is FuncItem && cs.stack[i - 1] is TypeInfo {
-			return cs.stack[i - 1] as TypeInfo
+		if cs.stack[i].func != none && cs.stack[i - 1].info != none {
+			return cs.stack[i - 1].info
 		}
 	}
 	return none
@@ -114,8 +126,7 @@ pub fn (mut cs CheckerScope) active_self_type() ?Instance {
 // current_self_type returns the self type (handles nested functions)
 pub fn (mut cs CheckerScope) current_self_type() ?Instance {
 	for i := cs.stack.len - 1; i >= 0; i-- {
-		if cs.stack[i] is TypeInfo {
-			ti := cs.stack[i] as TypeInfo
+		if ti := cs.stack[i].info {
 			return checker_scope_fill_typevars(ti)
 		}
 	}
@@ -129,7 +140,9 @@ pub fn (cs CheckerScope) is_top_level() bool {
 
 // push_function adds a function to the stack
 pub fn (mut cs CheckerScope) push_function(item FuncItem) {
-	cs.stack << TypeInfoOrFuncItemOrMypyFile(item)
+	cs.stack << ScopeItem{
+		func: item
+	}
 }
 
 // pop_function removes a function from the stack
@@ -140,8 +153,10 @@ pub fn (mut cs CheckerScope) pop_function() {
 }
 
 // push_class adds a class to the stack
-pub fn (mut cs CheckerScope) push_class(info TypeInfo) {
-	cs.stack << TypeInfoOrFuncItemOrMypyFile(info)
+pub fn (mut cs CheckerScope) push_class(info &TypeInfo) {
+	cs.stack << ScopeItem{
+		info: info
+	}
 }
 
 // pop_class removes a class from the stack
@@ -152,9 +167,9 @@ pub fn (mut cs CheckerScope) pop_class() {
 }
 
 // checker_scope_fill_typevars creates a simple Instance for a TypeInfo.
-fn checker_scope_fill_typevars(info TypeInfo) Instance {
+fn checker_scope_fill_typevars(info &TypeInfo) Instance {
 	return Instance{
-		type_: &info
+		type_: info
 		args:  []MypyTypeNode{}
 	}
 }

@@ -1,2 +1,2 @@
-@@in# "fromkeys(iterable T, value Any) &UserDict[T]"
+@@in# "fromkeys[T](iterable T, value Any) &UserDict[T]"
 @@notin# "cls int"

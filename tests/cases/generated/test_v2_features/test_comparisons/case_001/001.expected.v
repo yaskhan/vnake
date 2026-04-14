@@ -1,0 +1,8 @@
+@@in# "struct Child {"
+@@in# "Parent"
+@@in# "self.Parent_Impl.greet()"
+@@in# "is NoneType"
+@@in# "!is NoneType"
+@@in# "typeof(x).name"
+@@in# "typeof(x)"
+@@in# "if x is int"

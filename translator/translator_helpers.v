@@ -63,127 +63,242 @@ fn (t &Translator) is_pure_literal_expr(node ast.Expression) bool {
 }
 
 fn (mut t Translator) append_helpers() {
-	if 'py_any' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_any[T](a []T) bool {\n    for item in a {\n        if item {\n            return true\n        }\n    }\n    return false\n}'
+	if !t.state.omit_builtins {
+		if 'py_any' in t.state.used_builtins {
+		t.emit_helper_function_code('fn py_any[T](a []T) bool {\n    for item in a {\n        if item {\n            return true\n        }\n    }\n    return false\n}')
 	}
 	if 'py_all' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_all[T](a []T) bool {\n    for item in a {\n        if !item {\n            return false\n        }\n    }\n    return true\n}'
+		t.emit_helper_function_code('fn py_all[T](a []T) bool {\n    for item in a {\n        if !item {\n            return false\n        }\n    }\n    return true\n}')
 	}
 	if 'LiteralEnum_' in t.state.used_builtins {
-		t.state.output << 'enum LiteralEnum_ { py_lit }'
+		t.emit_helper_struct_code('enum LiteralEnum_ { py_lit }')
 	}
 	if 'py_argparse_new' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_argparse_new() argparse.ArgumentParser {\n    return argparse.argument_parser()\n}'
+		t.emit_helper_function_code('fn py_argparse_new() argparse.ArgumentParser {\n    return argparse.argument_parser()\n}')
 	}
 	if 'py_array' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_array[T](typecode string, items []T) []T {\n    _ = typecode\n    return items\n}'
+		t.emit_helper_function_code('fn py_array[T](typecode string, items []T) []T {\n    _ = typecode\n    return items\n}')
 	}
 	if 'py_sorted' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_sorted[T](a []T, reverse bool) []T {\n    mut res := a.clone()\n    res.sort()\n    if reverse { res.reverse() }\n    return res\n}'
+		t.emit_helper_function_code('fn py_sorted[T](a []T, reverse bool) []T {\n    mut res := a.clone()\n    res.sort()\n    if reverse { res.reverse() }\n    return res\n}')
 	}
 	if 'py_reversed' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_reversed[T](a []T) []T {\n    mut res := a.clone()\n    res.reverse()\n    return res\n}'
+		t.emit_helper_function_code('fn py_reversed[T](a []T) []T {\n    mut res := a.clone()\n    res.reverse()\n    return res\n}')
 	}
 	if 'py_next' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_next(mut it Any, args ...Any) Any {\n    // stub for next() on iterators\n    return none\n}'
+		t.emit_helper_function_code('fn py_next(mut it Any, args ...Any) Any {\n    // stub for next() on iterators\n    return none\n}')
 	}
 	if 'py_bytes_format' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_bytes_format_arg(arg Any) string {\n    return arg.str()\n}'
-		t.state.output << 'fn py_bytes_format(fmt []u8, args ...Any) []u8 {\n    // ... stub \n    return fmt\n}'
+		t.emit_helper_function_code('fn py_bytes_format_arg(arg Any) string {\n    return arg.str()\n}\nfn py_bytes_format(fmt []u8, args ...Any) []u8 {\n    // ... stub \n    return fmt\n}')
+	}
+	if t.state.used_builtins["py_os_system"] {
+		t.emit_helper_function_code("//##LLM@@ SECURITY WARNING: os.system is insecure as it executes commands via a shell. Consider using subprocess.run with a list of arguments instead.\nfn py_os_system(cmd string) int {\n    return os.system(cmd)\n}")
 	}
 	if t.state.used_builtins['py_subprocess_call'] {
-		t.state.output << 'fn py_subprocess_call(cmd Any) int {\n    if cmd is []string {\n        mut p := os.new_process(cmd[0])\n        p.set_args(cmd[1..])\n        p.wait()\n        return p.code\n    }\n    return -1\n}'
+		t.emit_helper_function_code('fn py_subprocess_call(cmd Any) int {\n    if cmd is []string {\n        mut p := os.new_process(cmd[0])\n        p.set_args(cmd[1..])\n        p.wait()\n        return p.code\n    }\n    return -1\n}')
 	}
 	if t.state.used_builtins['py_subprocess_run'] {
-		t.state.output << 'struct PySubprocessResult {\n    pub mut:\n        returncode int\n        stdout string\n        stderr string\n}\nfn py_subprocess_run(cmd Any) PySubprocessResult {\n    if cmd is []string {\n        mut p := os.new_process(cmd[0])\n        p.set_args(cmd[1..])\n        p.wait()\n        return PySubprocessResult{returncode: p.code, stdout: p.stdout_slurp(), stderr: p.stderr_slurp()}\n    }\n    return PySubprocessResult{returncode: -1}\n}'
+		t.emit_helper_struct_code('struct PySubprocessResult {\n    pub mut:\n        returncode int\n        stdout string\n        stderr string\n}')
+		t.emit_helper_function_code('fn py_subprocess_run(cmd Any) PySubprocessResult {\n    if cmd is []string {\n        mut p := os.new_process(cmd[0])\n        p.set_args(cmd[1..])\n        p.wait()\n        return PySubprocessResult{returncode: p.code, stdout: p.stdout_slurp(), stderr: p.stderr_slurp()}\n    }\n    return PySubprocessResult{returncode: -1}\n}')
 	}
 	if 'py_range' in t.state.used_builtins {
-		t.state.output << ''
-		t.state.output << 'fn py_range(args ...int) []int {\n    mut res := []int{}\n    mut start := 0\n    mut stop := 0\n    mut step := 1\n    if args.len == 1 {\n        stop = args[0]\n    } else if args.len == 2 {\n        start = args[0]\n        stop = args[1]\n    } else if args.len >= 3 {\n        start = args[0]\n        stop = args[1]\n        step = args[2]\n    }\n    if step > 0 {\n        for i := start; i < stop; i += step {\n            res << i\n        }\n    } else if step < 0 {\n        for i := start; i > stop; i += step {\n            res << i\n        }\n    }\n    return res\n}'
+		t.emit_helper_function_code('fn py_range(args ...int) []int {\n    mut res := []int{}\n    mut start := 0\n    mut stop := 0\n    mut step := 1\n    if args.len == 1 {\n        stop = args[0]\n    } else if args.len == 2 {\n        start = args[0]\n        stop = args[1]\n    } else if args.len >= 3 {\n        start = args[0]\n        stop = args[1]\n        step = args[2]\n    }\n    if step > 0 {\n        for i := start; i < stop; i += step {\n            res << i\n        }\n    } else if step < 0 {\n        for i := start; i > stop; i += step {\n            res << i\n        }\n    }\n    return res\n}')
+	}
+	if 'py_subscript' in t.state.used_builtins {
+		t.emit_helper_function_code("fn py_subscript(val Any, idx Any) Any {\n\tif val is []Any {\n\t\tif idx is int { return val[idx] }\n\t\tif idx is i64 { return val[int(idx)] }\n\t}\n\tif val is map[string]Any {\n\t\tif idx is string { return val[idx] }\n\t}\n\treturn NoneType{}\n}")
+	}
+	if 'py_repeat_list' in t.state.used_builtins {
+		t.emit_helper_function_code("fn py_repeat_list[T](arr []T, n int) []T {\n\tmut res := []T{cap: arr.len * n}\n\tfor _ in 0 .. n {\n\t\tres << arr\n\t}\n\treturn res\n}")
 	}
 	if 'py_urlencode' in t.state.used_builtins {
-		t.state.output << 'fn py_urlencode(params map[string]string) string {\n    // stub\n    return ""\n}'
+		t.state.used_builtins['net.urllib'] = true
+		t.emit_helper_function_code('fn py_urlencode(params map[string]string) string {\n    // stub\n    return ""\n}')
 	}
 	if 'py_urlparse' in t.state.used_builtins {
-		t.state.output << 'fn py_urlparse(url string) Any {\n    return urllib.parse(url) or { Any(0) }\n}'
+		t.state.used_builtins['net.urllib'] = true
+		t.emit_helper_function_code('fn py_urlparse(url string) Any {\n    return urllib.parse(url) or { Any(0) }\n}')
 	}
 	if 'py_urllib_unquote' in t.state.used_builtins {
-		t.state.output << 'fn py_urllib_unquote(url string) string {\n    return urllib.query_unescape(url)\n}'
+		t.state.used_builtins['net.urllib'] = true
+		t.emit_helper_function_code('fn py_urllib_unquote(url string) string {\n    return urllib.query_unescape(url)\n}')
 	}
 	if 'py_gzip_compress' in t.state.used_builtins {
-		t.state.output << 'fn py_gzip_compress(data []u8) []u8 {\n    return gzip.compress(data)\n}'
+		t.state.used_builtins['compress.gzip'] = true
+		t.emit_helper_function_code('fn py_gzip_compress(data []u8) []u8 {\n    return gzip.compress(data)\n}')
 	}
 	if 'py_gzip_decompress' in t.state.used_builtins {
-		t.state.output << 'fn py_gzip_decompress(data []u8) []u8 {\n    return gzip.decompress(data) or { []u8{} }\n}'
+		t.state.used_builtins['compress.gzip'] = true
+		t.emit_helper_function_code('fn py_gzip_decompress(data []u8) []u8 {\n    return gzip.decompress(data) or { []u8{} }\n}')
 	}
 	if 'py_zlib_compress' in t.state.used_builtins {
-		t.state.output << 'fn py_zlib_compress(data []u8) []u8 {\n    return zlib.compress(data)\n}'
+		t.state.used_builtins['compress.zlib'] = true
+		t.emit_helper_function_code('fn py_zlib_compress(data []u8) []u8 {\n    return zlib.compress(data)\n}')
 	}
 	if 'py_zlib_decompress' in t.state.used_builtins {
-		t.state.output << 'fn py_zlib_decompress(data []u8) []u8 {\n    return zlib.decompress(data) or { []u8{} }\n}'
+		t.state.used_builtins['compress.zlib'] = true
+		t.emit_helper_function_code('fn py_zlib_decompress(data []u8) []u8 {\n    return zlib.decompress(data) or { []u8{} }\n}')
 	}
 	if t.state.used_builtins['py_struct_pack_I_le'] {
-		t.state.output << ''
-		t.state.output << 'fn py_struct_pack_I_le(val u32) []u8 {\n    mut res := []u8{len: 4}\n    binary.little_endian_put_u32(mut res, val)\n    return res\n}'
+		t.emit_helper_function_code('fn py_struct_pack_I_le(val u32) []u8 {\n    mut res := []u8{len: 4}\n    binary.little_endian_put_u32(mut res, val)\n    return res\n}')
 	}
 	if t.state.used_builtins['py_struct_pack_I_be'] {
-		t.state.output << ''
-		t.state.output << 'fn py_struct_pack_I_be(val u32) []u8 {\n    mut res := []u8{len: 4}\n    binary.big_endian_put_u32(mut res, val)\n    return res\n}'
+		t.emit_helper_function_code('fn py_struct_pack_I_be(val u32) []u8 {\n    mut res := []u8{len: 4}\n    binary.big_endian_put_u32(mut res, val)\n    return res\n}')
 	}
 	if t.state.used_builtins['py_struct_unpack_I_le'] {
-		t.state.output << ''
-		t.state.output << 'fn py_struct_unpack_I_le(data []u8) []Any {\n    return [Any(binary.little_endian_u32(data))]\n}'
+		t.emit_helper_function_code('fn py_struct_unpack_I_le(data []u8) []Any {\n    return [Any(binary.little_endian_u32(data))]\n}')
 	}
 	if t.state.used_builtins['py_complex'] {
-		t.state.output << 'struct PyComplex {\n    pub mut:\n        real f64\n        imag f64\n}\nfn py_complex(real f64, imag f64) PyComplex {\n    return PyComplex{real: real, imag: imag}\n}'
-		t.state.output << 'fn (a PyComplex) + (b PyComplex) PyComplex {\n    return PyComplex{real: a.real + b.real, imag: a.imag + b.imag}\n}'
-		t.state.output << 'fn (a PyComplex) - (b PyComplex) PyComplex {\n    return PyComplex{real: a.real - b.real, imag: a.imag - b.imag}\n}'
+		t.emit_helper_struct_code('struct PyComplex {\n    pub mut:\n        real f64\n        imag f64\n}')
+		t.emit_helper_function_code('fn py_complex(real f64, imag f64) PyComplex {\n    return PyComplex{real: real, imag: imag}\n}\nfn (a PyComplex) + (b PyComplex) PyComplex {\n    return PyComplex{real: a.real + b.real, imag: a.imag + b.imag}\n}\nfn (a PyComplex) - (b PyComplex) PyComplex {\n    return PyComplex{real: a.real - b.real, imag: a.imag - b.imag}\n}')
 	}
 	if t.state.used_builtins['py_counter'] {
-		t.state.output << 'fn py_counter[T](a []T) map[T]int {\n    mut res := map[T]int{}\n    for x in a { res[x]++ }\n    return res\n}'
+		t.emit_helper_function_code('fn py_counter[T](a []T) map[T]int {\n    mut res := map[T]int{}\n    for x in a { res[x]++ }\n    return res\n}')
+	}
+	if t.state.used_builtins['py_list_slice'] {
+		t.emit_helper_function_code('fn py_list_slice[T](arr []T, start ?Any, end ?Any, step ?Any) []T {\n    mut s := if st := start {\n        if st is int { int(st) } else { 0 }\n    } else { 0 }\n    mut e := if et := end {\n        if et is int { int(et) } else { arr.len }\n    } else { arr.len }\n    if s < 0 { s = arr.len + s }\n    if e < 0 { e = arr.len + e }\n    if s < 0 { s = 0 } else if s > arr.len { s = arr.len }\n    if e < 0 { e = 0 } else if e > arr.len { e = arr.len }\n    if s >= e { return []T{} }\n    return arr[s..e].clone()\n}')
+	}
+	if t.state.used_builtins['py_str_slice'] {
+		t.emit_helper_function_code('fn py_str_slice(arr string, start ?Any, end ?Any, step ?Any) string {\n    mut s := if st := start {\n        if st is int { int(st) } else { 0 }\n    } else { 0 }\n    mut e := if et := end {\n        if et is int { int(et) } else { arr.len }\n    } else { arr.len }\n    if s < 0 { s = arr.len + s }\n    if e < 0 { e = arr.len + e }\n    if s < 0 { s = 0 } else if s > arr.len { s = arr.len }\n    if e < 0 { e = 0 } else if e > arr.len { e = arr.len }\n    if s >= e { return "" }\n    return arr[s..e]\n}')
 	}
 	if t.state.used_builtins['py_csv_reader'] || t.state.used_builtins['PyCsvReader'] {
-		t.state.output << 'struct PyCsvReader {\n    mut:\n        r &csv.Reader\n}\nfn py_csv_reader(f os.File) &PyCsvReader {\n    return &PyCsvReader{r: csv.new_reader(f)}\n}\nfn (mut r PyCsvReader) next() ?[]string {\n    return r.r.read() or { none }\n}\nfn (mut r PyCsvReader) iter() &PyCsvReader {\n    return r\n}'
+		t.state.used_builtins['csv'] = true
+		t.emit_helper_struct_code('struct PyCsvReader {\n    mut:\n        r &csv.Reader\n}')
+		t.emit_helper_function_code('fn py_csv_reader(f os.File) &PyCsvReader {\n    return &PyCsvReader{r: csv.new_reader(f)}\n}\nfn (mut r PyCsvReader) next() ?[]string {\n    return r.r.read() or { none }\n}\nfn (mut r PyCsvReader) iter() &PyCsvReader {\n    return r\n}')
 	}
 	if t.state.used_builtins['py_csv_writer'] || t.state.used_builtins['PyCsvWriter'] {
-		t.state.output << 'struct PyCsvWriter {\n    mut:\n        w &csv.Writer\n}\nfn py_csv_writer(f os.File) &PyCsvWriter {\n    return &PyCsvWriter{w: csv.new_writer(f)}\n}\nfn (mut w PyCsvWriter) writerow(row []string) {\n    w.w.write(row) or { }\n}'
+		t.state.used_builtins['csv'] = true
+		t.emit_helper_struct_code('struct PyCsvWriter {\n    mut:\n        w &csv.Writer\n}')
+		t.emit_helper_function_code('fn py_csv_writer(f os.File) &PyCsvWriter {\n    return &PyCsvWriter{w: csv.new_writer(f)}\n}\nfn (mut w PyCsvWriter) writerow(row []string) {\n    w.w.write(row) or { }\n}')
 	}
 	if t.state.used_builtins['py_decimal'] {
-		t.state.output << 'struct PyDecimal {\n    val f64\n}\nfn py_decimal(val Any) PyDecimal {\n    return PyDecimal{f64(0.0)}\n}'
+		t.emit_helper_struct_code('struct PyDecimal {\n    val f64\n}')
+		t.emit_helper_function_code('fn py_decimal(val Any) PyDecimal {\n    return PyDecimal{f64(0.0)}\n}')
 	}
 	if t.state.used_builtins['py_decimal_localcontext'] {
-		t.state.output << 'struct PyDecimalContext {\n    pub mut: prec int\n}\nfn (mut c PyDecimalContext) enter() &PyDecimalContext { return c }\nfn (mut c PyDecimalContext) exit(a Any, b Any, c Any) { }\nfn (mut c PyDecimalContext) __exit__(a Any, b Any, c Any) { }\nfn py_decimal_localcontext() &PyDecimalContext { return &PyDecimalContext{prec: 28} }\nfn py_decimal_getcontext() &PyDecimalContext { return &PyDecimalContext{prec: 28} }'
+		t.emit_helper_struct_code('struct PyDecimalContext {\n    pub mut: prec int\n}')
+		t.emit_helper_function_code('fn (mut c PyDecimalContext) enter() &PyDecimalContext { return c }\nfn (mut c PyDecimalContext) exit(a Any, b Any, c Any) { }\nfn (mut c PyDecimalContext) __exit__(a Any, b Any, c Any) { }\nfn py_decimal_localcontext() &PyDecimalContext { return &PyDecimalContext{prec: 28} }\nfn py_decimal_getcontext() &PyDecimalContext { return &PyDecimalContext{prec: 28} }')
 	}
 	if t.state.used_builtins['py_fraction'] {
-		t.state.output << 'fn py_fraction(a Any, b Any) Any { return none }'
+		t.emit_helper_function_code('fn py_fraction(a Any, b Any) Any { return none }')
 	}
 	if t.state.used_builtins['Point'] {
-		t.state.output << 'struct Point {\n    pub mut:\n        x int\n        y int = 5\n}'
+		t.emit_helper_struct_code('struct Point {\n    pub mut:\n        x int\n        y int = 5\n}')
 	}
 	if t.state.used_builtins['py_tempfile_tempdir'] {
-		t.state.output << 'struct PyTempDir {\n    pub mut:\n        path string\n}\nfn py_tempfile_tempdir() &PyTempDir {\n    path := os.mkdir_temp(\'\') or { \'\' }\n    return &PyTempDir{path: path}\n}\nfn (mut d PyTempDir) enter() string {\n    return d.path\n}\nfn (mut d PyTempDir) exit(a Any, b Any, c Any) {\n    os.rmdir_all(d.path) or { }\n}\nfn (mut d PyTempDir) __exit__(a Any, b Any, c Any) {\n    os.rmdir_all(d.path) or { }\n}'
+		t.emit_helper_struct_code('struct PyTempDir {\n    pub mut:\n        path string\n}')
+		t.emit_helper_function_code('fn py_tempfile_tempdir() &PyTempDir {\n    path := os.mkdir_temp(\'\') or { \'\' }\n    return &PyTempDir{path: path}\n}\nfn (mut d PyTempDir) enter() string {\n    return d.path\n}\nfn (mut d PyTempDir) exit(a Any, b Any, c Any) {\n    os.rmdir_all(d.path) or { }\n}\nfn (mut d PyTempDir) __exit__(a Any, b Any, c Any) {\n    os.rmdir_all(d.path) or { }\n}')
+	}
+	if 'py_get_logger' in t.state.used_builtins {
+		t.emit_helper_function_code('fn py_get_logger(name string) log.Log {\n    mut l := log.Log{}\n    l.set_level(.info)\n    return l\n}')
 	}
 	if 'py_socket_new' in t.state.used_builtins {
-		t.state.output << 'struct PySocket {\n    mut:\n        c net.TcpConn\n}\nfn py_socket_new(af int, typ int) &PySocket {\n    return &PySocket{}\n}\nfn (mut s PySocket) connect(addr Any) { }\nfn (mut s PySocket) send(data []u8) { }\nfn (mut s PySocket) close() { }'
+		t.emit_helper_struct_code('struct PySocket {\n    mut:\n        c net.TcpConn\n}')
+		t.emit_helper_function_code('fn py_socket_new(af int, typ int) &PySocket {\n    return &PySocket{}\n}\nfn (mut s PySocket) connect(addr Any) { }\nfn (mut s PySocket) send(data []u8) { }\nfn (mut s PySocket) close() { }')
 	}
 	if 'py_AF_INET' in t.state.used_builtins {
-		t.state.output << 'const py_af_inet = 2'
+		t.emit_constant_code('const py_af_inet = 2')
 	}
 	if 'py_SOCK_STREAM' in t.state.used_builtins {
-		t.state.output << 'const py_sock_stream = 1'
+		t.emit_constant_code('const py_sock_stream = 1')
 	}
 	if 'py_sqlite_connect' in t.state.used_builtins {
-		t.state.output << 'struct PySqliteCursor {\n}\nfn (mut c PySqliteCursor) execute(sql string) { }\nstruct PySqliteConnection {\n}\nfn (mut c PySqliteConnection) cursor() &PySqliteCursor {\n    return &PySqliteCursor{}\n}\nfn (mut c PySqliteConnection) commit() { }\nfn (mut c PySqliteConnection) close() { }\nfn py_sqlite_connect(path string) &PySqliteConnection {\n    return &PySqliteConnection{}\n}'
+		t.emit_helper_struct_code('struct PySqliteCursor {\n}\nstruct PySqliteConnection {\n}')
+		t.emit_helper_function_code('fn (mut c PySqliteCursor) execute(sql string) { }\nfn (mut c PySqliteConnection) cursor() &PySqliteCursor {\n    return &PySqliteCursor{}\n}\nfn (mut c PySqliteConnection) commit() { }\nfn (mut c PySqliteConnection) close() { }\nfn py_sqlite_connect(path string) &PySqliteConnection {\n    return &PySqliteConnection{}\n}')
 	}
 	if t.state.used_builtins['py_path_new'] || t.state.used_builtins['PyPath'] {
-		t.state.output << 'type PyPath = string\nfn py_path_new(p string) PyPath {\n    return PyPath(p)\n}\nfn (p PyPath) exists() bool {\n    return os.exists(string(p))\n}\nfn (p PyPath) is_file() bool {\n    return os.is_file(string(p))\n}\nfn (p PyPath) is_dir() bool {\n    return os.is_dir(string(p))\n}\nfn (p PyPath) joinpath(other string) PyPath {\n    return PyPath(os.join_path(string(p), other))\n}'
+		t.emit_helper_struct_code('type PyPath = string')
+		t.emit_helper_function_code('fn py_path_new(p string) PyPath {\n    return PyPath(p)\n}\nfn (p PyPath) exists() bool {\n    return os.exists(string(p))\n}\nfn (p PyPath) is_file() bool {\n    return os.is_file(string(p))\n}\nfn (p PyPath) is_dir() bool {\n    return os.is_dir(string(p))\n}\nfn (p PyPath) joinpath(other string) PyPath {\n    return PyPath(os.join_path(string(p), other))\n}')
 	}
+	if t.state.used_builtins['py_file_read_all'] {
+		t.emit_helper_function_code('fn py_file_read_all(mut f os.File) string {
+    mut res := []u8{}
+    for {
+        mut buf := []u8{len: 1024}
+        n := f.read(mut buf) or { break }
+        if n == 0 { break }
+        res << buf[..n]
+    }
+    return res.bytestr()
+}')
+	}
+	if t.state.used_builtins['py_file_read_line'] {
+		t.emit_helper_function_code('fn py_file_read_line(mut f os.File) string {
+    mut res := []u8{}
+    for {
+        mut buf := []u8{len: 1}
+        n := f.read(mut buf) or { break }
+        if n == 0 { break }
+        res << buf[0]
+        if buf[0] == `\n` { break }
+    }
+    return res.bytestr()
+}')
+	}
+	if t.state.used_builtins['py_file_read_lines'] {
+		t.emit_helper_function_code('fn py_file_read_lines(mut f os.File) []string {
+    mut res := []string{}
+    for {
+        line := py_file_read_line(mut f)
+        if line.len == 0 { break }
+        res << line
+    }
+    return res
+}')
+	}
+	if t.state.used_delete_many {
+		t.emit_helper_function_code('fn (mut a []T) delete_many[T](start int, count int) {
+    if count <= 0 { return }
+    a.delete(start, start + count)
+}')
+	}
+	if t.state.used_insert_many {
+		t.emit_helper_function_code('fn (mut a []T) insert_many[T](index int, val []T) {
+    a.insert(index, val)
+}')
+	if 'py_bool' in t.state.used_builtins {
+		t.emit_helper_function_code('fn py_bool(val Any) bool {
+    if val is bool { return val }
+    if val is int { return val != 0 }
+    if val is f64 { return val != 0.0 }
+    if val is string { return val.len > 0 }
+    if val is NoneType { return false }
+    if val is []Any { return val.len > 0 }
+    return true
+}')
+	}
+	}
+	}
+    for name, def in t.state.generated_sum_types {
+        if name.contains('|') {
+             // Derive SumType name from the union string itself to be safe
+             mut parts := name.split('|').map(it.trim_space())
+             parts.sort()
+             mut name_parts := []string{}
+             for p in parts {
+                 mut pn := p.capitalize()
+                 if pn == 'Str' { pn = 'String' }
+                 name_parts << pn
+             }
+             st_name := 'SumType_${name_parts.join("")}'
+             t.emit_helper_struct_code('type ${st_name} = ${name}')
+        } else if name.len > 0 && def.len > 0 {
+            t.emit_helper_struct_code('type ${name} = ${def}')
+        }
+    }
+    for name, vals_str in t.state.generated_literal_enums {
+        vals := vals_str.split('|').map(it.trim_space())
+        mut enum_fields := []string{}
+        for v in vals {
+            enum_fields << '    py_${v.trim("\'\"")}'
+        }
+        t.emit_helper_struct_code('enum ${name} {\n${enum_fields.join("\n")}\n}')
+    }
+    for name, types_str in t.state.generated_tuple_structs {
+        parts := types_str.split(',').map(it.trim_space())
+        mut struct_fields := []string{}
+        for i, pt in parts {
+            struct_fields << '    v${i} ${pt}'
+        }
+        t.emit_helper_struct_code('struct ${name} {\npub:\n${struct_fields.join("\n")}\n}')
+    }
 }
