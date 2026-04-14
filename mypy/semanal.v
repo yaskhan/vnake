@@ -812,6 +812,15 @@ pub fn (mut sa SemanticAnalyzer) visit_dictionary_comprehension(mut o Dictionary
 					false, none)
 			}
 		}
+<<<<<<< async-for-checks-9605502190530541696
+=======
+		if o.is_async[i] {
+			if !sa.is_async_context() {
+				sa.msg.fail("asynchronous comprehension outside of an asynchronous function", o.get_context(), false,
+					false, none)
+			}
+		}
+>>>>>>> main
 		if mut lval := o.indices[i].as_lvalue() {
 			sa.analyze_lvalue(mut lval, false, false)!
 		}
@@ -832,6 +841,15 @@ pub fn (mut sa SemanticAnalyzer) visit_generator_expr(mut o GeneratorExpr) !AnyN
 					false, none)
 			}
 		}
+<<<<<<< async-for-checks-9605502190530541696
+=======
+		if o.is_async[i] {
+			if !sa.is_async_context() {
+				sa.msg.fail("asynchronous comprehension outside of an asynchronous function", o.get_context(), false,
+					false, none)
+			}
+		}
+>>>>>>> main
 		if mut lval := o.indices[i].as_lvalue() {
 			sa.analyze_lvalue(mut lval, false, false)!
 		}

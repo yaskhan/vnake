@@ -554,3 +554,217 @@ fn test_yield_from_inside_async_context() {
 	assert sa.errors.error_info_list.len > 0
 	assert sa.errors.error_info_list[0].message == "'yield from' inside async function"
 }
+
+fn test_async_for_outside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(ForStmt{
+				is_async: true
+				index: Expression(NameExpr{name: 'x'})
+				expr: Expression(NameExpr{name: 'it'})
+				body: Block{body: []}
+			})
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "'async for' outside async function"
+}
+
+fn test_async_with_outside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(WithStmt{
+				is_async: true
+				expr: [Expression(NameExpr{name: 'ctx'})]
+				target: [?Expression(Expression(NameExpr{name: 'x'}))]
+				body: Block{body: []}
+			})
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "'async with' outside async function"
+}
+
+fn test_await_outside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(ExpressionStmt{
+				expr: Expression(AwaitExpr{
+					expr: Expression(NameExpr{name: 'coro'})
+				})
+			})
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "'await' outside function"
+}
+
+fn test_async_comprehension_outside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(ExpressionStmt{
+				expr: Expression(ListComprehension{
+					generator: GeneratorExpr{
+						left_expr: Expression(NameExpr{name: 'x'})
+						indices: [Expression(NameExpr{name: 'x'})]
+						sequences: [Expression(NameExpr{name: 'it'})]
+						condlists: [[]Expression{}]
+						is_async: [true]
+					}
+				})
+			})
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "asynchronous comprehension outside of an asynchronous function"
+}
+
+fn test_yield_from_inside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut func := &FuncDef{
+		name: 'f'
+		is_coroutine: true
+		body: Block{
+			body: [
+				Statement(ExpressionStmt{
+					expr: Expression(YieldFromExpr{
+						expr: Expression(NameExpr{name: 'it'})
+					})
+				})
+			]
+		}
+	}
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(func)
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "'yield from' inside async function"
+}
+
+fn test_async_for_outside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(ForStmt{
+				is_async: true
+				index: Expression(NameExpr{name: 'x'})
+				expr: Expression(NameExpr{name: 'it'})
+				body: Block{body: []}
+			})
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "'async for' outside async function"
+}
+
+fn test_async_with_outside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(WithStmt{
+				is_async: true
+				expr: [Expression(NameExpr{name: 'ctx'})]
+				target: [?Expression(Expression(NameExpr{name: 'x'}))]
+				body: Block{body: []}
+			})
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "'async with' outside async function"
+}
+
+fn test_await_outside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(ExpressionStmt{
+				expr: Expression(AwaitExpr{
+					expr: Expression(NameExpr{name: 'coro'})
+				})
+			})
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "'await' outside function"
+}
+
+fn test_async_comprehension_outside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(ExpressionStmt{
+				expr: Expression(ListComprehension{
+					generator: GeneratorExpr{
+						left_expr: Expression(NameExpr{name: 'x'})
+						indices: [Expression(NameExpr{name: 'x'})]
+						sequences: [Expression(NameExpr{name: 'it'})]
+						condlists: [[]Expression{}]
+						is_async: [true]
+					}
+				})
+			})
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "asynchronous comprehension outside of an asynchronous function"
+}
+
+fn test_yield_from_inside_async_context() {
+	mut sa := new_test_semantic_analyzer()
+	mut func := &FuncDef{
+		name: 'f'
+		is_coroutine: true
+		body: Block{
+			body: [
+				Statement(ExpressionStmt{
+					expr: Expression(YieldFromExpr{
+						expr: Expression(NameExpr{name: 'it'})
+					})
+				})
+			]
+		}
+	}
+	mut file := &MypyFile{
+		fullname: 'test'
+		path: 'test.py'
+		defs: [
+			Statement(func)
+		]
+	}
+	sa.visit_mypy_file(mut file) or {}
+	assert sa.errors.error_info_list.len > 0
+	assert sa.errors.error_info_list[0].message == "'yield from' inside async function"
+}
