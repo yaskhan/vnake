@@ -503,7 +503,13 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			} else {
 				tc.expr_checker.check_method_call_by_name('__setitem__', base_type, [
 					lvalue.index,
-					rvalue,
+					Expression(TempNode{
+						base: NodeBase{
+							ctx: rvalue.get_context()
+						}
+						type_: rvalue_type
+						no_rhs: false
+					}),
 				], [
 					.arg_pos,
 					.arg_pos,
