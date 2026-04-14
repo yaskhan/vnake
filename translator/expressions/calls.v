@@ -1498,9 +1498,7 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	
 	mut call_str := '${recv}.${sanitized_attr}(${processed_args.join(", ")})'
 	
-	if sanitized_attr in ['hold', 'wait_task', 'release', 'run_task', 'py_fn'] && call_ret_type.starts_with('?') {
-		call_str = '(${call_str} or { panic("missing return value") })'
-	} else if call_ret_type.starts_with('?') && !eg.state.current_assignment_type.starts_with('?') {
+	if call_ret_type.starts_with('?') && (eg.state.is_v_class_type(call_ret_type) || !eg.state.current_assignment_type.starts_with('?')) {
 		call_str = '(${call_str} or { panic("missing return value") })'
 	}
 	
@@ -1540,7 +1538,12 @@ pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string
 			v_type = eg.guess_type(args_nodes[i])
 		}
 
-		mut should_unwrap := (arg == 'pkt' || (arg.ends_with('_mut')) || arg == 'dev' || arg == 'work' || arg == 'wkq' || arg.contains('.hold(') || arg.contains('.wait_task(') || arg.contains('.release(') || arg.contains('.run_task('))
+		mut should_unwrap := (arg.ends_with('_mut'))
+		if !should_unwrap && v_type.starts_with('?') && call_sig == none {
+			// Fallback: if we don't have a signature, unwrap class instances
+			// which are almost always expected to be non-none when passed as args in Python benchmarks
+			should_unwrap = eg.state.is_v_class_type(v_type)
+		}
 		
 		mut is_any_target := false
 		if sig := call_sig {

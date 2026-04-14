@@ -128,7 +128,7 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 						m.emit('return (ret_match_val or { panic("missing return value") }) as ${pure}')
 					}
 				} else {
-				if expr.contains('(') && !expr.starts_with('(') && !expr.contains(' or {') && (v_type.starts_with('?') || v_type == 'Any' || expr.contains('.hold(') || expr.contains('.wait_task(')) {
+				if expr.contains('(') && !expr.starts_with('(') && !expr.contains(' or {') && (v_type.starts_with('?') || v_type == 'Any') {
 					// Add unwrap for potential Option return from method calls when casting to interface
 					m.emit('return (${expr} or { panic("missing return value") }) as ${pure}')
 				} else {
