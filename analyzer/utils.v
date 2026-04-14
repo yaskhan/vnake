@@ -267,22 +267,38 @@ pub fn map_python_type_to_v(py_type string) string {
 			if clean_type.starts_with('Union[') {
 				inner := clean_type[6..clean_type.len - 1]
 				parts := inner.split(',').map(it.trim_space())
-				mut non_none := []string{}
+				mut mapped := []string{}
 				for part in parts {
-					if part != 'None' {
-						non_none << map_python_type_to_v(part)
+					m := map_python_type_to_v(part)
+					if m == 'Any' { return 'Any' }
+					if m !in mapped {
+						mapped << m
 					}
 				}
-				if non_none.len == 1 && parts.len > 1 {
+				
+				mut non_none := []string{}
+				for m in mapped {
+					if m != 'none' {
+						non_none << m
+					}
+				}
+				if non_none.len == 1 && mapped.len > 1 {
 					return '?' + non_none[0]
+				}
+				if non_none.len == 1 {
+					return non_none[0]
 				}
 				return if non_none.len > 0 { non_none.join(' | ') } else { 'Any' }
 			}
 			if clean_type.contains('|') {
-				parts := clean_type.split('|').map(it.trim_space())
+				mut parts := clean_type.split('|').map(it.trim_space())
 				mut mapped := []string{}
 				for p in parts {
-					mapped << map_python_type_to_v(p)
+					m := map_python_type_to_v(p)
+					if m == 'Any' { return 'Any' }
+					if m !in mapped {
+						mapped << m
+					}
 				}
 				
 				// Optional check
@@ -296,6 +312,9 @@ pub fn map_python_type_to_v(py_type string) string {
 					return '?' + others[0]
 				}
 				
+				if mapped.len == 1 {
+					return mapped[0]
+				}
 				return mapped.join(' | ')
 			}
 			return clean_type

@@ -33,36 +33,6 @@ fn (eg &ExprGen) is_explicit_any(node ast.Expression, typ string) bool {
 }
 
 fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
-	if typ.starts_with('?') { return false }
-	if typ.starts_with('SumType_') { return true }
-	if typ.starts_with('map[') && typ.ends_with(']Any') { return true }
-	// For Any type (sum type containing NoneType), use is NoneType check
-	// unless we know it's an optional pointer.
-	if typ == 'Any' {
-		if node is ast.Name {
-			// If it's a narrowed variable, it might be an optional
-			if node.id in eg.state.narrowed_vars {
-				return false
-			}
-			// Check Mypy type directly - if Mypy says it's Optional, use == none
-			loc := '${node.get_token().line}:${node.get_token().column}'
-			if mypy_t := eg.analyzer.get_mypy_type(node.id, loc) {
-				if mypy_t.starts_with('Optional[') || mypy_t.contains('| None') || mypy_t == 'None' {
-					return false
-				}
-			}
-		}
-		if node is ast.Attribute {
-			loc := '${node.get_token().line}:${node.get_token().column}'
-			if mypy_t := eg.analyzer.get_mypy_type(node.attr, loc) {
-				if mypy_t.starts_with('Optional[') || mypy_t.contains('| None') || mypy_t == 'None' {
-					return false
-				}
-			}
-		}
-		return true
-	}
-	// Optional types should always use `== none`
 	if typ.starts_with('?') {
 		return false
 	}
@@ -71,7 +41,7 @@ fn (eg &ExprGen) should_use_is_none_type(typ string, node ast.Expression) bool {
 	if pure in eg.state.known_interfaces || pure in eg.state.class_to_impl {
 		return false
 	}
-	return typ == 'Any' || typ.starts_with('SumType_') || typ.contains('|')
+	return true
 }
 
 
@@ -313,6 +283,7 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 		}
 		'//' {
 			eg.state.used_builtins['math.floor'] = true
+			eg.state.used_builtins['math'] = true
 			if left_type in ['int', 'i64'] || right_type in ['int', 'i64'] {
 				return "i64(math.floor(f64(${left}) / f64(${right})))"
 			}

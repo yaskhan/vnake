@@ -26,6 +26,7 @@ pub mut:
 	structs   []string
 	functions []string
 	classes   []string
+	used_builtins map[string]bool
 }
 
 pub fn new_global_helpers() GlobalHelpers {
@@ -34,6 +35,7 @@ pub fn new_global_helpers() GlobalHelpers {
 		structs:   []string{}
 		functions: []string{}
 		classes:   []string{}
+		used_builtins: map[string]bool{}
 	}
 }
 
@@ -54,11 +56,14 @@ pub fn (mut g GlobalHelpers) merge(trans &translator.Translator) {
 			g.classes << v_cls
 		}
 	}
+	for k, v in trans.state.used_builtins {
+		if v { g.used_builtins[k] = true }
+	}
 }
 
 pub fn (g GlobalHelpers) write(path string, module_name string) bool {
 	v_code := translator.VCodeEmitter.emit_global_helpers(g.imports, g.structs, g.functions,
-		module_name, g.classes)
+		module_name, g.classes, g.used_builtins)
 	os.write_file(path, v_code) or {
 		println('Error writing global helpers to ${path}: ${err}')
 		return false
@@ -129,7 +134,8 @@ pub fn generate_all_helpers(output_path string) bool {
 		trans.get_helper_structs(),
 		trans.get_helper_functions(),
 		'main',
-		[]
+		[]string{},
+		trans.state.used_builtins
 	)
 	
 	os.write_file(output_path, helpers_code) or {

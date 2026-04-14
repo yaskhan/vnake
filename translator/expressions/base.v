@@ -118,8 +118,8 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	
 	v_type := eg.guess_type(node)
 	if v_type.starts_with('?') && !eg.state.in_assignment_lhs {
-		// If explicitly narrowed in this scope, V 0.5 already considers it non-optional
-		if eg.state.narrowed_vars[sanitized] {
+		// If explicitly narrowed in this scope, or it's a _mut shadow variable, V 0.5 already considers it non-optional
+		if eg.state.narrowed_vars[sanitized] || sanitized.ends_with('_mut') {
 			return sanitized
 		}
 		// Unwrap if the target context requires non-optional type
@@ -332,6 +332,7 @@ fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
 			parts << "''"
 		}
 
+		eg.state.used_builtins['Template'] = true
 		return 'Template{strings: [${parts.join(', ')}], interpolations: [${interpolations.join(', ')}]}'
 }
 
@@ -361,6 +362,7 @@ pub fn (mut eg ExprGen) visit_constant(node ast.Constant) string {
 		} else if content.starts_with('__py2v_rt__') {
 			content = content['__py2v_rt__'.len..]
 		}
+		eg.state.used_builtins['Template'] = true
 		return 'Template{strings: [${eg.quote_string_content(content, is_raw)}], interpolations: []}'
 	}
 	if node.token.typ == .string_tok || node.token.typ == .fstring_tok {

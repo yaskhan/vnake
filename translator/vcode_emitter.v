@@ -19,6 +19,9 @@ pub mut:
 	helper_imports  []string
 	helper_structs  []string
 	helper_functions []string
+	used_builtins    map[string]bool
+	defined_classes  map[string]bool
+	omit_builtins    bool
 }
 
 pub fn new_vcode_emitter(module_name string) VCodeEmitter {
@@ -34,6 +37,9 @@ pub fn new_vcode_emitter(module_name string) VCodeEmitter {
 		helper_imports:  []string{}
 		helper_structs:  []string{}
 		helper_functions: []string{}
+		used_builtins:    map[string]bool{}
+		defined_classes:  map[string]bool{}
+		omit_builtins:    false
 	}
 }
 
@@ -50,8 +56,25 @@ pub fn (mut e VCodeEmitter) add_helper_import(module_name string) {
 }
 
 pub fn (mut e VCodeEmitter) add_global(global_def string) {
-	if global_def in e.globals {
-		return
+	mut name := global_def.trim_space()
+	if name.starts_with('__global ') {
+		name = name['__global '.len..].trim_space()
+	}
+	if name.contains(' ') {
+		name = name.all_before(' ')
+	}
+
+	for existing in e.globals {
+		mut ex_name := existing.trim_space()
+		if ex_name.starts_with('__global ') {
+			ex_name = ex_name['__global '.len..].trim_space()
+		}
+		if ex_name.contains(' ') {
+			ex_name = ex_name.all_before(' ')
+		}
+		if name == ex_name {
+			return
+		}
 	}
 	e.globals << global_def
 }
@@ -119,6 +142,29 @@ pub fn (e &VCodeEmitter) emit() string {
 
 	if e.structs.len > 0 {
 		lines << e.structs.join('\n\n')
+		lines << ''
+	}
+
+	// Generate Any sum-type if not already present
+	mut has_any := false
+	for s in e.structs { if s.contains('type Any =') { has_any = true; break } }
+	for s in e.helper_structs { if s.contains('type Any =') { has_any = true; break } }
+	
+	if !has_any && (e.used_builtins.len > 0 || e.defined_classes.len > 0) {
+		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any', 'map[string]Any', 'map[i64]Any']
+		variants << ['[]i64', '[]f64', '[]int']
+		for cls, _ in e.defined_classes {
+			v_cls := cls.trim_left('&')
+			if v_cls.len > 0 && v_cls[0].is_capital() && v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
+				if '&' + v_cls !in variants { variants << '&' + v_cls }
+			} else if v_cls !in variants {
+				variants << v_cls
+			}
+		}
+		lines << 'pub type Any = ${variants.join(" | ")}'
+		lines << ''
+		lines << 'pub struct NoneType {}'
+		lines << 'pub fn (n NoneType) str() string { return "None" }'
 		lines << ''
 	}
 	
@@ -220,10 +266,10 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 }
 
 pub fn (e &VCodeEmitter) emit_helpers() string {
-	return VCodeEmitter.emit_global_helpers(e.helper_imports, e.helper_structs, e.helper_functions, 'main', [])
+	return VCodeEmitter.emit_global_helpers(e.helper_imports, e.helper_structs, e.helper_functions, 'main', [], e.used_builtins)
 }
 
-pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, functions []string, module_name string, classes []string) string {
+pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, functions []string, module_name string, classes []string, used_builtins map[string]bool) string {
 	mut lines := []string{}
 	lines << 'module ${module_name}'
 	lines << ''
@@ -244,10 +290,20 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		lines << ''
 	}
 
-	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', 'Interpolation', 'Template', '[]Any', 'map[string]Any']
+	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any', 'map[string]Any', 'map[i64]Any']
+	variants << ['[]i64', '[]f64', '[]int', '[]Packet', '[]Task', '[]TaskRec']
+	if used_builtins['Template'] {
+		if 'Interpolation' !in variants { variants << 'Interpolation' }
+		if 'Template' !in variants { variants << 'Template' }
+	}
 	for cls in classes {
 		v_cls := cls.trim_left('&')
-		if v_cls !in variants {
+		// Ensure classes in Any are always references to match V 0.5 heap-allocated memory model for Python objects
+		if v_cls.len > 0 && v_cls[0].is_capital() && v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
+			if '&' + v_cls !in variants {
+				variants << '&' + v_cls
+			}
+		} else if v_cls !in variants {
 			variants << v_cls
 		}
 	}
@@ -273,61 +329,63 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 }'
 	lines << ''
 
-	lines << 'pub struct Interpolation {'
-	lines << 'pub:'
-	lines << '    value       Any'
-	lines << '    expression  string'
-	lines << '    conversion  string'
-	lines << '    format_spec string'
-	lines << '}'
-	lines << ''
+	if used_builtins['Template'] {
+		lines << 'pub struct Interpolation {'
+		lines << 'pub:'
+		lines << '    value       Any'
+		lines << '    expression  string'
+		lines << '    conversion  string'
+		lines << '    format_spec string'
+		lines << '}'
+		lines << ''
 
-	lines << 'pub struct Template {'
-	lines << 'pub:'
-	lines << '    strings        []string'
-	lines << '    interpolations []Interpolation'
-	lines << '}'
-	lines << ''
+		lines << 'pub struct Template {'
+		lines << 'pub:'
+		lines << '    strings        []string'
+		lines << '    interpolations []Interpolation'
+		lines << '}'
+		lines << ''
 
-	lines << 'pub fn (t Template) values() []Any {'
-	lines << '    mut res := []Any{cap: t.interpolations.len}'
-	lines << '    for i in t.interpolations {'
-	lines << '        res << i.value'
-	lines << '    }'
-	lines << '    return res'
-	lines << '}'
-	lines << ''
-	
-	lines << 'pub fn py_bool(val Any) bool {
-    if val is bool { return val }
-    if val is int { return val != 0 }
-    if val is i64 { return val != 0 }
-    if val is f64 { return val != 0.0 }
-    if val is string { return val.len > 0 }
-    if val is []Any { return val.len > 0 }
-    if val is map[string]Any { return val.len > 0 }
-    if val is NoneType { return false }
-    return true
-}'
-	lines << ''
-	lines << ''
+		lines << 'pub fn (t Template) values() []Any {'
+		lines << '    mut res := []Any{cap: t.interpolations.len}'
+		lines << '    for i in t.interpolations {'
+		lines << '        res << i.value'
+		lines << '    }'
+		lines << '    return res'
+		lines << '}'
+		lines << ''
 
-	lines << 'pub fn (t1 Template) + (t2 Template) Template {'
-	lines << '    if t1.strings.len == 0 { return t2 }'
-	lines << '    if t2.strings.len == 0 { return t1 }'
-	lines << '    mut new_strings := t1.strings[..t1.strings.len - 1].clone()'
-	lines << '    new_strings << t1.strings.last() + t2.strings[0]'
-	lines << '    if t2.strings.len > 1 {'
-	lines << '        new_strings << t2.strings[1..]'
-	lines << '    }'
-	lines << '    mut new_interpolations := t1.interpolations.clone()'
-	lines << '    new_interpolations << t2.interpolations'
-	lines << '    return Template{'
-	lines << '        strings: new_strings'
-	lines << '        interpolations: new_interpolations'
-	lines << '    }'
-	lines << '}'
-	lines << ''
+		lines << 'pub fn (t1 Template) + (t2 Template) Template {'
+		lines << '    if t1.strings.len == 0 { return t2 }'
+		lines << '    if t2.strings.len == 0 { return t1 }'
+		lines << '    mut new_strings := t1.strings[..t1.strings.len - 1].clone()'
+		lines << '    new_strings << t1.strings.last() + t2.strings[0]'
+		lines << '    if t2.strings.len > 1 {'
+		lines << '        new_strings << t2.strings[1..]'
+		lines << '    }'
+		lines << '    mut new_interpolations := t1.interpolations.clone()'
+		lines << '    new_interpolations << t2.interpolations'
+		lines << '    return Template{'
+		lines << '        strings: new_strings'
+		lines << '        interpolations: new_interpolations'
+		lines << '    }'
+		lines << '}'
+		lines << ''
+	}
+
+	if used_builtins['py_subscript'] {
+		lines << 'pub fn py_subscript(val Any, idx Any) Any {'
+		lines << '    if val is []Any {'
+		lines << '        if idx is int { return val[idx] }'
+		lines << '        if idx is i64 { return val[int(idx)] }'
+		lines << '    }'
+		lines << '    if val is map[string]Any {'
+		lines << '        if idx is string { return val[idx] }'
+		lines << '    }'
+		lines << '    return NoneType{}'
+		lines << '}'
+		lines << ''
+	}
 
 	lines << 'pub enum PyAnnotationFormat { value forwardref string }'
 	lines << ''

@@ -106,6 +106,11 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 		if is_auto {
 			// Mark variable as narrowed so that later accesses don't add redundant 'or' blocks
 			m.env.state.narrowed_vars[sanitized] = true
+			if var_name in m.env.state.name_remap {
+				original_remaps[var_name] = m.env.state.name_remap[var_name]
+			} else {
+				original_remaps[var_name] = '__NONE__'
+			}
 			continue
 		}
 
