@@ -66,6 +66,10 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	dec_info := h.get_decorator_info(node, struct_name, env)
 	mut coroutine_handler := unsafe { &analyzer.CoroutineHandler(env.state.coroutine_handler) }
 	is_generator := dec_info.is_generator
+	prev_in_generator := env.state.in_generator
+	env.state.in_generator = is_generator
+	prev_has_yield := env.state.has_yield
+	env.state.has_yield = false
 
 	mut output := []string{}
 	if env.state.include_all_symbols {
@@ -688,9 +692,14 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		env.visit_stmt_fn(stmt)
 	}
 
+	if env.state.in_generator && !env.state.has_yield {
+		// This is just a normal function returning an iterator
+	}
+
 	if ret_type != 'void' && ret_type != '' && !is_init && !ends_with_return(node.body) {
+		// V requires explicit return
 		default_val := base.get_v_default_value(ret_type, v_gens_to_declare)
-		env.emit_fn(env.state.indent() + 'return ${default_val}')
+		env.emit_fn(env.state.indent() + 'return ${default_val} // TODO: default value for ${ret_type}')
 	}
 
 	if is_generator {
@@ -708,6 +717,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	env.pop_scope_fn()
 	env.state.in_init = prev_in_init
 	env.state.current_function_return_type = prev_ret_type_state
+	env.state.has_yield = prev_has_yield
+	env.state.in_generator = prev_in_generator
 	for line in dec_info.injected_end {
 		env.emit_fn(env.state.indent() + line)
 	}

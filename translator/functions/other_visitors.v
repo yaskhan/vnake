@@ -137,7 +137,7 @@ pub fn visit_yield(
 	visit_expr_fn fn (ast.Expression) string,
 	indent_fn fn () string,
 ) string {
-	_ = state
+	state.has_yield = true
 	_ = indent_fn
 	active_channel := ''
 	active_in_channel := ''
@@ -159,7 +159,7 @@ pub fn visit_yield_from(
 	indent_fn fn () string,
 	emit_fn fn (string),
 ) ?string {
-	_ = state
+	state.has_yield = true
 	active_channel := ''
 	active_in_channel := ''
 	if active_channel.len > 0 {
