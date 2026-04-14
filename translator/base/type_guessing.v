@@ -8,6 +8,17 @@ pub type TypeGuessingContext = models.TypeGuessingContext
 
 // guess_type infers a best-effort V type for an Expression node.
 pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location bool) string {
+	if node is ast.Name {
+		id := node.id
+		actual_name := ctx.name_remap[id] or { id }
+		if actual_name in ctx.known_v_types {
+			return ctx.known_v_types[actual_name]
+		}
+		if id in ctx.known_v_types {
+			return ctx.known_v_types[id]
+		}
+	}
+
 	if use_location {
 		loc_key := '${node.get_token().line}:${node.get_token().column}'
 		if loc_key in ctx.location_map {
@@ -218,16 +229,16 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		if fid in ['range', 'py_range'] {
 			return '[]int'
 		}
-		if fid in ['py_sorted', 'py_reversed'] {
+		if fid in ['py_sorted', 'py_reversed', 'sorted', 'reversed'] {
 			if node.args.len > 0 {
 				return guess_type(node.args[0], ctx, true)
 			}
 			return '[]Any'
 		}
-		if fid == 'py_zip' {
+		if fid in ['py_zip', 'zip'] {
 			return '[]PyZipItem'
 		}
-		if fid == 'py_enumerate' {
+		if fid in ['py_enumerate', 'enumerate'] {
 			return '[]PyEnumerateItem'
 		}
 		if fid == 'py_divmod' {
@@ -445,7 +456,10 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 			}
 		}
 	}
-	actual_name := ctx.name_remap[node.id] or { node.id }
+	mut actual_name := ctx.name_remap[node.id] or { node.id }
+	if actual_name.contains(' or {') {
+		actual_name = actual_name.all_before(' or {').trim_left('(').trim_space()
+	}
 	if node.id == 't' {
 	}
 	if actual_name.starts_with('(') && actual_name.contains(' as ') {
@@ -597,6 +611,9 @@ fn guess_type_binop(node ast.BinaryOp, ctx TypeGuessingContext) string {
 		}
 		if (right == 'none' || right == 'NoneType') && left != 'Any' {
 			return '?' + left
+		}
+		if left == right && (is_numeric_type(left) || is_collection_type(left)) {
+			return left
 		}
 		return left + ' | ' + right
 	}

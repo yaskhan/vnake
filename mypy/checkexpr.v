@@ -452,8 +452,9 @@ fn (mut ec ExpressionChecker) get_iterable_item_type(typ MypyTypeNode) MypyTypeN
 		return proper
 	}
 	if proper is Instance {
-		if (proper.type_name == 'builtins.list' || proper.type_name == 'builtins.set'
-			|| proper.type_name == 'typing.Iterable') && proper.args.len > 0 {
+		if (proper.type_name == 'builtins.list' || proper.type_name == 'builtins.set' ||
+			proper.type_name == 'builtins.tuple' || proper.type_name == 'builtins.dict' ||
+			proper.type_name == 'typing.Iterable') && proper.args.len > 0 {
 			return proper.args[0]
 		}
 	}

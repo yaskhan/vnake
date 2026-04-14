@@ -98,6 +98,17 @@ pub fn (mut t TypeInferenceBase) set_type(name string, typ string) {
 }
 
 pub fn (t &TypeInferenceBase) get_type(name string) string {
+	if !name.contains('.') && t.scope_names.len > 0 {
+		for i := t.scope_names.len - 1; i >= 0; i-- {
+			qual := t.scope_names[..i+1].join('.') + '.' + name
+			if qual in t.type_map { 
+				res := t.type_map[qual]
+				eprintln('DEBUG: analyzer.get_type scoped(${name}) ${qual} = ${res}')
+				return res 
+			}
+		}
+	}
+
 	if name in t.type_map { 
 		res := t.type_map[name]
 		eprintln('DEBUG: analyzer.get_type ${name} = ${res}')
@@ -118,17 +129,6 @@ pub fn (t &TypeInferenceBase) get_type(name string) string {
 			res = t.get_type('${b}.${to_camel_case(attr)}')
 			if res != 'Any' {
 				return res
-			}
-		}
-	}
-
-	if !name.contains('.') && t.scope_names.len > 0 {
-		for i := t.scope_names.len - 1; i >= 0; i-- {
-			qual := t.scope_names[..i+1].join('.') + '.' + name
-			if qual in t.type_map { 
-				res := t.type_map[qual]
-				eprintln('DEBUG: analyzer.get_type scoped(${name}) ${qual} = ${res}')
-				return res 
 			}
 		}
 	}
@@ -166,6 +166,15 @@ pub fn (mut t TypeInferenceBase) set_mutability(name string, info MutabilityInfo
 }
 
 pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
+	if !name.contains('.') && t.scope_names.len > 0 {
+		for i := t.scope_names.len - 1; i >= 0; i-- {
+			qual := t.scope_names[..i+1].join('.') + '.' + name
+			if qual in t.mutability_map { 
+				return t.mutability_map[qual]
+			}
+		}
+	}
+
 	if name in t.mutability_map { 
 		return t.mutability_map[name] 
 	}

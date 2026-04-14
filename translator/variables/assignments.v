@@ -265,10 +265,10 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			mut sanitized_rhs := rhs
 			if sanitized_rhs.starts_with('ord(') && sanitized_rhs.ends_with(')') {
 				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
-				sanitized_rhs = 'i64(u32(${inner}[0]))'
+				sanitized_rhs = 'int(${inner}[0])'
 			} else if sanitized_rhs.starts_with('chr(') && sanitized_rhs.ends_with(')') {
 				inner := sanitized_rhs[4..sanitized_rhs.len - 1]
-				sanitized_rhs = 'rune(${inner}).str()'
+				sanitized_rhs = 'rune(int(${inner})).str()'
 			} else if sanitized_rhs.contains('.u32(') && sanitized_rhs.contains(')') {
 				// Already converted ord call like u32('A') - leave it as is
 				for i := 0; i < sanitized_rhs.len - 4; i++ {

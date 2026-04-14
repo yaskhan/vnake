@@ -127,6 +127,11 @@ pub fn generate_overload_variants(
 		for stmt in node.body {
 			env.visit_stmt_fn(stmt)
 		}
+
+		if sig_ret != 'void' && sig_ret != 'none' && sig_ret != '' && !ends_with_return(node.body) {
+			default_val := base.get_v_default_value(sig_ret, v_gens_to_declare)
+			emit_fn('${indent_fn()}return ${default_val}')
+		}
 		state.indent_level--
 		
 		emit_fn('${indent_fn()}}')

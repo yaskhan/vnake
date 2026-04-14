@@ -361,6 +361,8 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		struct_parts << '${pub_prefix}struct ${struct_name_for_body}${generics_str} {'
 		if struct_fields_str.len > 0 {
 			struct_parts << struct_fields_str.join('\n')
+		} else {
+			struct_parts << '    dummy_field_workaround bool'
 		}
 		struct_parts << '}'
 		if !is_unittest {
