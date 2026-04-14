@@ -84,8 +84,10 @@ pub fn (mut t TypeInferenceUtilsMixin) find_lcs(types []string) string {
 		return 'Any'
 	}
 	mut unique_types := []string{}
+	mut seen := map[string]bool{}
 	for typ in types {
-		if typ !in unique_types {
+		if typ !in seen {
+			seen[typ] = true
 			unique_types << typ
 		}
 	}
