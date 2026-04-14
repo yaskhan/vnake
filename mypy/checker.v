@@ -360,7 +360,7 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 					// Mypy typically uses a List for the starred part
 					tc.check_assignment(mut star_lval, Expression(star_expr), MypyTypeNode(Instance{
 						type_name: 'builtins.list'
-						args: [starred_items[0] or { MypyTypeNode(AnyType{type_of_any: .from_untyped_call}) }]
+						args: [join_type_list(starred_items)]
 					}))
 				}
 
@@ -373,14 +373,16 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 			}
 		}
 		Instance {
-			if (proper_rvalue.type_name == 'builtins.list' || proper_rvalue.type_name == 'builtins.tuple' || proper_rvalue.type_name == 'builtins.dict') && proper_rvalue.args.len > 0 {
-				item_type := proper_rvalue.args[0]
+			item_type := tc.expr_checker.get_iterable_item_type(proper_rvalue)
+			if item_type is AnyType && (item_type as AnyType).type_of_any == .from_another_any {
+				tc.msg.fail('"' + proper_rvalue.type_name + '" object is not iterable', rvalue.get_context(), false, false, none)
+			} else {
 				for item_ in items {
 					mut item := item_
 					if item is StarExpr {
 						mut star_expr := item as StarExpr
 						mut star_lval := Expression(star_expr).as_lvalue() or { continue }
-						// For list/tuple/dict, starred version is a list of the same element type
+						// For iterables, starred version is a list of the same element type
 						mut list_type := MypyTypeNode(Instance{
 							type_name: 'builtins.list'
 							args: [item_type]
@@ -390,8 +392,6 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 						tc.check_assignment(mut item_lval, item, item_type)
 					}
 				}
-			} else {
-				tc.msg.fail('"' + proper_rvalue.type_name + '" object is not iterable', rvalue.get_context(), false, false, none)
 			}
 		}
 		AnyType {
@@ -469,8 +469,14 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 		StarExpr {
 			tc.store_type(Expression(lvalue), rvalue_type)
 			if mut inner_lval := lvalue.expr.as_lvalue() {
-				// The rvalue_type here is already the list type
-				tc.check_assignment(mut inner_lval, lvalue.expr, rvalue_type)
+				// The rvalue_type should be an iterable.
+				// For *a = x, a gets a list containing elements of x if x is iterable.
+				item_type := tc.expr_checker.get_iterable_item_type(rvalue_type)
+				list_type := MypyTypeNode(Instance{
+					type_name: 'builtins.list'
+					args: [item_type]
+				})
+				tc.check_assignment(mut inner_lval, lvalue.expr, list_type)
 			}
 		}
 		IndexExpr {
