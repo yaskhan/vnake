@@ -495,7 +495,18 @@ pub fn (mut sa SemanticAnalyzer) visit_for_stmt(mut s ForStmt) !AnyNode {
 		}
 	}
 	sa.statement = Statement(s)
+
+	tag := sa.track_incomplete_refs()
 	s.expr.accept(mut sa)!
+	if sa.found_incomplete_ref(tag) {
+		if mut lval := s.index.as_lvalue() {
+			for name_expr in sa.names_modified_in_lvalue(lval) {
+				sa.mark_incomplete(name_expr.name, name_expr.base)
+			}
+		}
+		return ''
+	}
+
 	if mut lval := s.index.as_lvalue() {
 		sa.analyze_lvalue(mut lval, false, s.index_type != none)!
 	}
@@ -766,7 +777,17 @@ pub fn (mut sa SemanticAnalyzer) visit_unary_expr(mut o UnaryExpr) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_assignment_expr(mut o AssignmentExpr) !AnyNode {
+	tag := sa.track_incomplete_refs()
 	o.value.accept(mut sa)!
+	if sa.found_incomplete_ref(tag) {
+		if mut lval := o.target.as_lvalue() {
+			for name_expr in sa.names_modified_in_lvalue(lval) {
+				sa.mark_incomplete(name_expr.name, name_expr.base)
+			}
+		}
+		return ''
+	}
+
 	if mut lval := o.target.as_lvalue() {
 		sa.analyze_lvalue(mut lval, false, false)!
 	}
@@ -917,6 +938,36 @@ pub fn (mut sa SemanticAnalyzer) visit_await_expr(mut o AwaitExpr) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_with_stmt(mut o WithStmt) !AnyNode {
+	sa.statement = Statement(o)
+	mut incomplete := false
+	for i in 0 .. o.expr.len {
+		expr := o.expr[i]
+		tag := sa.track_incomplete_refs()
+		expr.accept(mut sa)!
+		if sa.found_incomplete_ref(tag) {
+			incomplete = true
+			if target := o.target[i] {
+				if mut lval := target.as_lvalue() {
+					for name_expr in sa.names_modified_in_lvalue(lval) {
+						sa.mark_incomplete(name_expr.name, name_expr.base)
+					}
+				}
+			}
+		}
+	}
+
+	if incomplete {
+		return ''
+	}
+
+	for target in o.target {
+		if t := target {
+			if mut lval := t.as_lvalue() {
+				sa.analyze_lvalue(mut lval, false, false)!
+			}
+		}
+	}
+	sa.visit_block(mut o.body)!
 	return ''
 }
 
@@ -941,6 +992,19 @@ pub fn (mut sa SemanticAnalyzer) visit_import_all(mut o ImportAll) !AnyNode {
 }
 
 pub fn (mut sa SemanticAnalyzer) visit_operator_assignment_stmt(mut o OperatorAssignmentStmt) !AnyNode {
+	sa.statement = Statement(o)
+	tag := sa.track_incomplete_refs()
+	o.lvalue.as_expression().accept(mut sa)!
+	o.rvalue.accept(mut sa)!
+	if sa.found_incomplete_ref(tag) {
+		for name_expr in sa.names_modified_in_lvalue(o.lvalue) {
+			sa.mark_incomplete(name_expr.name, name_expr.base)
+		}
+		return ''
+	}
+
+	mut lval := o.lvalue
+	sa.analyze_lvalue(mut lval, false, false)!
 	return ''
 }
 
@@ -1416,6 +1480,18 @@ fn (sa SemanticAnalyzer) names_modified_in_lvalue(lval Lvalue) []NameExpr {
 			}
 		}
 		return result
+	} else if lval is ListExpr {
+		mut result := []NameExpr{}
+		for item in lval.items {
+			if l := item.as_lvalue() {
+				result << sa.names_modified_in_lvalue(l)
+			}
+		}
+		return result
+	} else if lval is StarExpr {
+		if l := lval.expr.as_lvalue() {
+			return sa.names_modified_in_lvalue(l)
+		}
 	}
 	return []
 }
