@@ -159,7 +159,7 @@ pub fn (mut sa SemanticAnalyzer) prepare_file(mut file_node MypyFile) {
 	if 'builtins' in sa.modules {
 		file_node.names.symbols['__builtins__'] = SymbolTableNode{
 			kind: gdef
-			node: SymbolNodeRef(sa.modules['builtins'])
+			node: SymbolNodeRef(sa.modules['builtins'] or { panic('builtins not found') })
 		}
 	}
 	if file_node.fullname == 'builtins' {
@@ -358,7 +358,7 @@ pub fn (mut sa SemanticAnalyzer) visit_import(mut i Import) !AnyNode {
 		_ = imported_id
 
 		if base_id in sa.modules {
-			node := sa.modules[base_id]
+			node := sa.modules[base_id] or { continue }
 			kind := if sa.is_func_scope() {
 				ldef
 			} else if sa.cur_type != none {
@@ -1022,7 +1022,8 @@ pub fn (mut sa SemanticAnalyzer) visit_import_all(mut o ImportAll) !AnyNode {
 pub fn (mut sa SemanticAnalyzer) visit_operator_assignment_stmt(mut o OperatorAssignmentStmt) !AnyNode {
 	sa.statement = Statement(o)
 	tag := sa.track_incomplete_refs()
-	o.lvalue.as_expression().accept(mut sa)!
+	mut lval_expr := o.lvalue.as_expression()
+	lval_expr.accept(mut sa)!
 	o.rvalue.accept(mut sa)!
 	if sa.found_incomplete_ref(tag) {
 		for name_expr in sa.names_modified_in_lvalue(o.lvalue) {
@@ -2042,7 +2043,7 @@ pub fn (mut sa SemanticAnalyzer) current_symbol_table() map[string]&SymbolTableN
 	mut res := map[string]&SymbolTableNode{}
 	if sa.is_class_scope() {
 		if mut ct := sa.cur_type {
-			for k, v in ct.names.symbols {
+			for k, _ in ct.names.symbols {
 				res[k] = unsafe { &ct.names.symbols[k] }
 			}
 			return res
@@ -2051,14 +2052,14 @@ pub fn (mut sa SemanticAnalyzer) current_symbol_table() map[string]&SymbolTableN
 
 	if sa.locals.len > 0 {
 		if mut locals := sa.locals.last() {
-			for k, v in locals.symbols {
+			for k, _ in locals.symbols {
 				res[k] = unsafe { &locals.symbols[k] }
 			}
 			return res
 		}
 	}
 
-	for k, v in sa.globals.symbols {
+	for k, _ in sa.globals.symbols {
 		res[k] = unsafe { &sa.globals.symbols[k] }
 	}
 	return res

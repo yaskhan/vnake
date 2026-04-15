@@ -58,7 +58,7 @@ pub fn (mut nf NodeFixer) visit_symbol_table(mut symtab SymbolTable, table_fulln
 			value.cross_ref = none
 
 			if cross_ref in nf.modules {
-				value.node = SymbolNodeRef(nf.modules[cross_ref])
+				value.node = SymbolNodeRef(nf.modules[cross_ref] or { continue })
 			} else {
 				stnode := lookup_fully_qualified(cross_ref, nf.modules)
 				if st := stnode {

@@ -1,7 +1,6 @@
 module analyzer
 
 import ast
-import strings
 
 pub fn to_camel_case(name string) string {
 	if name.len == 0 || name == '_' {
