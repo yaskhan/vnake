@@ -95,7 +95,7 @@ pub fn to_snake_case(name string) string {
 // to_camel_case converts snake_case to camelCase (e.g., run_task -> runTask)
 pub fn to_camel_case(name string) string {
 	if name.len == 0 { return name }
-	mut res := ''
+	mut res := []u8{cap: name.len}
 	mut next_upper := false
 	for i := 0; i < name.len; i++ {
 		ch := name[i]
@@ -103,14 +103,18 @@ pub fn to_camel_case(name string) string {
 			next_upper = true
 		} else {
 			if next_upper {
-				res += ch.ascii_str().to_upper()
+				if ch >= `a` && ch <= `z` {
+					res << ch - 32
+				} else {
+					res << ch
+				}
 				next_upper = false
 			} else {
-				res += ch.ascii_str()
+				res << ch
 			}
 		}
 	}
-	return res
+	return res.bytestr()
 }
 
 // get_factory_name returns snake_case factory name for the given struct name
@@ -192,20 +196,27 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 	}
 
 	if is_type {
-		// PascalCase for types
-		mut parts := []string{}
-		for p in clean_name.split('_') {
-			if p.len > 0 {
-				parts << p[0].ascii_str().to_upper() + p[1..]
+		// PascalCase for types - Optimized single-pass implementation
+		mut res_bytes := []u8{cap: clean_name.len}
+		mut next_upper := true
+		for i := 0; i < clean_name.len; i++ {
+			ch := clean_name[i]
+			if ch == `_` {
+				next_upper = true
+			} else {
+				if next_upper {
+					if ch >= `a` && ch <= `z` {
+						res_bytes << ch - 32
+					} else {
+						res_bytes << ch
+					}
+					next_upper = false
+				} else {
+					res_bytes << ch
+				}
 			}
 		}
-		mut res := if parts.len > 0 {
-			parts.join('')
-		} else {
-			clean_name[0].ascii_str().to_upper() + clean_name[1..]
-		}
-		// V structs cannot have underscores
-		res = res.replace('_', '')
+		mut res := res_bytes.bytestr()
 		res += '_'.repeat(prefix_count)
 
 		if res in reserved_words || is_v_reserved_keyword(res) {
