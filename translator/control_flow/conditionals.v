@@ -97,6 +97,15 @@ fn (mut m ControlFlowModule) collect_narrowing(node ast.Expression, positive boo
 		for k, v in m.collect_narrowing(node.right, false) {
 			res[k] = v
 		}
+	} else if node is ast.Name {
+		v_type := m.guess_type(node)
+		if v_type.starts_with('?') {
+			if positive {
+				res[node.id] = v_type[1..]
+			} else {
+				res[node.id] = 'none'
+			}
+		}
 	}
 	return res
 }
@@ -147,11 +156,17 @@ fn (mut m ControlFlowModule) apply_flow_narrowing(body []ast.Statement, test ast
 					m.emit('mut ${narrowed_var} := ${sanitized} or { break }')
 					narrowed_expr = narrowed_var
 				} else {
-					narrowed_expr = '(${sanitized} or { panic("narrowing failed") })'
+					is_narrowed := m.env.state.narrowed_vars[sanitized] || sanitized.ends_with('_mut')
+					if is_narrowed {
+						narrowed_expr = sanitized
+					} else {
+						narrowed_expr = '(${sanitized} or { panic("narrowing failed") })'
+					}
 				}
 			} else {
 				mut expr_to_cast := sanitized
-				if base_type.starts_with('?') || base_type == 'Any' {
+				is_narrowed := m.env.state.narrowed_vars[sanitized] || sanitized.ends_with('_mut')
+				if (base_type.starts_with('?') || base_type == 'Any') && !is_narrowed {
 					// We must unwrap before 'as'
 					expr_to_cast = '(${sanitized} or { panic("narrowing failed for ${sanitized}") })'
 				}
