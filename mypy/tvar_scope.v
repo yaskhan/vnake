@@ -231,9 +231,7 @@ pub fn (mut f TypeVarLikeDefaultFixer) visit_type_var(t &TypeVarType) !MypyTypeN
 			type_of_any: TypeOfAny.from_error
 		}
 	}
-	ex := existing or { return AnyType{
-		type_of_any: TypeOfAny.from_error
-	} }
+	ex := existing
 
 	return ex.as_node()
 }
@@ -247,9 +245,7 @@ pub fn (mut f TypeVarLikeDefaultFixer) visit_param_spec(t &ParamSpecType) !MypyT
 			type_of_any: TypeOfAny.from_error
 		}
 	}
-	ex := existing or { return AnyType{
-		type_of_any: TypeOfAny.from_error
-	} }
+	ex := existing
 
 	return ex.as_node()
 }
@@ -263,9 +259,7 @@ pub fn (mut f TypeVarLikeDefaultFixer) visit_type_var_tuple(t &TypeVarTupleType)
 			type_of_any: TypeOfAny.from_error
 		}
 	}
-	ex := existing or { return AnyType{
-		type_of_any: TypeOfAny.from_error
-	} }
+	ex := existing
 
 	return ex.as_node()
 }

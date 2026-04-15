@@ -88,7 +88,17 @@ pub fn (mut m ControlFlowModule) visit_while(node ast.While) {
 		m.env.state.indent_level--
 		m.emit('}')
 	} else {
-		m.emit('for ${test_expr} {')
+			mut final_test_expr := test_expr
+	if test_expr.contains(' is ') && !test_expr.contains('mut ') {
+		narrowing := m.collect_narrowing(node.test, true)
+		for var_name, _ in narrowing {
+			m_info := m.env.analyzer.get_mutability(var_name)
+			if m_info.is_mutated || m_info.is_reassigned {
+				final_test_expr = final_test_expr.replace('${m.sanitize_name(var_name, false)} is', 'mut ${m.sanitize_name(var_name, false)} is')
+			}
+		}
+	}
+	m.emit('for ${final_test_expr} {')
 		m.env.state.indent_level++
 
 		// Apply narrowing for while loop body
