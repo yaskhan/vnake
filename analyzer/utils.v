@@ -7,22 +7,26 @@ pub fn to_camel_case(name string) string {
 	if name.len == 0 || name == '_' {
 		return name
 	}
-	mut parts := name.split('_')
-	mut res := strings.new_builder(name.len)
-	for i, part in parts {
-		if part.len == 0 {
-			continue
-		}
-		if i == 0 {
-			res.write_string(part)
+	mut res := []u8{cap: name.len}
+	mut next_upper := false
+	for i := 0; i < name.len; i++ {
+		ch := name[i]
+		if ch == `_` {
+			next_upper = true
 		} else {
-			res.write_string(part[0..1].to_upper())
-			if part.len > 1 {
-				res.write_string(part[1..])
+			if next_upper {
+				if ch >= `a` && ch <= `z` {
+					res << ch - 32
+				} else {
+					res << ch
+				}
+				next_upper = false
+			} else {
+				res << ch
 			}
 		}
 	}
-	return res.str()
+	return res.bytestr()
 }
 
 pub fn expr_name(node ast.Expression) string {
