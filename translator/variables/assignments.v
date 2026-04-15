@@ -11,7 +11,8 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 	mut lhs := ''
 
 	if target is ast.Name {
-		maybe_type := target.id.len > 0 && (target.id[0].is_capital() || (target.id.starts_with('_') && target.id.len > 1 && target.id[1].is_capital()))
+		maybe_type := target.id.len > 0 && (target.id[0].is_capital()
+			|| (target.id.starts_with('_') && target.id.len > 1 && target.id[1].is_capital()))
 		lhs = m.sanitize_name(target.id, maybe_type)
 		if target.id in m.state.name_remap {
 			m.state.name_remap.delete(target.id)
@@ -25,7 +26,8 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			if call.func is ast.Name {
 				func_name := call.func.id
 				if func_name == 'NewType' && call.args.len == 2 {
-					base_type := m.map_python_type(m.visit_expr(call.args[1]), true, false, false)
+					base_type := m.map_python_type(m.visit_expr(call.args[1]), true, false,
+						false)
 					pub_prefix := if m.is_exported(target.id) { 'pub ' } else { '' }
 					m.emitter.add_struct('${pub_prefix}type ${lhs} = ${base_type}')
 					return
@@ -34,11 +36,13 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 					m.state.type_vars[target.id] = true
 					mut constraints := []string{}
 					for arg in call.args[1..] {
-						constraints << m.map_python_type(m.visit_expr(arg), true, false, false)
+						constraints << m.map_python_type(m.visit_expr(arg), true, false,
+							false)
 					}
 					for kw in call.keywords {
 						if kw.arg == 'bound' {
-							bound_type := m.map_python_type(m.visit_expr(kw.value), true, false, false)
+							bound_type := m.map_python_type(m.visit_expr(kw.value), true,
+								false, false)
 							if bound_type.len > 0 {
 								if bound_type.contains('|') {
 									constraints << bound_type.split('|').map(it.trim_space())
@@ -48,7 +52,8 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 								m.state.constrained_typevars[target.id] = true
 							}
 						} else if kw.arg == 'default' {
-							m.state.generic_defaults[target.id] = m.map_python_type(m.visit_expr(kw.value), true, false, false)
+							m.state.generic_defaults[target.id] = m.map_python_type(m.visit_expr(kw.value),
+								true, false, false)
 						}
 					}
 					if constraints.len > 0 {
@@ -73,7 +78,8 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 					if mapped.len > 0 && mapped != rhs_source {
 						is_type_alias = true
 						type_alias_val = mapped
-					} else if node.value is ast.Name && node.value.id.len > 0 && node.value.id[0].is_capital() {
+					} else if node.value is ast.Name && node.value.id.len > 0
+						&& node.value.id[0].is_capital() {
 						is_type_alias = true
 						type_alias_val = node.value.id
 					}
@@ -101,7 +107,8 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 					return
 				}
 			}
-			if obj_type in m.state.property_setters && target.attr in m.state.property_setters[obj_type] {
+			if obj_type in m.state.property_setters
+				&& target.attr in m.state.property_setters[obj_type] {
 				obj_expr := m.visit_expr(target.value)
 				rhs_expr := m.visit_expr(node.value)
 				m.emit('${obj_expr}.set_${target.attr}(${rhs_expr})')
@@ -115,7 +122,8 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			if target.slice is ast.Constant {
 				if target.slice.value.starts_with("'") || target.slice.value.starts_with('"') {
 					field_name := m.sanitize_name(target.slice.value.trim('\'"'), false)
-					if obj_type in m.state.readonly_fields && field_name in m.state.readonly_fields[obj_type] {
+					if obj_type in m.state.readonly_fields
+						&& field_name in m.state.readonly_fields[obj_type] {
 						m.emit('\$compile_error("Cannot assign to ReadOnly TypedDict field \'${field_name}\'")')
 						return
 					}
@@ -221,7 +229,9 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 				m.emit('${lhs} = ${v_type}{len: ${node.value.elements.len}, init: none}')
 			} else {
 				m.emit('mut ${lhs} := ${v_type}{len: ${node.value.elements.len}, init: none}')
-				if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
+				if !m.state.in_main {
+					m.local_vars_in_scope[lhs] = true
+				}
 			}
 			for i, elt in node.value.elements {
 				m.emit('${lhs}[${i}] = ${m.visit_expr(elt)}')
@@ -232,14 +242,20 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 				m.emit('${lhs} = ${v_type}{len: 0, init: none}')
 			} else {
 				m.emit('mut ${lhs} := ${v_type}{len: 0, init: none}')
-				if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
+				if !m.state.in_main {
+					m.local_vars_in_scope[lhs] = true
+				}
 			}
 		}
 		return
 	}
 
 	mut rhs := ''
-	is_void_call := if node.value is ast.Call { m.map_python_type(m.guess_type(node.value, true), false, false, true) == 'void' } else { false }
+	is_void_call := if node.value is ast.Call {
+		m.map_python_type(m.guess_type(node.value, true), false, false, true) == 'void'
+	} else {
+		false
+	}
 
 	if is_void_call {
 		m.emit(m.visit_expr(node.value))
@@ -272,13 +288,20 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			} else if sanitized_rhs.contains('.u32(') && sanitized_rhs.contains(')') {
 				// Already converted ord call like u32('A') - leave it as is
 				for i := 0; i < sanitized_rhs.len - 4; i++ {
-					if sanitized_rhs[i..i+5] == 'u32(' {
+					if sanitized_rhs[i..i + 5] == 'u32(' {
 						close_idx := -1
 						depth := 1
 						for j := i + 5; j < sanitized_rhs.len; j++ {
-							if sanitized_rhs[j] == `[` || sanitized_rhs[j] == `(` { depth++ }
-							if sanitized_rhs[j] == `]` || sanitized_rhs[j] == `)` { depth-- }
-							if depth == 0 { close_idx = j; break }
+							if sanitized_rhs[j] == `[` || sanitized_rhs[j] == `(` {
+								depth++
+							}
+							if sanitized_rhs[j] == `]` || sanitized_rhs[j] == `)` {
+								depth--
+							}
+							if depth == 0 {
+								close_idx = j
+								break
+							}
 						}
 						if close_idx > 0 {
 							// Already converted ord call like u32('A') - leave it as is
@@ -305,7 +328,8 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 	}
 
 	is_mut := m.is_mutable_target(target, lhs)
-	if is_mut && m.is_clonable_collection(v_type) && !rhs.contains('.clone()') && !rhs.starts_with('[') && !rhs.starts_with('map[') {
+	if is_mut && m.is_clonable_collection(v_type) && !rhs.contains('.clone()')
+		&& !rhs.starts_with('[') && !rhs.starts_with('map[') {
 		rhs = '${rhs}.clone()'
 	}
 
@@ -335,7 +359,9 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 	} else {
 		mut_prefix := if is_mut { 'mut ' } else { '' }
 		m.emit('${mut_prefix}${lhs} := ${rhs}')
-		if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
+		if !m.state.in_main {
+			m.local_vars_in_scope[lhs] = true
+		}
 	}
 }
 
@@ -368,8 +394,11 @@ fn (mut m VariablesModule) visit_destructuring(target ast.Expression, source_exp
 		m.emit('${tmp_var} := ${source_expr}')
 
 		mut elements := []ast.Expression{}
-		if target is ast.Tuple { elements = target.elements.clone() }
-		else if target is ast.List { elements = target.elements.clone() }
+		if target is ast.Tuple {
+			elements = target.elements.clone()
+		} else if target is ast.List {
+			elements = target.elements.clone()
+		}
 
 		mut starred_idx := -1
 		for i, elt in elements {
@@ -382,11 +411,19 @@ fn (mut m VariablesModule) visit_destructuring(target ast.Expression, source_exp
 		is_tuple := source_type.starts_with('TupleStruct_') || source_type.contains('Tuple')
 		if starred_idx == -1 {
 			for i, elt in elements {
-				m.visit_destructuring(elt, if is_tuple { '${tmp_var}.it_${i}' } else { '${tmp_var}[${i}]' }, source_type)
+				m.visit_destructuring(elt, if is_tuple {
+					'${tmp_var}.it_${i}'
+				} else {
+					'${tmp_var}[${i}]'
+				}, source_type)
 			}
 		} else {
 			for i in 0 .. starred_idx {
-				m.visit_destructuring(elements[i], if is_tuple { '${tmp_var}.it_${i}' } else { '${tmp_var}[${i}]' }, source_type)
+				m.visit_destructuring(elements[i], if is_tuple {
+					'${tmp_var}.it_${i}'
+				} else {
+					'${tmp_var}[${i}]'
+				}, source_type)
 			}
 			star_elt := elements[starred_idx]
 			if star_elt is ast.Starred {
@@ -400,7 +437,11 @@ fn (mut m VariablesModule) visit_destructuring(target ast.Expression, source_exp
 			}
 			for i in starred_idx + 1 .. elements.len {
 				offset := elements.len - i
-				m.visit_destructuring(elements[i], if is_tuple { '${tmp_var}.it_${i}' } else { '${tmp_var}[(${tmp_var}.len - ${offset})]' }, source_type)
+				m.visit_destructuring(elements[i], if is_tuple {
+					'${tmp_var}.it_${i}'
+				} else {
+					'${tmp_var}[(${tmp_var}.len - ${offset})]'
+				}, source_type)
 			}
 		}
 		return
@@ -415,11 +456,14 @@ fn (mut m VariablesModule) visit_destructuring(target ast.Expression, source_exp
 		is_mut := m.is_mutable_target(target, lhs)
 		mut_prefix := if is_mut { 'mut ' } else { '' }
 		mut rhs := source_expr
-		if is_mut && m.is_clonable_collection(m.guess_type(target, false)) && !rhs.contains('.clone()') && !rhs.starts_with('[') {
+		if is_mut && m.is_clonable_collection(m.guess_type(target, false))
+			&& !rhs.contains('.clone()') && !rhs.starts_with('[') {
 			rhs = '${rhs}.clone()'
 		}
 		m.emit('${mut_prefix}${lhs} := ${rhs}')
-		if !m.state.in_main { m.local_vars_in_scope[lhs] = true }
+		if !m.state.in_main {
+			m.local_vars_in_scope[lhs] = true
+		}
 		return
 	}
 
@@ -437,8 +481,12 @@ fn (m &VariablesModule) is_clonable_collection(v_type string) bool {
 
 fn (m &VariablesModule) is_mutable_target(node ast.Expression, name string) bool {
 	// Simple heuristic for now, should ideally come from analyzer
-	if node is ast.Attribute || node is ast.Subscript { return true }
-	if name in m.local_vars_in_scope { return true }
+	if node is ast.Attribute || node is ast.Subscript {
+		return true
+	}
+	if name in m.local_vars_in_scope {
+		return true
+	}
 	return true // Default to true to be safe in V
 }
 

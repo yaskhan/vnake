@@ -35,13 +35,13 @@ pub mut:
 
 pub fn new_conditional_type_binder(options &Options) &ConditionalTypeBinder {
 	mut b := &ConditionalTypeBinder{
-		next_id:      1
-		bind_all:     options.allow_redefinition_new
-		frames:       []&Frame{}
+		next_id:           1
+		bind_all:          options.allow_redefinition_new
+		frames:            []&Frame{}
 		options_on_return: [][]&Frame{}
-		declarations: map[string]MypyTypeNode{}
-		dependencies: map[string][]string{}
-		try_frames:   map[int]bool{}
+		declarations:      map[string]MypyTypeNode{}
+		dependencies:      map[string][]string{}
+		try_frames:        map[int]bool{}
 	}
 	b.frames << &Frame{
 		id:    b.get_id()
@@ -183,7 +183,3 @@ fn chk_literal_hash(node Expression) ?string {
 	}
 	return none
 }
-
-
-
-

@@ -343,7 +343,8 @@ fn (mut p Parser) parse_type_params() []TypeParam {
 			tok := p.current_token
 			mut kind := TypeParamKind.typevar
 
-			if p.current_is(.operator) && (p.current_token.value == '*' || p.current_token.value == '**') {
+			if p.current_is(.operator)
+				&& (p.current_token.value == '*' || p.current_token.value == '**') {
 				is_double := p.current_token.value == '**'
 				p.advance()
 				if !is_double && p.current_is(.operator) && p.current_token.value == '*' {
@@ -1380,15 +1381,17 @@ fn (mut p Parser) parse_binary_expr(precedence int, allow_in bool, allow_ternary
 				mut next_op := p.current_token
 				if next_op.value in ['and', 'or'] {
 					p.advance()
-					next_right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
+					next_right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or {
+						break
+					}
 					values << next_right
 				} else {
 					break
 				}
 			}
 			left = BoolOp{
-				token: op_tok
-				op:    op_tok
+				token:  op_tok
+				op:     op_tok
 				values: values
 			}
 		} else {
@@ -1499,7 +1502,7 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 			}
 			parts << Constant{
 				token: p.current_token
-				value: "${prefix}${p.current_token.value}"
+				value: '${prefix}${p.current_token.value}'
 			}
 			p.advance()
 		}
@@ -1542,7 +1545,7 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 		prefix := if is_t { 't' } else { '' }
 		return Constant{
 			token: tok
-			value: "${prefix}${sb.str()}"
+			value: '${prefix}${sb.str()}'
 		}
 	}
 

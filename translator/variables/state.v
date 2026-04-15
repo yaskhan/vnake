@@ -6,20 +6,20 @@ import base
 
 pub struct VariablesEmitter {
 pub mut:
-	helper_structs []string
-	globals        []string
+	helper_structs  []string
+	globals         []string
 	init_statements []string
-	constants      []string
-	imports        map[string]bool
+	constants       []string
+	imports         map[string]bool
 }
 
 pub fn new_variables_emitter() VariablesEmitter {
 	return VariablesEmitter{
-		helper_structs: []string{}
-		globals:        []string{}
+		helper_structs:  []string{}
+		globals:         []string{}
 		init_statements: []string{}
-		constants:      []string{}
-		imports:        map[string]bool{}
+		constants:       []string{}
+		imports:         map[string]bool{}
 	}
 }
 
@@ -103,10 +103,10 @@ pub fn (mut m VariablesModule) visit_expr(node ast.Expression) string {
 
 fn (m &VariablesModule) type_utils_context() base.TypeUtilsContext {
 	return base.TypeUtilsContext{
-		imported_symbols: m.state.imported_symbols
-		scc_files:        m.state.scc_files
-		used_builtins:    m.state.used_builtins
-		warnings:         m.state.warnings
+		imported_symbols:    m.state.imported_symbols
+		scc_files:           m.state.scc_files
+		used_builtins:       m.state.used_builtins
+		warnings:            m.state.warnings
 		include_all_symbols: m.state.include_all_symbols
 		strict_exports:      m.state.strict_exports
 	}
@@ -146,18 +146,20 @@ pub fn (mut m VariablesModule) map_python_type(type_str string, allow_union bool
 	}, fn [mut m] (vals []string) string {
 		mut cleaned_vals := []string{}
 		for v in vals {
-			cleaned := v.trim("'\"")
+			cleaned := v.trim('\'"')
 			cleaned_vals << cleaned
 		}
 		mut name_parts := []string{}
 		for v in cleaned_vals {
 			if v.len > 0 {
 				mut vp := v.capitalize()
-				if vp == 'Str' { vp = 'String' }
+				if vp == 'Str' {
+					vp = 'String'
+				}
 				name_parts << vp
 			}
 		}
-		enum_name := 'LiteralEnum_${name_parts.join("")}'
+		enum_name := 'LiteralEnum_${name_parts.join('')}'
 		m.state.generated_literal_enums[enum_name] = vals.join(' | ')
 		return enum_name
 	}, fn [mut m] (types_str string) string {

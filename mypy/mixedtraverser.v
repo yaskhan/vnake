@@ -133,5 +133,3 @@ pub fn (mut v MixedTraverserVisitor) visit_optional_type(t ?MypyTypeNode) !AnyNo
 	}
 	return ''
 }
-
-

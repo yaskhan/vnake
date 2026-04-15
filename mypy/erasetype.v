@@ -27,7 +27,13 @@ pub fn erase_type(typ MypyTypeNode) MypyTypeNode {
 					type_of_any: .special_form
 				})
 			}
-			info := if ti := proper.type_ { ti } else if ty := proper.typ { ty } else { panic('No type info in Instance') }
+			info := if ti := proper.type_ {
+				ti
+			} else if ty := proper.typ {
+				ty
+			} else {
+				panic('No type info in Instance')
+			}
 			MypyTypeNode(Instance{
 				typ:              info
 				type_:            info

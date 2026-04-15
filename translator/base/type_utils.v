@@ -30,8 +30,8 @@ pub mut:
 	imported_symbols    map[string]string
 	defined_classes     map[string]map[string]bool
 	scc_files           map[string]bool
-	used_builtins    map[string]bool
-	warnings         []string
+	used_builtins       map[string]bool
+	warnings            []string
 	include_all_symbols bool
 	strict_exports      bool
 }
@@ -136,12 +136,12 @@ pub fn build_truthiness_check(expr string, v_type string) string {
 		}
 		return '${expr} != none'
 	}
-	
+
 	// Any type needs py_bool check with none handling
 	if v_type == 'Any' {
 		return '(${expr} != none && py_bool(${expr}))'
 	}
-	
+
 	return truthiness_condition(expr, v_type)
 }
 
@@ -210,7 +210,7 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 		if parts.len > 1 {
 			module_prefix := parts[..parts.len - 1].join('.')
 			typename := parts[parts.len - 1]
-			
+
 			// Handle Nested Classes: Outer.Inner -> Outer_Inner
 			nested_name := v_type.replace('.', '_')
 			if nested_name in ctx.defined_classes {
@@ -287,7 +287,7 @@ pub fn get_sum_type_name(union_str string) string {
 pub fn get_literal_enum_name(vals []string) string {
 	mut cleaned_vals := []string{}
 	for v in vals {
-		cleaned := v.trim("'\"")
+		cleaned := v.trim('\'"')
 		cleaned_vals << cleaned
 	}
 	mut name_parts := []string{}

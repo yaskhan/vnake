@@ -4,21 +4,21 @@ import ast
 
 pub struct DecoratorInfo {
 pub mut:
-	is_static             bool
-	is_property           bool
-	is_setter             bool
-	is_classmethod        bool
-	is_abstract           bool
-	decorators_to_handle  []string
-	cache_wrapper_needed  bool
-	cache_map_name        ?string
-	cache_key_type        string
-	wrapper_code          []string
-	injected_start        []string
-	injected_end          []string
-	implementation_name   ?string
-	deprecated            bool
-	deprecated_message    ?string
+	is_static            bool
+	is_property          bool
+	is_setter            bool
+	is_classmethod       bool
+	is_abstract          bool
+	decorators_to_handle []string
+	cache_wrapper_needed bool
+	cache_map_name       ?string
+	cache_key_type       string
+	wrapper_code         []string
+	injected_start       []string
+	injected_end         []string
+	implementation_name  ?string
+	deprecated           bool
+	deprecated_message   ?string
 }
 
 pub struct DecoratorProcessor {

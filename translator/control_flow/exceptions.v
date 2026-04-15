@@ -41,9 +41,14 @@ pub fn (mut m ControlFlowModule) visit_raise(node ast.Raise) {
 			if exc.args.len > 0 {
 				arg0 := exc.args[0]
 				mut msg := m.visit_expr(arg0)
-				if arg0 is ast.Constant && (arg0.value.starts_with("'") || arg0.value.starts_with('"') || arg0.value.starts_with('b')) {
-					if msg.starts_with("'") && msg.ends_with("'") { msg = msg[1..msg.len - 1] }
-					else if msg.starts_with('"') && msg.ends_with('"') { msg = msg[1..msg.len - 1] }
+				if arg0 is ast.Constant
+					&& (arg0.value.starts_with("'") || arg0.value.starts_with('"')
+					|| arg0.value.starts_with('b')) {
+					if msg.starts_with("'") && msg.ends_with("'") {
+						msg = msg[1..msg.len - 1]
+					} else if msg.starts_with('"') && msg.ends_with('"') {
+						msg = msg[1..msg.len - 1]
+					}
 					m.emit("vexc.raise('${exc_name}', '${msg}')")
 				} else {
 					m.emit("vexc.raise('${exc_name}', ${msg})")
@@ -61,19 +66,21 @@ pub fn (mut m ControlFlowModule) visit_raise(node ast.Raise) {
 		if m.env.state.current_function_return_type.len > 0 {
 			if m.env.state.current_function_return_type == 'void' {
 				m.emit('return')
-			} else if m.env.state.current_function_return_type.starts_with('?') || m.env.state.current_function_return_type == 'Any' {
+			} else if m.env.state.current_function_return_type.starts_with('?')
+				|| m.env.state.current_function_return_type == 'Any' {
 				m.emit('return none')
 			} else {
-                // For non-optional return types, we return early to satisfy the compiler.
-                // vexc.raise already marks the error state.
+				// For non-optional return types, we return early to satisfy the compiler.
+				// vexc.raise already marks the error state.
 				ret_type := m.env.state.current_function_return_type
 				pure_type := ret_type.trim_left('?&')
-				if pure_type in m.env.state.known_interfaces || pure_type in m.env.state.class_to_impl {
+				if pure_type in m.env.state.known_interfaces
+					|| pure_type in m.env.state.class_to_impl {
 					m.emit('panic("Exception raised in function returning interface ${ret_type}")')
 				} else {
-                	m.emit('return ${ret_type}{}')
+					m.emit('return ${ret_type}{}')
 				}
-            }
+			}
 		}
 	} else {
 		m.emit('if vexc.get_curr_exc().name != "" {')
@@ -101,7 +108,9 @@ pub fn (mut m ControlFlowModule) visit_try(node ast.Try) {
 			m.emit('{')
 			m.emit('    defer {')
 			m.env.state.indent_level += 2
-			for stmt in node.finalbody { m.visit_stmt(stmt) }
+			for stmt in node.finalbody {
+				m.visit_stmt(stmt)
+			}
 			m.env.state.indent_level -= 2
 			m.emit('    }')
 		}
@@ -143,8 +152,12 @@ pub fn (mut m ControlFlowModule) visit_try(node ast.Try) {
 
 	m.emit('if C.try() {')
 	m.env.state.indent_level++
-	for stmt in node.body { m.visit_stmt(stmt) }
-	if node.orelse.len > 0 { m.emit('${success_var} = true') }
+	for stmt in node.body {
+		m.visit_stmt(stmt)
+	}
+	if node.orelse.len > 0 {
+		m.emit('${success_var} = true')
+	}
 	m.emit('vexc.end_try()')
 	m.env.state.indent_level--
 	m.env.state.vexc_depth--
@@ -176,7 +189,9 @@ pub fn (mut m ControlFlowModule) visit_try(node ast.Try) {
 			prefix := if first { 'if' } else { 'else if' }
 			if has_default {
 				m.emit('//##LLM@@ Bare except block.')
-				if !first { m.emit('else {') }
+				if !first {
+					m.emit('else {')
+				}
 			} else {
 				m.emit('${prefix} ${cond} {')
 			}
@@ -187,11 +202,17 @@ pub fn (mut m ControlFlowModule) visit_try(node ast.Try) {
 					m.emit('${name} := ${exc_var}')
 				}
 			}
-			for stmt in handler.body { m.visit_stmt(stmt) }
+			for stmt in handler.body {
+				m.visit_stmt(stmt)
+			}
 			m.env.state.indent_level--
-			if !has_default || !first { m.emit('}') }
+			if !has_default || !first {
+				m.emit('}')
+			}
 			first = false
-			if has_default { break }
+			if has_default {
+				break
+			}
 		}
 		if !has_default {
 			m.emit('else {')
@@ -209,7 +230,9 @@ pub fn (mut m ControlFlowModule) visit_try(node ast.Try) {
 	if node.orelse.len > 0 {
 		m.emit('if ${success_var} {')
 		m.env.state.indent_level++
-		for stmt in node.orelse { m.visit_stmt(stmt) }
+		for stmt in node.orelse {
+			m.visit_stmt(stmt)
+		}
 		m.env.state.indent_level--
 		m.emit('}')
 	}

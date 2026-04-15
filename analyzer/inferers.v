@@ -28,30 +28,83 @@ fn add_unique_int(mut items []int, value int) {
 }
 
 fn is_mutating_method(name string) bool {
-	return name in ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update',
-		'setdefault', 'delete', 'add', 'discard']
+	return name in ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'setdefault',
+		'delete', 'add', 'discard']
 }
 
 fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 	return match stmt {
-		ast.If { mut children := []ast.Statement{}; children << stmt.body; children << stmt.orelse; children }
-		ast.While { mut children := []ast.Statement{}; children << stmt.body; children << stmt.orelse; children }
-		ast.For { mut children := []ast.Statement{}; children << stmt.body; children << stmt.orelse; children }
-		ast.With { stmt.body.clone() }
-		ast.Try { mut children := []ast.Statement{}; children << stmt.body; for handler in stmt.handlers { children << handler.body }; children << stmt.orelse; children << stmt.finalbody; children }
-		ast.TryStar { mut children := []ast.Statement{}; children << stmt.body; for handler in stmt.handlers { children << handler.body }; children << stmt.orelse; children << stmt.finalbody; children }
-		ast.Match { mut children := []ast.Statement{}; for case in stmt.cases { children << case.body }; children }
-		ast.FunctionDef { stmt.body.clone() }
-		ast.ClassDef { stmt.body.clone() }
-		else { []ast.Statement{} }
+		ast.If {
+			mut children := []ast.Statement{}
+			children << stmt.body
+			children << stmt.orelse
+			children
+		}
+		ast.While {
+			mut children := []ast.Statement{}
+			children << stmt.body
+			children << stmt.orelse
+			children
+		}
+		ast.For {
+			mut children := []ast.Statement{}
+			children << stmt.body
+			children << stmt.orelse
+			children
+		}
+		ast.With {
+			stmt.body.clone()
+		}
+		ast.Try {
+			mut children := []ast.Statement{}
+			children << stmt.body
+			for handler in stmt.handlers {
+				children << handler.body
+			}
+			children << stmt.orelse
+			children << stmt.finalbody
+			children
+		}
+		ast.TryStar {
+			mut children := []ast.Statement{}
+			children << stmt.body
+			for handler in stmt.handlers {
+				children << handler.body
+			}
+			children << stmt.orelse
+			children << stmt.finalbody
+			children
+		}
+		ast.Match {
+			mut children := []ast.Statement{}
+			for case in stmt.cases {
+				children << case.body
+			}
+			children
+		}
+		ast.FunctionDef {
+			stmt.body.clone()
+		}
+		ast.ClassDef {
+			stmt.body.clone()
+		}
+		else {
+			[]ast.Statement{}
+		}
 	}
 }
 
 fn collect_expr_children(expr ast.Expression) []ast.Expression {
 	return match expr {
-		ast.List { expr.elements.clone() }
-		ast.Tuple { expr.elements.clone() }
-		ast.Set { expr.elements.clone() }
+		ast.List {
+			expr.elements.clone()
+		}
+		ast.Tuple {
+			expr.elements.clone()
+		}
+		ast.Set {
+			expr.elements.clone()
+		}
 		ast.Dict {
 			mut children := []ast.Expression{}
 			for key in expr.keys {
@@ -62,8 +115,12 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			children << expr.values
 			children
 		}
-		ast.BinaryOp { [expr.left, expr.right] }
-		ast.UnaryOp { [expr.operand] }
+		ast.BinaryOp {
+			[expr.left, expr.right]
+		}
+		ast.UnaryOp {
+			[expr.operand]
+		}
 		ast.Compare {
 			mut children := []ast.Expression{}
 			children << expr.left
@@ -79,8 +136,12 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			}
 			children
 		}
-		ast.Attribute { [expr.value] }
-		ast.Subscript { [expr.value, expr.slice] }
+		ast.Attribute {
+			[expr.value]
+		}
+		ast.Subscript {
+			[expr.value, expr.slice]
+		}
 		ast.Slice {
 			mut children := []ast.Expression{}
 			if lower := expr.lower {
@@ -133,12 +194,24 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			}
 			children
 		}
-		ast.ListComp { [expr.elt] }
-		ast.DictComp { [expr.key, expr.value] }
-		ast.SetComp { [expr.elt] }
-		ast.GeneratorExp { [expr.elt] }
-		ast.IfExp { [expr.test, expr.body, expr.orelse] }
-		ast.Await { [expr.value] }
+		ast.ListComp {
+			[expr.elt]
+		}
+		ast.DictComp {
+			[expr.key, expr.value]
+		}
+		ast.SetComp {
+			[expr.elt]
+		}
+		ast.GeneratorExp {
+			[expr.elt]
+		}
+		ast.IfExp {
+			[expr.test, expr.body, expr.orelse]
+		}
+		ast.Await {
+			[expr.value]
+		}
 		ast.Yield {
 			mut children := []ast.Expression{}
 			if value := expr.value {
@@ -146,9 +219,15 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			}
 			children
 		}
-		ast.YieldFrom { [expr.value] }
-		ast.Starred { [expr.value] }
-		ast.JoinedStr { expr.values.clone() }
+		ast.YieldFrom {
+			[expr.value]
+		}
+		ast.Starred {
+			[expr.value]
+		}
+		ast.JoinedStr {
+			expr.values.clone()
+		}
 		ast.FormattedValue {
 			mut children := []ast.Expression{}
 			children << expr.value
@@ -157,8 +236,12 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			}
 			children
 		}
-		ast.NamedExpr { [expr.target, expr.value] }
-		else { []ast.Expression{} }
+		ast.NamedExpr {
+			[expr.target, expr.value]
+		}
+		else {
+			[]ast.Expression{}
+		}
 	}
 }
 
@@ -237,7 +320,8 @@ fn (mut a AliasInferer) collect_aliases_stmt(stmt ast.Statement, mut aliases map
 		if cause := stmt.cause {
 			a.collect_aliases_expr(cause, mut aliases, mut instantiations, mut appends)
 		}
-	} else if stmt is ast.Global || stmt is ast.Nonlocal || stmt is ast.Pass || stmt is ast.Break || stmt is ast.Continue {
+	} else if stmt is ast.Global || stmt is ast.Nonlocal || stmt is ast.Pass || stmt is ast.Break
+		|| stmt is ast.Continue {
 	}
 }
 
@@ -264,7 +348,8 @@ fn (mut a AliasInferer) collect_aliases_expr(expr ast.Expression, mut aliases ma
 				a.collect_aliases_expr(arg, mut aliases, mut instantiations, mut appends)
 			}
 			for kw in expr.keywords {
-				a.collect_aliases_expr(kw.value, mut aliases, mut instantiations, mut appends)
+				a.collect_aliases_expr(kw.value, mut aliases, mut instantiations, mut
+					appends)
 			}
 			a.collect_aliases_expr(expr.func, mut aliases, mut instantiations, mut appends)
 		}
@@ -297,14 +382,19 @@ fn (mut a AliasInferer) collect_aliases_expr(expr ast.Expression, mut aliases ma
 			a.collect_aliases_expr(expr.left, mut aliases, mut instantiations, mut appends)
 			a.collect_aliases_expr(expr.right, mut aliases, mut instantiations, mut appends)
 		}
-		ast.UnaryOp { a.collect_aliases_expr(expr.operand, mut aliases, mut instantiations, mut appends) }
+		ast.UnaryOp {
+			a.collect_aliases_expr(expr.operand, mut aliases, mut instantiations, mut
+				appends)
+		}
 		ast.Compare {
 			a.collect_aliases_expr(expr.left, mut aliases, mut instantiations, mut appends)
 			for comp in expr.comparators {
 				a.collect_aliases_expr(comp, mut aliases, mut instantiations, mut appends)
 			}
 		}
-		ast.Attribute { a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends) }
+		ast.Attribute {
+			a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends)
+		}
 		ast.Subscript {
 			a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends)
 			a.collect_aliases_expr(expr.slice, mut aliases, mut instantiations, mut appends)
@@ -341,14 +431,20 @@ fn (mut a AliasInferer) collect_aliases_expr(expr ast.Expression, mut aliases ma
 			a.collect_aliases_expr(expr.body, mut aliases, mut instantiations, mut appends)
 			a.collect_aliases_expr(expr.orelse, mut aliases, mut instantiations, mut appends)
 		}
-		ast.Await { a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends) }
+		ast.Await {
+			a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends)
+		}
 		ast.Yield {
 			if value := expr.value {
 				a.collect_aliases_expr(value, mut aliases, mut instantiations, mut appends)
 			}
 		}
-		ast.YieldFrom { a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends) }
-		ast.Starred { a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends) }
+		ast.YieldFrom {
+			a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends)
+		}
+		ast.Starred {
+			a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends)
+		}
 		ast.JoinedStr {
 			for value in expr.values {
 				a.collect_aliases_expr(value, mut aliases, mut instantiations, mut appends)
@@ -357,7 +453,8 @@ fn (mut a AliasInferer) collect_aliases_expr(expr ast.Expression, mut aliases ma
 		ast.FormattedValue {
 			a.collect_aliases_expr(expr.value, mut aliases, mut instantiations, mut appends)
 			if format_spec := expr.format_spec {
-				a.collect_aliases_expr(format_spec, mut aliases, mut instantiations, mut appends)
+				a.collect_aliases_expr(format_spec, mut aliases, mut instantiations, mut
+					appends)
 			}
 		}
 		ast.NamedExpr {
@@ -432,7 +529,7 @@ pub fn (a &AliasInferer) get_type(alias string) string {
 pub struct MixinInferer {
 pub mut:
 	mixin_to_main   map[string][]string
-	main_to_mixins   map[string][]string
+	main_to_mixins  map[string][]string
 	mixin_nodes     map[string]string
 	class_hierarchy map[string][]string
 	is_abc          map[string]bool
@@ -443,7 +540,7 @@ pub mut:
 pub fn new_mixin_inferer() MixinInferer {
 	return MixinInferer{
 		mixin_to_main:   map[string][]string{}
-		main_to_mixins:   map[string][]string{}
+		main_to_mixins:  map[string][]string{}
 		mixin_nodes:     map[string]string{}
 		class_hierarchy: map[string][]string{}
 		is_abc:          map[string]bool{}
@@ -620,7 +717,8 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 								has_abstract = true
 								is_abstract_stmt = true
 							}
-							if dec is ast.Attribute && (dec as ast.Attribute).attr == 'abstractmethod' {
+							if dec is ast.Attribute
+								&& (dec as ast.Attribute).attr == 'abstractmethod' {
 								has_abstract = true
 								is_abstract_stmt = true
 							}
@@ -782,9 +880,9 @@ fn (mut f FunctionMutabilityScanner) mark_mutated(node ast.Expression) {
 		ast.Attribute {
 			if node.value is ast.Name {
 				f.mutated_params[node.value.id] = true
-				if f.scope_stack.len > 0 && node.value.id in ["self", "cls"] {
-					prefix := f.scope_stack.join(".")
-					key := "${prefix}.${node.attr}"
+				if f.scope_stack.len > 0 && node.value.id in ['self', 'cls'] {
+					prefix := f.scope_stack.join('.')
+					key := '${prefix}.${node.attr}'
 					mut info := f.mutability_map[key] or { MutabilityInfo{} }
 					info.is_mutated = true
 					f.mutability_map[key] = info
@@ -881,7 +979,9 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 			}
 			f.visit_expr(node.func)
 		}
-		ast.Attribute { f.visit_expr(node.value) }
+		ast.Attribute {
+			f.visit_expr(node.value)
+		}
 		ast.Subscript {
 			f.visit_expr(node.value)
 			f.visit_expr(node.slice)
@@ -890,7 +990,9 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 			f.visit_expr(node.left)
 			f.visit_expr(node.right)
 		}
-		ast.UnaryOp { f.visit_expr(node.operand) }
+		ast.UnaryOp {
+			f.visit_expr(node.operand)
+		}
 		ast.Compare {
 			f.visit_expr(node.left)
 			for comp in node.comparators {
@@ -954,14 +1056,20 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 		ast.GeneratorExp {
 			f.visit_expr(node.elt)
 		}
-		ast.Await { f.visit_expr(node.value) }
+		ast.Await {
+			f.visit_expr(node.value)
+		}
 		ast.Yield {
 			if value := node.value {
 				f.visit_expr(value)
 			}
 		}
-		ast.YieldFrom { f.visit_expr(node.value) }
-		ast.Starred { f.visit_expr(node.value) }
+		ast.YieldFrom {
+			f.visit_expr(node.value)
+		}
+		ast.Starred {
+			f.visit_expr(node.value)
+		}
 		ast.NamedExpr {
 			f.visit_expr(node.target)
 			f.visit_expr(node.value)
@@ -1074,10 +1182,10 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		ast.AugAssign {
 			if node.target is ast.Subscript || node.target is ast.Attribute {
 				f.mark_mutated(node.target)
-			f.add_to_seen(node.target)
+				f.add_to_seen(node.target)
 			} else if node.target is ast.Name {
 				f.mark_reassigned(node.target)
-			f.add_to_seen(node.target)
+				f.add_to_seen(node.target)
 			}
 			f.visit_expr(node.target)
 			f.visit_expr(node.value)
@@ -1217,10 +1325,10 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			if _ := node.value {
 				if node.target is ast.Subscript || node.target is ast.Attribute {
 					f.mark_mutated(node.target)
-			f.add_to_seen(node.target)
+					f.add_to_seen(node.target)
 				} else if node.target is ast.Name {
 					f.mark_reassigned(node.target)
-			f.add_to_seen(node.target)
+					f.add_to_seen(node.target)
 				}
 			}
 			f.visit_expr(node.target)
@@ -1250,7 +1358,9 @@ fn (mut f FunctionMutabilityScanner) visit_type_param(node ast.TypeParam) {
 
 fn (mut f FunctionMutabilityScanner) visit_pattern(node ast.Pattern) {
 	match node {
-		ast.MatchValue { f.visit_expr(node.value) }
+		ast.MatchValue {
+			f.visit_expr(node.value)
+		}
 		ast.MatchSequence {
 			for pattern in node.patterns {
 				f.visit_pattern(pattern)

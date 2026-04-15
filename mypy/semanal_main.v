@@ -91,8 +91,8 @@ fn process_top_levels(mut graph Graph, scc []string, mut patches Patches) {
 			mut next_state := graph[next_id] or { continue }
 			tree := next_state.tree or { continue }
 
-			deferred, incomplete, progress := semantic_analyze_target(next_id, next_id,
-				mut *next_state, TargetNode(tree), none, final_iteration, mut patches)
+			deferred, incomplete, progress := semantic_analyze_target(next_id, next_id, mut
+				*next_state, TargetNode(tree), none, final_iteration, mut patches)
 
 			all_deferred << deferred
 			any_progress = any_progress || progress

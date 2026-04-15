@@ -37,7 +37,9 @@ pub fn (mut pc PatternChecker) accept(p PatternNode, type_context MypyTypeNode) 
 }
 
 fn (pc PatternChecker) require_type_checker() &TypeChecker {
-	return pc.chk or { panic('PatternChecker requires an initialized TypeChecker; this usually means pattern checking started before pc.chk was set') }
+	return pc.chk or {
+		panic('PatternChecker requires an initialized TypeChecker; this usually means pattern checking started before pc.chk was set')
+	}
 }
 
 pub fn (mut pc PatternChecker) visit_as_pattern(p AsPattern) PatternTypeResult {

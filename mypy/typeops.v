@@ -80,7 +80,9 @@ pub fn get_self_type(func CallableType, def_info TypeInfo) ?MypyTypeNode {
 		return func.ret_type
 	}
 
-	if func.arg_types.len > 0 && func.arg_types[0] is Instance && (func.arg_types[0] as Instance) == (default_self as Instance) && func.arg_kinds[0] == .arg_pos {
+	if func.arg_types.len > 0 && func.arg_types[0] is Instance
+		&& (func.arg_types[0] as Instance) == (default_self as Instance)
+		&& func.arg_kinds[0] == .arg_pos {
 		return func.arg_types[0]
 	}
 

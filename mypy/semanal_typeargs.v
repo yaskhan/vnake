@@ -67,7 +67,9 @@ pub fn (mut v TypeArgumentAnalyzer) visit_type_alias_type(t &TypeAliasType) !Any
 	v.seen_aliases[alias.fullname] = true
 	defer { v.seen_aliases.delete(alias.fullname) }
 
-	is_error, is_invalid := v.validate_args(alias.name, t.args, alias.alias_tvars, Context{line: t.line})
+	is_error, is_invalid := v.validate_args(alias.name, t.args, alias.alias_tvars, Context{
+		line: t.line
+	})
 
 	if is_invalid {
 		// Erase args
@@ -84,7 +86,7 @@ pub fn (mut v TypeArgumentAnalyzer) visit_type_alias_type(t &TypeAliasType) !Any
 pub fn (mut v TypeArgumentAnalyzer) visit_tuple_type(t &TupleType) !AnyNode {
 	// t.items = flatten_nested_tuples(t.items)
 	for _, it in t.items {
-		if v.check_non_paramspec(it, 'tuple', Context{line: t.line}) {
+		if v.check_non_paramspec(it, 'tuple', Context{ line: t.line }) {
 			// t.items[i] = ...
 		}
 	}
@@ -104,7 +106,7 @@ pub fn (mut v TypeArgumentAnalyzer) visit_instance(t &Instance) !AnyNode {
 
 pub fn (mut v TypeArgumentAnalyzer) check_non_paramspec(arg MypyTypeNode, tv_kind string, context Context) bool {
 	if arg is ParamSpecType {
-				v.fail('Invalid location for ParamSpec', context, valid_type.code)
+		v.fail('Invalid location for ParamSpec', context, valid_type.code)
 		// note ...
 		return true
 	}

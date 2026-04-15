@@ -6,7 +6,7 @@ import analyzer
 
 pub struct ModuleEmitter {
 pub mut:
-	module_name     string
+	module_name      string
 	helper_structs   []string
 	helper_functions []string
 	imports          map[string]bool
@@ -21,7 +21,7 @@ pub mut:
 
 pub fn new_module_emitter() ModuleEmitter {
 	return ModuleEmitter{
-		module_name:     'main'
+		module_name:      'main'
 		helper_structs:   []string{}
 		helper_functions: []string{}
 		imports:          map[string]bool{}
@@ -43,17 +43,25 @@ fn extract_symbol_name(code string, keywords []string) string {
 			break
 		}
 	}
-	
+
 	for kw in keywords {
 		if s.starts_with(kw + ' ') {
 			s = s[kw.len..].trim_space()
 		}
 	}
 
-	if s.contains(' ') { s = s.all_before(' ') }
-	if s.contains('{') { s = s.all_before('{') }
-	if s.contains('(') { s = s.all_before('(') }
-	if s.contains('[') { s = s.all_before('[') }
+	if s.contains(' ') {
+		s = s.all_before(' ')
+	}
+	if s.contains('{') {
+		s = s.all_before('{')
+	}
+	if s.contains('(') {
+		s = s.all_before('(')
+	}
+	if s.contains('[') {
+		s = s.all_before('[')
+	}
 	return s.trim_space()
 }
 
@@ -66,7 +74,9 @@ pub fn (mut e ModuleEmitter) add_helper_struct(code string) {
 
 	for existing in e.helper_structs {
 		ex_name := extract_symbol_name(existing, ['pub', 'struct', 'interface', 'type'])
-		if name == ex_name { return }
+		if name == ex_name {
+			return
+		}
 	}
 	e.helper_structs << code
 }
@@ -80,7 +90,9 @@ pub fn (mut e ModuleEmitter) add_helper_function(code string) {
 
 	for existing in e.helper_functions {
 		ex_name := extract_symbol_name(existing, ['pub', 'fn'])
-		if name == ex_name { return }
+		if name == ex_name {
+			return
+		}
 	}
 	e.helper_functions << code
 }
@@ -150,6 +162,7 @@ pub fn (mut e ModuleEmitter) add_global(code string) {
 	}
 	e.globals << code
 }
+
 pub fn (mut e ModuleEmitter) add_helper_import(name string) {
 	e.imports[name] = true
 }
@@ -174,11 +187,16 @@ pub fn (e &ModuleEmitter) emit() string {
 		parts << 'pub struct PyVersionInfo { pub: major int minor int micro int }'
 		parts << 'pub const sys_version_info = PyVersionInfo{major: 3, minor: 11, micro: 0}'
 		parts << "pub fn (n NoneType) str() string { return 'None' }"
-		
-		mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any', 'map[string]Any']
+
+		mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
+			'map[string]Any']
 		if e.used_builtins['Template'] {
-			if 'Interpolation' !in any_variants { any_variants << 'Interpolation' }
-			if 'Template' !in any_variants { any_variants << 'Template' }
+			if 'Interpolation' !in any_variants {
+				any_variants << 'Interpolation'
+			}
+			if 'Template' !in any_variants {
+				any_variants << 'Template'
+			}
 		}
 		for cls_name, _ in e.defined_classes {
 			v_cls := cls_name.trim_left('&')
@@ -186,7 +204,7 @@ pub fn (e &ModuleEmitter) emit() string {
 				any_variants << v_cls
 			}
 		}
-		parts << 'pub type Any = ${any_variants.join(" | ")}'
+		parts << 'pub type Any = ${any_variants.join(' | ')}'
 	}
 
 	if e.constants.len > 0 {
@@ -232,21 +250,19 @@ fn clean_string_constant(value string) string {
 @[heap]
 pub struct ModuleTranslator {
 pub mut:
-	state         &base.TranslatorState
-	emitter       ModuleEmitter
+	state             &base.TranslatorState
+	emitter           ModuleEmitter
 	coroutine_handler analyzer.CoroutineHandler
 	analyzer          &analyzer.Analyzer
 	visit_stmt_fn     fn (ast.Statement) = noop_visit_stmt
-	source_mapping bool
-	strict_exports bool
-	has_module_all bool
+	source_mapping    bool
+	strict_exports    bool
+	has_module_all    bool
 }
 
-pub fn new_module_translator(
-	mut state &base.TranslatorState,
+pub fn new_module_translator(mut state base.TranslatorState,
 	type_analyzer &analyzer.Analyzer,
-	visit_stmt_fn fn (ast.Statement),
-) &ModuleTranslator {
+	visit_stmt_fn fn (ast.Statement)) &ModuleTranslator {
 	mut m := &ModuleTranslator{
 		state:             state
 		emitter:           new_module_emitter()
@@ -261,13 +277,11 @@ pub fn new_module_translator(
 	return m
 }
 
-pub fn new_module_translator_with_flags(
-	mut state &base.TranslatorState,
+pub fn new_module_translator_with_flags(mut state base.TranslatorState,
 	type_analyzer &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 	source_mapping bool,
-	strict_exports bool,
-) &ModuleTranslator {
+	strict_exports bool) &ModuleTranslator {
 	mut mt := new_module_translator(mut state, type_analyzer, visit_stmt_fn)
 	mt.source_mapping = source_mapping
 	mt.strict_exports = strict_exports
@@ -312,10 +326,30 @@ fn (mut m ModuleTranslator) collect_declared_names_from_block(body []ast.Stateme
 
 fn (mut m ModuleTranslator) collect_declared_names_from_stmt(stmt ast.Statement, mut names map[string]bool) {
 	match stmt {
-		ast.FunctionDef { names[stmt.name] = true }
-		ast.ClassDef { names[stmt.name] = true }
-		ast.Import { for n in stmt.names { names[if val := n.asname { val } else { n.name }] = true } }
-		ast.ImportFrom { for n in stmt.names { names[if val := n.asname { val } else { n.name }] = true } }
+		ast.FunctionDef {
+			names[stmt.name] = true
+		}
+		ast.ClassDef {
+			names[stmt.name] = true
+		}
+		ast.Import {
+			for n in stmt.names {
+				names[if val := n.asname {
+					val
+				} else {
+					n.name
+				}] = true
+			}
+		}
+		ast.ImportFrom {
+			for n in stmt.names {
+				names[if val := n.asname {
+					val
+				} else {
+					n.name
+				}] = true
+			}
+		}
 		ast.Assign {
 			for target in stmt.targets {
 				m.collect_names_from_expr(target, mut names)
@@ -327,7 +361,6 @@ fn (mut m ModuleTranslator) collect_declared_names_from_stmt(stmt ast.Statement,
 		else {}
 	}
 }
-
 
 fn (mut m ModuleTranslator) collect_assigned_names(n []ast.Statement, mut names map[string]bool) {
 	for stmt in n {
@@ -446,12 +479,22 @@ fn (m &ModuleTranslator) collect_global_refs(node ast.ASTNode, top_level map[str
 		}
 	} else if node is ast.FunctionDef {
 		mut inner_assigned := assigned_locally.clone()
-		for arg in node.args.args { inner_assigned[arg.arg] = true }
-		for arg in node.args.posonlyargs { inner_assigned[arg.arg] = true }
-		for arg in node.args.kwonlyargs { inner_assigned[arg.arg] = true }
-		if va := node.args.vararg { inner_assigned[va.arg] = true }
-		if ka := node.args.kwarg { inner_assigned[ka.arg] = true }
-		
+		for arg in node.args.args {
+			inner_assigned[arg.arg] = true
+		}
+		for arg in node.args.posonlyargs {
+			inner_assigned[arg.arg] = true
+		}
+		for arg in node.args.kwonlyargs {
+			inner_assigned[arg.arg] = true
+		}
+		if va := node.args.vararg {
+			inner_assigned[va.arg] = true
+		}
+		if ka := node.args.kwarg {
+			inner_assigned[ka.arg] = true
+		}
+
 		m.collect_inner_assignments(node.body, mut inner_assigned)
 		m.collect_inner_refs(node.body, top_level, mut inner_assigned, mut globals)
 	} else if node is ast.ClassDef {
@@ -465,7 +508,9 @@ fn (m &ModuleTranslator) collect_inner_assignments(body []ast.Statement, mut ass
 	for stmt in body {
 		match stmt {
 			ast.Assign {
-				for t in stmt.targets { m.collect_names_from_expr(t, mut assigned) }
+				for t in stmt.targets {
+					m.collect_names_from_expr(t, mut assigned)
+				}
 			}
 			ast.AnnAssign {
 				m.collect_names_from_expr(stmt.target, mut assigned)
@@ -485,14 +530,18 @@ fn (m &ModuleTranslator) collect_inner_assignments(body []ast.Statement, mut ass
 			}
 			ast.With {
 				for item in stmt.items {
-					if opt := item.optional_vars { m.collect_names_from_expr(opt, mut assigned) }
+					if opt := item.optional_vars {
+						m.collect_names_from_expr(opt, mut assigned)
+					}
 				}
 				m.collect_inner_assignments(stmt.body, mut assigned)
 			}
 			ast.Try {
 				m.collect_inner_assignments(stmt.body, mut assigned)
 				for h in stmt.handlers {
-					if n := h.name { assigned[n] = true }
+					if n := h.name {
+						assigned[n] = true
+					}
 					m.collect_inner_assignments(h.body, mut assigned)
 				}
 				m.collect_inner_assignments(stmt.orelse, mut assigned)
@@ -511,34 +560,58 @@ fn (m &ModuleTranslator) collect_inner_refs(body []ast.Statement, top_level map[
 
 fn (m &ModuleTranslator) walk_stmt_refs(s ast.Statement, top_level map[string]bool, mut assigned map[string]bool, mut globals map[string]bool) {
 	match s {
-		ast.Expr { m.walk_expr_refs(s.value, top_level, assigned, mut globals) }
+		ast.Expr {
+			m.walk_expr_refs(s.value, top_level, assigned, mut globals)
+		}
 		ast.Assign {
-			for t in s.targets { m.walk_expr_refs(t, top_level, assigned, mut globals) }
+			for t in s.targets {
+				m.walk_expr_refs(t, top_level, assigned, mut globals)
+			}
 			m.walk_expr_refs(s.value, top_level, assigned, mut globals)
 		}
 		ast.AnnAssign {
 			m.walk_expr_refs(s.target, top_level, assigned, mut globals)
-			if v := s.value { m.walk_expr_refs(v, top_level, assigned, mut globals) }
+			if v := s.value {
+				m.walk_expr_refs(v, top_level, assigned, mut globals)
+			}
 		}
-		ast.Return { if v := s.value { m.walk_expr_refs(v, top_level, assigned, mut globals) } }
+		ast.Return {
+			if v := s.value {
+				m.walk_expr_refs(v, top_level, assigned, mut globals)
+			}
+		}
 		ast.If {
 			m.walk_expr_refs(s.test, top_level, assigned, mut globals)
-			for item in s.body { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
-			for item in s.orelse { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
+			for item in s.body {
+				m.walk_stmt_refs(item, top_level, mut assigned, mut globals)
+			}
+			for item in s.orelse {
+				m.walk_stmt_refs(item, top_level, mut assigned, mut globals)
+			}
 		}
 		ast.While {
 			m.walk_expr_refs(s.test, top_level, assigned, mut globals)
-			for item in s.body { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
-			for item in s.orelse { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
+			for item in s.body {
+				m.walk_stmt_refs(item, top_level, mut assigned, mut globals)
+			}
+			for item in s.orelse {
+				m.walk_stmt_refs(item, top_level, mut assigned, mut globals)
+			}
 		}
 		ast.For {
 			m.walk_expr_refs(s.target, top_level, assigned, mut globals)
 			m.walk_expr_refs(s.iter, top_level, assigned, mut globals)
-			for item in s.body { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
-			for item in s.orelse { m.walk_stmt_refs(item, top_level, mut assigned, mut globals) }
+			for item in s.body {
+				m.walk_stmt_refs(item, top_level, mut assigned, mut globals)
+			}
+			for item in s.orelse {
+				m.walk_stmt_refs(item, top_level, mut assigned, mut globals)
+			}
 		}
 		ast.Global {
-			for name in s.names { globals[name] = true }
+			for name in s.names {
+				globals[name] = true
+			}
 		}
 		ast.FunctionDef {
 			m.collect_global_refs(s, top_level, mut assigned, mut globals)
@@ -559,14 +632,20 @@ fn (m &ModuleTranslator) walk_expr_refs(e ast.Expression, top_level map[string]b
 		}
 		ast.Call {
 			m.walk_expr_refs(e.func, top_level, assigned, mut globals)
-			for a in e.args { m.walk_expr_refs(a, top_level, assigned, mut globals) }
+			for a in e.args {
+				m.walk_expr_refs(a, top_level, assigned, mut globals)
+			}
 		}
-		ast.Attribute { m.walk_expr_refs(e.value, top_level, assigned, mut globals) }
+		ast.Attribute {
+			m.walk_expr_refs(e.value, top_level, assigned, mut globals)
+		}
 		ast.BinaryOp {
 			m.walk_expr_refs(e.left, top_level, assigned, mut globals)
 			m.walk_expr_refs(e.right, top_level, assigned, mut globals)
 		}
-		ast.UnaryOp { m.walk_expr_refs(e.operand, top_level, assigned, mut globals) }
+		ast.UnaryOp {
+			m.walk_expr_refs(e.operand, top_level, assigned, mut globals)
+		}
 		ast.IfExp {
 			m.walk_expr_refs(e.test, top_level, assigned, mut globals)
 			m.walk_expr_refs(e.body, top_level, assigned, mut globals)
@@ -574,14 +653,32 @@ fn (m &ModuleTranslator) walk_expr_refs(e ast.Expression, top_level map[string]b
 		}
 		ast.Compare {
 			m.walk_expr_refs(e.left, top_level, assigned, mut globals)
-			for c in e.comparators { m.walk_expr_refs(c, top_level, assigned, mut globals) }
+			for c in e.comparators {
+				m.walk_expr_refs(c, top_level, assigned, mut globals)
+			}
 		}
-		ast.Tuple { for item in e.elements { m.walk_expr_refs(item, top_level, assigned, mut globals) } }
-		ast.List { for item in e.elements { m.walk_expr_refs(item, top_level, assigned, mut globals) } }
-		ast.Set { for item in e.elements { m.walk_expr_refs(item, top_level, assigned, mut globals) } }
+		ast.Tuple {
+			for item in e.elements {
+				m.walk_expr_refs(item, top_level, assigned, mut globals)
+			}
+		}
+		ast.List {
+			for item in e.elements {
+				m.walk_expr_refs(item, top_level, assigned, mut globals)
+			}
+		}
+		ast.Set {
+			for item in e.elements {
+				m.walk_expr_refs(item, top_level, assigned, mut globals)
+			}
+		}
 		ast.Dict {
-			for k in e.keys { m.walk_expr_refs(k, top_level, assigned, mut globals) }
-			for v in e.values { m.walk_expr_refs(v, top_level, assigned, mut globals) }
+			for k in e.keys {
+				m.walk_expr_refs(k, top_level, assigned, mut globals)
+			}
+			for v in e.values {
+				m.walk_expr_refs(v, top_level, assigned, mut globals)
+			}
 		}
 		else {}
 	}
@@ -590,7 +687,7 @@ fn (m &ModuleTranslator) walk_expr_refs(e ast.Expression, top_level map[string]b
 fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 	m.state.module_all = []string{}
 	m.has_module_all = false
-	
+
 	// Pre-scan for __all__
 	for stmt in node.body {
 		if stmt is ast.Assign {
@@ -638,7 +735,9 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 				mut names := map[string]bool{}
 				m.collect_names_from_expr(target, mut names)
 				for name, _ in names {
-					if name == '__all__' { continue }
+					if name == '__all__' {
+						continue
+					}
 					mut is_mutated := false
 					m_info := m.analyzer.get_mutability(name)
 					if m_info.is_mutated {
@@ -659,7 +758,9 @@ fn (mut m ModuleTranslator) scan_module_symbols(node ast.Module) {
 					is_mutated = true
 				}
 				// Annotated assignments are often intended to be globals
-				if is_mutated || (stmt.value != none && !base.is_compile_time_evaluable(stmt.value or { panic('unreachable') })) || stmt.value == none {
+				if is_mutated || (stmt.value != none && !base.is_compile_time_evaluable(stmt.value or {
+					panic('unreachable')
+				})) || stmt.value == none {
 					m.state.global_vars[name] = true
 				}
 			}
@@ -696,17 +797,20 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 		imported[mod] = true
 	}
 
-	if m.state.used_builtins["regex"] {
-		m.emitter.add_helper_import("regex")
+	if m.state.used_builtins['regex'] {
+		m.emitter.add_helper_import('regex')
 	}
-	if m.state.used_builtins['math.pow'] || m.state.used_builtins['math.floor'] || m.state.used_builtins['py_round'] {
+	if m.state.used_builtins['math.pow'] || m.state.used_builtins['math.floor']
+		|| m.state.used_builtins['py_round'] {
 		m.emitter.add_helper_import('math')
 	}
 	if m.state.used_builtins['py_set_union'] || m.state.used_builtins['py_set_intersection']
 		|| m.state.used_builtins['py_set_difference'] || m.state.used_builtins['py_set_xor']
 		|| m.state.used_builtins['py_set_subset'] || m.state.used_builtins['py_set_strict_subset']
-		|| m.state.used_builtins['py_set_superset'] || m.state.used_builtins['py_set_strict_superset']
-		|| m.state.used_builtins['py_set_from_list'] || m.state.used_builtins['py_set_from_iter'] || m.state.used_builtins['py_set_from_array'] {
+		|| m.state.used_builtins['py_set_superset']
+		|| m.state.used_builtins['py_set_strict_superset']
+		|| m.state.used_builtins['py_set_from_list'] || m.state.used_builtins['py_set_from_iter']
+		|| m.state.used_builtins['py_set_from_array'] {
 		m.emitter.add_helper_import('datatypes')
 		if m.state.used_builtins['py_set_union'] {
 			m.emitter.add_helper_function('fn py_set_union[K](a datatypes.Set[K], b datatypes.Set[K]) datatypes.Set[K] {
@@ -730,7 +834,7 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 }')
 		}
 	}
-	
+
 	if 'tempfile' in imported {
 		m.emitter.add_helper_import('os')
 		m.emitter.add_helper_struct('struct PyTempDir { path string }')
@@ -759,11 +863,13 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 		mut lines := []string{}
 		lines << 'fn ${func_name}(arg Any) {'
 		lines << '    // Singledispatch implementation'
-		
+
 		default_impl := registry['default'] or { '' }
 		mut first := true
 		for type_name, impl_name in registry {
-			if type_name == 'default' { continue }
+			if type_name == 'default' {
+				continue
+			}
 			pfx := if first { 'if' } else { ' else if' }
 			lines << '    ${pfx} arg is ${type_name} {'
 			lines << '        ${impl_name}(arg as ${type_name})'
@@ -786,9 +892,6 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 	if m.state.used_builtins['py_is_identical'] {
 		m.emitter.add_helper_function('fn py_is_identical[T, U](a T, b U) bool { return voidptr(&a) == voidptr(&b) }')
 	}
-
-
-
 
 	if m.state.used_list_concat {
 		m.emitter.add_helper_function('fn py_list_concat[T](lists ...[]T) []T {
@@ -871,8 +974,8 @@ fn (mut m ModuleTranslator) append_runtime_helpers() {
 
 	if m.state.used_string_format || m.state.used_builtins['py_bytes_format'] {
 		m.emitter.add_helper_import('strings')
-		
-				m.emitter.add_helper_function('fn py_string_format(fmt string, args ...Any) string {
+
+		m.emitter.add_helper_function('fn py_string_format(fmt string, args ...Any) string {
     mut res := strings.new_builder(fmt.len + 16)
     mut arg_idx := 0
     mut i := 0
@@ -1074,7 +1177,6 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 	}
 
-
 	if 'py_any' in m.state.used_builtins {
 		m.emitter.add_helper_function('fn py_any[T](a []T) bool {
     for x in a { if py_bool(x) { return true } }
@@ -1090,7 +1192,6 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 }')
 		m.state.used_builtins['py_bool'] = true
 	}
-
 
 	if 'py_round' in m.state.used_builtins || 'round' in m.state.used_builtins {
 		m.emitter.add_helper_import('math')
@@ -1187,7 +1288,6 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
     return d
 }')
 	}
-
 
 	if m.state.used_builtins['py_dict_items'] {
 		m.emitter.add_helper_function('struct PyDictItem[K, V] { key K; value V }')
@@ -1547,9 +1647,9 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn (c PySqliteConnection) close() { c.db.close() or {} }')
 	}
 
-	if 'os' in imported || m.state.used_builtins["py_os_system"] {
-		m.emitter.add_helper_import("os")
-		m.emitter.add_helper_function("//##LLM@@ SECURITY WARNING: os.system is insecure as it executes commands via a shell. Consider using subprocess.run with a list of arguments instead.\nfn py_os_system(cmd string) int {\n    return os.system(cmd)\n}")
+	if 'os' in imported || m.state.used_builtins['py_os_system'] {
+		m.emitter.add_helper_import('os')
+		m.emitter.add_helper_function('//##LLM@@ SECURITY WARNING: os.system is insecure as it executes commands via a shell. Consider using subprocess.run with a list of arguments instead.\nfn py_os_system(cmd string) int {\n    return os.system(cmd)\n}')
 	}
 	if 'subprocess' in imported {
 		m.emitter.add_helper_import('os')
@@ -1619,17 +1719,18 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_gzip_decompress(data []u8) []u8 { return gzip.decompress(data) or { panic(err) } }')
 	}
 
-	if 'copy' in imported || m.state.used_builtins['py_copy'] || m.state.used_builtins['py_deepcopy'] {
-		m.emitter.add_helper_function("fn py_copy[T](x T) T {
+	if 'copy' in imported || m.state.used_builtins['py_copy']
+		|| m.state.used_builtins['py_deepcopy'] {
+		m.emitter.add_helper_function('fn py_copy[T](x T) T {
     \x24if T is array { return x.clone() }
     \x24else \x24if T is map { return x.clone() }
     \x24else { return x }
-}")
-		m.emitter.add_helper_function("fn py_deepcopy[T](x T) T {
+}')
+		m.emitter.add_helper_function('fn py_deepcopy[T](x T) T {
     \x24if T is array { return x.clone() }
     \x24else \x24if T is map { return x.clone() }
     \x24else { return x }
-}")
+}')
 	}
 
 	if m.state.used_builtins['py_os_path_split'] {
@@ -1650,7 +1751,7 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 		m.emitter.add_helper_function('fn py_array[T](code string, init []T) []T { return init }')
 	}
 
-		if 'fractions' in imported {
+	if 'fractions' in imported {
 		m.emitter.add_helper_import('math.fractions')
 		m.emitter.add_helper_function('fn py_fraction(val Any) fractions.Fraction {
     \x24if val is int { return fractions.fraction(i64(val), 1) }
@@ -1720,24 +1821,23 @@ fn py_bytes_format(fmt []u8, args Any) []u8 {
 	}
 
 	if m.state.used_builtins['py_repr'] {
-		m.emitter.add_helper_function("fn py_repr(val Any) string {
-    if val is string { return \"'\" + val + \"'\" }
-    return \"\x24{val}\"
-}")
+		m.emitter.add_helper_function('fn py_repr(val Any) string {
+    if val is string { return "\'" + val + "\'" }
+    return "\x24{val}"
+}')
 	}
 
 	if m.state.used_builtins['py_ascii'] {
-		m.emitter.add_helper_function("fn py_ascii(val Any) string {
-    s := \"\x24{val}\"
-    mut res := ''
+		m.emitter.add_helper_function('fn py_ascii(val Any) string {
+    s := "\x24{val}"
+    mut res := \'\'
     for c in s {
         if c < 128 { res += c.ascii_str() }
-        else { res += '\\\\u' + int(c).hex() }
+        else { res += \'\\\\u\' + int(c).hex() }
     }
     return res
-}")
+}')
 	}
-
 
 	if m.state.used_builtins['py_dict_items'] {
 		m.emitter.add_helper_function('struct PyDictItem[K, V] { key K; value V }')
@@ -1814,8 +1914,9 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 		if m.source_mapping {
 			m.state.output << '// @line: ${m.state.get_source_info(stmt.get_token())}'
 		}
-		
-		if stmt is ast.FunctionDef || stmt is ast.ClassDef || stmt is ast.Import || stmt is ast.ImportFrom {
+
+		if stmt is ast.FunctionDef || stmt is ast.ClassDef || stmt is ast.Import
+			|| stmt is ast.ImportFrom {
 			m.state.in_main = false
 			m.visit_stmt_fn(stmt)
 			m.state.in_main = true
@@ -1850,7 +1951,8 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 				m.emitter.add_helper_function(line)
 			} else if stmt is ast.ClassDef {
 				m.emitter.add_helper_struct(line) // For now, handle as block
-			} else if line.trim_space().starts_with('const ') || line.trim_space().starts_with('pub const ') {
+			} else if line.trim_space().starts_with('const ')
+				|| line.trim_space().starts_with('pub const ') {
 				m.emitter.add_constant(line.trim_space())
 			} else if line.trim_space().contains('__global ') {
 				m.emitter.add_global(line.trim_space())
@@ -1859,7 +1961,7 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 			}
 		}
 	}
-	
+
 	m.emitter.used_builtins = m.state.used_builtins.clone()
 
 	if m.has_module_all {

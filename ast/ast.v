@@ -254,8 +254,8 @@ pub fn (n &Compare) str() string {
 
 pub struct BoolOp {
 pub:
-	token Token
-	op    Token
+	token  Token
+	op     Token
 	values []Expression
 }
 
@@ -732,7 +732,7 @@ pub:
 
 pub struct FunctionDef {
 pub:
-	token          Token
+	token Token
 pub mut:
 	name           string
 	args           Arguments

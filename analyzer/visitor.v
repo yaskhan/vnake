@@ -52,7 +52,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 	if t.guess_type_handler != unsafe { nil } {
 		return t.guess_type_handler(node, t.type_ctx())
 	}
-	
+
 	// Fallback for analysis pass if handler is not set
 	match node {
 		ast.Constant {
@@ -64,13 +64,23 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 				return if node.value.contains('.') { 'f64' } else { 'int' }
 			}
 			if tok.typ == .keyword {
-				if node.value in ['True', 'False'] { return 'bool' }
-				if node.value == 'None' { return 'none' }
+				if node.value in ['True', 'False'] {
+					return 'bool'
+				}
+				if node.value == 'None' {
+					return 'none'
+				}
 			}
 		}
-		ast.List { return '[]Any' }
-		ast.Dict { return 'map[string]Any' }
-		ast.Tuple { return '[]Any' }
+		ast.List {
+			return '[]Any'
+		}
+		ast.Dict {
+			return 'map[string]Any'
+		}
+		ast.Tuple {
+			return '[]Any'
+		}
 		ast.UnaryOp {
 			return t.guess_expr_type(node.operand)
 		}
@@ -78,13 +88,17 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 			if node.op.value == '|' {
 				left := t.guess_expr_type(node.left)
 				right := t.guess_expr_type(node.right)
-				if (left == 'none' || left == 'NoneType') && right != 'Any' { return '?' + right }
-				if (right == 'none' || right == 'NoneType') && left != 'Any' { return '?' + left }
+				if (left == 'none' || left == 'NoneType') && right != 'Any' {
+					return '?' + right
+				}
+				if (right == 'none' || right == 'NoneType') && left != 'Any' {
+					return '?' + left
+				}
 				return left + ' | ' + right
 			}
 			return t.guess_expr_type(node.left)
 		}
-		ast.Name { 
+		ast.Name {
 			res := t.get_type(node.id)
 			if res == 'Any' && node.id.len > 0 && node.id[0].is_capital() {
 				return node.id
@@ -150,7 +164,7 @@ fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 	if name.len == 0 || typ.len == 0 {
 		return
 	}
-	eprintln('DEBUG: analyzer.store_type ${name} = ${typ} (in ${t.scope_names.join("/")})')
+	eprintln('DEBUG: analyzer.store_type ${name} = ${typ} (in ${t.scope_names.join('/')})')
 	if t.scope_names.len == 0 {
 		t.type_map[name] = typ
 	}
@@ -297,7 +311,9 @@ fn (mut t TypeInferenceVisitorMixin) get_base_node(node ast.Expression) ast.Expr
 
 fn (t &TypeInferenceVisitorMixin) expr_to_name(node ast.Expression) string {
 	return match node {
-		ast.Name { node.id }
+		ast.Name {
+			node.id
+		}
 		ast.Attribute {
 			base_name := t.expr_to_name(node.value)
 			if base_name.len > 0 {
@@ -306,13 +322,17 @@ fn (t &TypeInferenceVisitorMixin) expr_to_name(node ast.Expression) string {
 				node.attr
 			}
 		}
-		else { '' }
+		else {
+			''
+		}
 	}
 }
 
 fn (mut t TypeInferenceVisitorMixin) expr_to_type_string(node ast.Expression) string {
 	return match node {
-		ast.Name { node.id }
+		ast.Name {
+			node.id
+		}
 		ast.Attribute {
 			base_name := t.expr_to_type_string(node.value)
 			if base_name.len > 0 {
@@ -333,13 +353,27 @@ fn (mut t TypeInferenceVisitorMixin) expr_to_type_string(node ast.Expression) st
 				base_name
 			}
 		}
-		ast.Tuple { node.elements.map(t.expr_to_type_string(it)).join(', ') }
-		ast.List { node.elements.map(t.expr_to_type_string(it)).join(', ') }
-		ast.Constant { node.value }
-		ast.NoneExpr { 'None' }
-		ast.Call { t.expr_to_type_string(node.func) }
-		ast.JoinedStr { 'LiteralString' }
-		ast.FormattedValue { t.expr_to_type_string(node.value) }
+		ast.Tuple {
+			node.elements.map(t.expr_to_type_string(it)).join(', ')
+		}
+		ast.List {
+			node.elements.map(t.expr_to_type_string(it)).join(', ')
+		}
+		ast.Constant {
+			node.value
+		}
+		ast.NoneExpr {
+			'None'
+		}
+		ast.Call {
+			t.expr_to_type_string(node.func)
+		}
+		ast.JoinedStr {
+			'LiteralString'
+		}
+		ast.FormattedValue {
+			t.expr_to_type_string(node.value)
+		}
 		ast.BinaryOp {
 			if node.op.value == '|' {
 				'${t.expr_to_type_string(node.left)} | ${t.expr_to_type_string(node.right)}'
@@ -347,8 +381,12 @@ fn (mut t TypeInferenceVisitorMixin) expr_to_type_string(node ast.Expression) st
 				t.expr_to_type_string(node.left)
 			}
 		}
-		ast.UnaryOp { '${node.op.value}${t.expr_to_type_string(node.operand)}' }
-		ast.Starred { t.expr_to_type_string(node.value) }
+		ast.UnaryOp {
+			'${node.op.value}${t.expr_to_type_string(node.operand)}'
+		}
+		ast.Starred {
+			t.expr_to_type_string(node.value)
+		}
 		ast.Slice {
 			mut parts := []string{}
 			if lower_expr := node.lower {
@@ -362,14 +400,20 @@ fn (mut t TypeInferenceVisitorMixin) expr_to_type_string(node ast.Expression) st
 			}
 			parts.join(':')
 		}
-		else { '' }
+		else {
+			''
+		}
 	}
 }
 
 pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
 	return match node {
-		ast.Name { node.id }
-		ast.NoneExpr { 'none' }
+		ast.Name {
+			node.id
+		}
+		ast.NoneExpr {
+			'none'
+		}
 		ast.Constant {
 			if node.value == 'None' {
 				'none'
@@ -379,9 +423,10 @@ pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
 				'false'
 			} else if node.token.typ == .number {
 				node.value
-			} else if node.token.typ == .string_tok || node.token.typ == .fstring_tok || node.token.typ == .tstring_tok {
-				if node.value.starts_with("'") || node.value.starts_with('"') || node.value.starts_with('t\'')
-					|| node.value.starts_with('t"') {
+			} else if node.token.typ == .string_tok || node.token.typ == .fstring_tok
+				|| node.token.typ == .tstring_tok {
+				if node.value.starts_with("'") || node.value.starts_with('"')
+					|| node.value.starts_with("t'") || node.value.starts_with('t"') {
 					node.value
 				} else {
 					"'${node.value}'"
@@ -390,9 +435,15 @@ pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
 				node.value
 			}
 		}
-		ast.List { '[' + node.elements.map(t.render_expr(it)).join(', ') + ']' }
-		ast.Tuple { node.elements.map(t.render_expr(it)).join(', ') }
-		ast.Set { '{' + node.elements.map(t.render_expr(it)).join(', ') + '}' }
+		ast.List {
+			'[' + node.elements.map(t.render_expr(it)).join(', ') + ']'
+		}
+		ast.Tuple {
+			node.elements.map(t.render_expr(it)).join(', ')
+		}
+		ast.Set {
+			'{' + node.elements.map(t.render_expr(it)).join(', ') + '}'
+		}
 		ast.Dict {
 			mut items := []string{}
 			for i, key in node.keys {
@@ -407,8 +458,12 @@ pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
 			}
 			'{${items.join(', ')}}'
 		}
-		ast.Attribute { '${t.render_expr(node.value)}.${node.attr}' }
-		ast.Subscript { '${t.render_expr(node.value)}[${t.render_expr(node.slice)}]' }
+		ast.Attribute {
+			'${t.render_expr(node.value)}.${node.attr}'
+		}
+		ast.Subscript {
+			'${t.render_expr(node.value)}[${t.render_expr(node.slice)}]'
+		}
 		ast.Call {
 			mut all_args := []string{}
 			for arg in node.args {
@@ -423,8 +478,12 @@ pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
 			}
 			'${t.render_expr(node.func)}(${all_args.join(', ')})'
 		}
-		ast.BinaryOp { '${t.render_expr(node.left)} ${node.op.value} ${t.render_expr(node.right)}' }
-		ast.UnaryOp { '${node.op.value}${t.render_expr(node.operand)}' }
+		ast.BinaryOp {
+			'${t.render_expr(node.left)} ${node.op.value} ${t.render_expr(node.right)}'
+		}
+		ast.UnaryOp {
+			'${node.op.value}${t.render_expr(node.operand)}'
+		}
 		ast.Compare {
 			mut parts := []string{}
 			parts << t.render_expr(node.left)
@@ -439,8 +498,12 @@ pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
 			}
 			rendered.join(' and ')
 		}
-		ast.JoinedStr { node.values.map(t.render_expr(it)).join(' + ') }
-		ast.FormattedValue { t.render_expr(node.value) }
+		ast.JoinedStr {
+			node.values.map(t.render_expr(it)).join(' + ')
+		}
+		ast.FormattedValue {
+			t.render_expr(node.value)
+		}
 		ast.Slice {
 			mut lower := ''
 			if lower_expr := node.lower {
@@ -456,9 +519,15 @@ pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
 				'${lower}..${upper}'
 			}
 		}
-		ast.Starred { t.render_expr(node.value) }
-		ast.NamedExpr { '(${t.render_expr(node.target)} = ${t.render_expr(node.value)})' }
-		else { node.str() }
+		ast.Starred {
+			t.render_expr(node.value)
+		}
+		ast.NamedExpr {
+			'(${t.render_expr(node.target)} = ${t.render_expr(node.value)})'
+		}
+		else {
+			node.str()
+		}
 	}
 }
 
@@ -616,7 +685,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 	if node.ctx == .store {
 		t.mark_mutated_expr(node.value)
 	}
-	
+
 	val_type := t.guess_expr_type(node.value)
 	if val_type != 'Any' && val_type != 'int' {
 		loc_key := '${node.token.line}:${node.token.column}'
@@ -634,7 +703,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 			} else if node.slice is ast.Name {
 				key = t.literal_types[node.slice.id] or { '' }
 			}
-			
+
 			if key.len > 0 {
 				field_type := t.get_type('${dict_type}.${key}')
 				if field_type != 'Any' {
@@ -837,15 +906,23 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_for(node ast.For) {
 			for elt in node.iter.elements {
 				if elt is ast.Constant {
 					literals << elt.value
-				} else { all_constants = false; break }
+				} else {
+					all_constants = false
+					break
+				}
 			}
 		} else if node.iter is ast.Tuple {
 			for elt in node.iter.elements {
 				if elt is ast.Constant {
 					literals << elt.value
-				} else { all_constants = false; break }
+				} else {
+					all_constants = false
+					break
+				}
 			}
-		} else { all_constants = false }
+		} else {
+			all_constants = false
+		}
 		if all_constants && literals.len > 0 {
 			t.type_map[node.target.id] = 'Literal[' + literals.join(', ') + ']'
 		}
@@ -905,7 +982,9 @@ fn (mut t TypeInferenceVisitorMixin) infer_return_type(stmts []ast.Statement) st
 	mut found_types := map[string]bool{}
 	has_return_value := t.collect_return_types(stmts, mut found_types)
 	if found_types.len == 1 {
-		for k, _ in found_types { return k }
+		for k, _ in found_types {
+			return k
+		}
 	}
 	if found_types.len > 1 || has_return_value {
 		return 'Any'
@@ -927,39 +1006,55 @@ fn (mut t TypeInferenceVisitorMixin) collect_return_types(stmts []ast.Statement,
 				}
 			}
 			ast.If {
-				has_return_value = t.collect_return_types(stmt.body, mut found_types) || has_return_value
-				has_return_value = t.collect_return_types(stmt.orelse, mut found_types) || has_return_value
+				has_return_value = t.collect_return_types(stmt.body, mut found_types)
+					|| has_return_value
+				has_return_value = t.collect_return_types(stmt.orelse, mut found_types)
+					|| has_return_value
 			}
 			ast.For {
-				has_return_value = t.collect_return_types(stmt.body, mut found_types) || has_return_value
-				has_return_value = t.collect_return_types(stmt.orelse, mut found_types) || has_return_value
+				has_return_value = t.collect_return_types(stmt.body, mut found_types)
+					|| has_return_value
+				has_return_value = t.collect_return_types(stmt.orelse, mut found_types)
+					|| has_return_value
 			}
 			ast.While {
-				has_return_value = t.collect_return_types(stmt.body, mut found_types) || has_return_value
-				has_return_value = t.collect_return_types(stmt.orelse, mut found_types) || has_return_value
+				has_return_value = t.collect_return_types(stmt.body, mut found_types)
+					|| has_return_value
+				has_return_value = t.collect_return_types(stmt.orelse, mut found_types)
+					|| has_return_value
 			}
 			ast.With {
-				has_return_value = t.collect_return_types(stmt.body, mut found_types) || has_return_value
+				has_return_value = t.collect_return_types(stmt.body, mut found_types)
+					|| has_return_value
 			}
 			ast.Try {
-				has_return_value = t.collect_return_types(stmt.body, mut found_types) || has_return_value
+				has_return_value = t.collect_return_types(stmt.body, mut found_types)
+					|| has_return_value
 				for handler in stmt.handlers {
-					has_return_value = t.collect_return_types(handler.body, mut found_types) || has_return_value
+					has_return_value = t.collect_return_types(handler.body, mut found_types)
+						|| has_return_value
 				}
-				has_return_value = t.collect_return_types(stmt.orelse, mut found_types) || has_return_value
-				has_return_value = t.collect_return_types(stmt.finalbody, mut found_types) || has_return_value
+				has_return_value = t.collect_return_types(stmt.orelse, mut found_types)
+					|| has_return_value
+				has_return_value = t.collect_return_types(stmt.finalbody, mut found_types)
+					|| has_return_value
 			}
 			ast.TryStar {
-				has_return_value = t.collect_return_types(stmt.body, mut found_types) || has_return_value
+				has_return_value = t.collect_return_types(stmt.body, mut found_types)
+					|| has_return_value
 				for handler in stmt.handlers {
-					has_return_value = t.collect_return_types(handler.body, mut found_types) || has_return_value
+					has_return_value = t.collect_return_types(handler.body, mut found_types)
+						|| has_return_value
 				}
-				has_return_value = t.collect_return_types(stmt.orelse, mut found_types) || has_return_value
-				has_return_value = t.collect_return_types(stmt.finalbody, mut found_types) || has_return_value
+				has_return_value = t.collect_return_types(stmt.orelse, mut found_types)
+					|| has_return_value
+				has_return_value = t.collect_return_types(stmt.finalbody, mut found_types)
+					|| has_return_value
 			}
 			ast.Match {
 				for case in stmt.cases {
-					has_return_value = t.collect_return_types(case.body, mut found_types) || has_return_value
+					has_return_value = t.collect_return_types(case.body, mut found_types)
+						|| has_return_value
 				}
 			}
 			// Don't recurse into nested sub-functions or classes for return types of THIS function
@@ -1034,7 +1129,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 			t.visit_expr(annotation)
 		}
 	}
-	
+
 	qual_name := t.get_qualified_name(node.name)
 
 	t.push_scope(node.name)
@@ -1052,7 +1147,10 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 				// If it's a method (not @property), mark self as mutated to match Translator's forcing of 'mut self'
 				mut is_property := false
 				for decorator in node.decorator_list {
-					if t.render_expr(decorator) == 'property' { is_property = true; break }
+					if t.render_expr(decorator) == 'property' {
+						is_property = true
+						break
+					}
 				}
 				if !is_property && s_arg == 'self' {
 					t.mark_mutated(s_arg)
@@ -1067,8 +1165,9 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 	if return_annotation := node.returns {
 		py_return := t.expr_to_type_string(return_annotation)
 		if py_return.len > 0 {
-			if py_return.starts_with('TypeGuard[') || py_return.starts_with('TypeIs[') || 
-			   py_return.starts_with('typing.TypeGuard[') || py_return.starts_with('typing.TypeIs[') {
+			if py_return.starts_with('TypeGuard[') || py_return.starts_with('TypeIs[')
+				|| py_return.starts_with('typing.TypeGuard[')
+				|| py_return.starts_with('typing.TypeIs[') {
 				is_type_is = py_return.contains('TypeIs')
 				bracket_idx := py_return.index('[') or { -1 }
 				if bracket_idx >= 0 {
@@ -1089,16 +1188,16 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 	t.store_type('${node.name}@return', return_type)
 
 	sig := CallSignature{
-		args:        arg_types
-		arg_names:   arg_names
-		defaults:    defaults_map
-		return_type: return_type
-		is_class:    false
-		has_init:    false
-		has_vararg:  node.args.vararg != none
-		has_kwarg:   node.args.kwarg != none
+		args:          arg_types
+		arg_names:     arg_names
+		defaults:      defaults_map
+		return_type:   return_type
+		is_class:      false
+		has_init:      false
+		has_vararg:    node.args.vararg != none
+		has_kwarg:     node.args.kwarg != none
 		narrowed_type: narrowed_type_opt
-		is_type_is:  is_type_is
+		is_type_is:    is_type_is
 	}
 	t.store_call_signature(node.name, sig)
 
@@ -1129,7 +1228,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 			sig_info[p.arg] = arg_types[i]
 		}
 		sig_info['return'] = return_type
-		
+
 		t.overloaded_signatures[qual_name] << sig_info
 		// We don't visit the body of @overload stubs
 		t.pop_scope()
@@ -1186,7 +1285,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_class_def(node ast.ClassDef) {
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 	t.visit_expr(node.value)
-	
+
 	mut value_type := t.guess_expr_type(node.value)
 	if node.value is ast.Call {
 		func_expr := node.value.func
@@ -1216,7 +1315,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 		if value_type != 'Any' {
 			t.location_map[loc_key] = value_type
 		}
-		
+
 		match target {
 			ast.Name {
 				if target.id in t.mutability_map {
@@ -1225,14 +1324,20 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				current := t.get_type(target.id)
 				qual_cur := t.get_qualified_name(target.id)
 				is_scoped_match := qual_cur in t.type_map
-				
+
 				is_cap := target.id.len > 0 && target.id[0].is_capital()
 				if value_type != 'Any' {
 					mut target_type := value_type
-					if current.starts_with('?') && !target_type.starts_with('?') && current[1..] == target_type {
+					if current.starts_with('?') && !target_type.starts_with('?')
+						&& current[1..] == target_type {
 						target_type = current
 					}
-					if !is_scoped_match || (current in ['Any', 'none', 'int'] && value_type != 'none') || current == 'Any' || (current == 'int' && (value_type.contains('[]') || value_type.contains('map['))) || (is_cap && value_type.contains('[]') && (current == '[]Any' || current == 'int')) {
+					if !is_scoped_match
+						|| (current in ['Any', 'none', 'int'] && value_type != 'none')
+						|| current == 'Any' || (current == 'int' && (value_type.contains('[]')
+						|| value_type.contains('map[')))
+						|| (is_cap && value_type.contains('[]')
+						&& (current == '[]Any' || current == 'int')) {
 						t.store_type(target.id, target_type)
 					}
 				} else if node.value is ast.Name {
@@ -1242,7 +1347,8 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 						t.store_type(target.id, rhs_type)
 					}
 				}
-				if value_type == 'none' && current != '' && current != 'Any' && current != 'none' && !current.starts_with('?') {
+				if value_type == 'none' && current != '' && current != 'Any' && current != 'none'
+					&& !current.starts_with('?') {
 					t.store_type(target.id, '?' + current)
 				}
 				if node.value is ast.Lambda {
@@ -1258,10 +1364,11 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				}
 				attr_name := target.attr
 				if obj_key.len > 0 {
-					full_attr := "${obj_key}.${attr_name}"
+					full_attr := '${obj_key}.${attr_name}'
 					curr_attr_type := t.get_type(full_attr)
 					mut target_type := value_type
-					if curr_attr_type.starts_with('?') && !target_type.starts_with('?') && curr_attr_type[1..] == target_type {
+					if curr_attr_type.starts_with('?') && !target_type.starts_with('?')
+						&& curr_attr_type[1..] == target_type {
 						target_type = curr_attr_type
 					}
 					if value_type != 'none' && value_type != 'Any' {
@@ -1279,7 +1386,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 							break
 						}
 					}
-					
+
 					if value_type != 'none' && value_type != 'Any' {
 						if cls_name.len > 0 {
 							t.type_map['${cls_name}.${target.attr}'] = value_type
@@ -1300,7 +1407,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 						} else if target.slice is ast.Name {
 							key = t.literal_types[target.slice.id] or { '' }
 						}
-						
+
 						if key.len > 0 {
 							field_type := t.get_type('${dict_type}.${key}')
 							if field_type != 'Any' {
@@ -1372,7 +1479,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 		|| annotation_str == 'typing_extensions.LiteralString' {
 		v_type = 'string'
 	}
-	
+
 	mut value_type := 'Any'
 	if n_val := node.value {
 		value_type = t.guess_expr_type(n_val)
@@ -1385,12 +1492,17 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 	if annotation_str.starts_with('Literal[') || annotation_str.starts_with('typing.Literal[') {
 		if node.target is ast.Name {
 			// Extract literal value
-			mut lit_val := if annotation_str.starts_with('Literal[') { annotation_str[8..annotation_str.len - 1] } else { annotation_str[15..annotation_str.len - 1] }
+			mut lit_val := if annotation_str.starts_with('Literal[') {
+				annotation_str[8..annotation_str.len - 1]
+			} else {
+				annotation_str[15..annotation_str.len - 1]
+			}
 			t.literal_types[node.target.id] = lit_val
 		}
 	}
 
-	if annotation_str == 'Any' || annotation_str == 'typing.Any' || annotation_str == 'typing_extensions.Any' {
+	if annotation_str == 'Any' || annotation_str == 'typing.Any'
+		|| annotation_str == 'typing_extensions.Any' {
 		if node.target is ast.Name {
 			t.store_explicit_any(node.target.id, '${node.target.token.line}:${node.target.token.column}')
 		} else if node.target is ast.Attribute {
@@ -1410,7 +1522,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 			is_self_attr = true
 		}
 	}
-	
+
 	if target_name.len > 0 {
 		if is_self_attr {
 			t.type_map['self.${target_name}'] = v_type
@@ -1476,7 +1588,8 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 			if obj_name.len > 0 && elt_type != 'Any' {
 				new_type := '[]${elt_type}'
 				current := t.get_type(obj_name)
-				if current == 'Any' || current == '[]Any' || current == 'int' || current.contains('Any') {
+				if current == 'Any' || current == '[]Any' || current == 'int'
+					|| current.contains('Any') {
 					t.store_type(obj_name, new_type)
 				}
 			}
@@ -1489,14 +1602,14 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 				t.location_map[loc_key] = 'PyHashMd5'
 			}
 		}
-		
+
 		// Check for method-based mutability if object is a parameter
 		obj_name := t.expr_to_name(attr.value)
 		if obj_name.len > 0 {
 			obj_type := t.guess_expr_type(attr.value).trim_left('?&')
 			mut_keys := [
 				'${obj_type}.${attr.attr}.self',
-				'${obj_type}.${to_camel_case(attr.attr)}.self'
+				'${obj_type}.${to_camel_case(attr.attr)}.self',
 			]
 			for mk in mut_keys {
 				if m_info := t.mutability_map[mk] {
@@ -1518,7 +1631,8 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 			}
 		}
 		is_cap := func_name.len > 0 && func_name[0].is_capital()
-		if !is_cap && func_name !in ['list', 'set', 'dict'] && (!t.has_type(func_name) || t.get_type(func_name) == 'Any') {
+		if !is_cap && func_name !in ['list', 'set', 'dict']
+			&& (!t.has_type(func_name) || t.get_type(func_name) == 'Any') {
 			t.store_type(func_name, 'fn (...Any) Any')
 		}
 	}
@@ -1592,12 +1706,12 @@ pub fn (mut t TypeInferenceVisitorMixin) register_lambda_signature(name string, 
 	mut args := []string{}
 	mut arg_names := []string{}
 	mut defaults := map[string]string{}
-	
+
 	mut all_py_args := []ast.Parameter{}
 	all_py_args << lambda_node.args.posonlyargs
 	all_py_args << lambda_node.args.args
 	all_py_args << lambda_node.args.kwonlyargs
-	
+
 	for p in all_py_args {
 		if d := p.default_ {
 			if d is ast.Name && d.id == p.arg {
@@ -1614,7 +1728,7 @@ pub fn (mut t TypeInferenceVisitorMixin) register_lambda_signature(name string, 
 			defaults[p.arg] = t.render_expr(d)
 		}
 	}
-	
+
 	mut return_type := 'Any'
 	py_ret := t.guess_expr_type(lambda_node.body)
 	return_type = map_python_type_to_v(py_ret)

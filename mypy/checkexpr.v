@@ -66,7 +66,9 @@ pub fn (mut ec ExpressionChecker) reset() {
 }
 
 fn (ec ExpressionChecker) require_type_checker() &TypeChecker {
-	return ec.chk or { panic('ExpressionChecker requires an initialized TypeChecker; this usually means expr_checker.chk was not set before type analysis') }
+	return ec.chk or {
+		panic('ExpressionChecker requires an initialized TypeChecker; this usually means expr_checker.chk was not set before type analysis')
+	}
 }
 
 pub fn (mut ec ExpressionChecker) accept(node Expression) MypyTypeNode {
@@ -452,9 +454,9 @@ fn (mut ec ExpressionChecker) get_iterable_item_type(typ MypyTypeNode) MypyTypeN
 		return proper
 	}
 	if proper is Instance {
-		if (proper.type_name == 'builtins.list' || proper.type_name == 'builtins.set' ||
-			proper.type_name == 'builtins.tuple' || proper.type_name == 'builtins.dict' ||
-			proper.type_name == 'typing.Iterable') && proper.args.len > 0 {
+		if (proper.type_name == 'builtins.list' || proper.type_name == 'builtins.set'
+			|| proper.type_name == 'builtins.tuple' || proper.type_name == 'builtins.dict'
+			|| proper.type_name == 'typing.Iterable') && proper.args.len > 0 {
 			return proper.args[0]
 		}
 	}

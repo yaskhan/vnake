@@ -6,8 +6,8 @@ import json
 
 pub struct MypyPluginStore {
 pub mut:
-	collected_types      map[string]map[string]string // map[expr_str]map[loc]type_str
-	collected_signatures map[string]map[string]map[string]string // map[fullname]map[loc]sig_map
+	collected_types      map[string]map[string]string                  // map[expr_str]map[loc]type_str
+	collected_signatures map[string]map[string]map[string]string       // map[fullname]map[loc]sig_map
 	collected_mutability map[string]map[string]MypyCollectedMutability // map[fullname]map[loc]info
 	processed_files      map[string]bool
 }
@@ -16,7 +16,7 @@ pub struct MypyCollectedMutability {
 pub mut:
 	is_reassigned bool
 	is_final      bool
-	is_mutated     bool
+	is_mutated    bool
 }
 
 pub fn new_mypy_plugin_store() MypyPluginStore {
@@ -52,16 +52,16 @@ pub fn (mut s MypyPluginStore) collect_mutability(name string, loc string, info 
 
 pub struct MypyPluginAnalyzer {
 pub mut:
-	store   MypyPluginStore
-	visited map[string]bool
-	checker ?&mypy.TypeChecker
+	store            MypyPluginStore
+	visited          map[string]bool
+	checker          ?&mypy.TypeChecker
 	mutating_methods []string
 }
 
 pub fn new_mypy_plugin_analyzer() MypyPluginAnalyzer {
 	return MypyPluginAnalyzer{
-		store:   new_mypy_plugin_store()
-		visited: map[string]bool{}
+		store:            new_mypy_plugin_store()
+		visited:          map[string]bool{}
 		mutating_methods: ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update',
 			'setdefault', 'delete', 'add', 'discard']
 	}
@@ -75,45 +75,87 @@ fn (mut a MypyPluginAnalyzer) visit_block(mut body mypy.Block) {
 
 fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 	match mut stmt {
-		mypy.AssignmentStmt { a.visit_assignment_stmt(mut stmt) }
-		mypy.OperatorAssignmentStmt { a.visit_operator_assignment_stmt(mut stmt) }
-		mypy.ExpressionStmt { a.visit_expr(mut stmt.expr) }
-		mypy.ReturnStmt { if mut e := stmt.expr { a.visit_expr(mut e) } }
+		mypy.AssignmentStmt {
+			a.visit_assignment_stmt(mut stmt)
+		}
+		mypy.OperatorAssignmentStmt {
+			a.visit_operator_assignment_stmt(mut stmt)
+		}
+		mypy.ExpressionStmt {
+			a.visit_expr(mut stmt.expr)
+		}
+		mypy.ReturnStmt {
+			if mut e := stmt.expr {
+				a.visit_expr(mut e)
+			}
+		}
 		mypy.IfStmt {
-			for mut expr in stmt.expr { a.visit_expr(mut expr) }
-			for mut body in stmt.body { a.visit_block(mut body) }
-			if mut else_body := stmt.else_body { a.visit_block(mut else_body) }
+			for mut expr in stmt.expr {
+				a.visit_expr(mut expr)
+			}
+			for mut body in stmt.body {
+				a.visit_block(mut body)
+			}
+			if mut else_body := stmt.else_body {
+				a.visit_block(mut else_body)
+			}
 		}
 		mypy.WhileStmt {
 			a.visit_expr(mut stmt.expr)
 			a.visit_block(mut stmt.body)
-			if mut else_body := stmt.else_body { a.visit_block(mut else_body) }
+			if mut else_body := stmt.else_body {
+				a.visit_block(mut else_body)
+			}
 		}
 		mypy.ForStmt {
 			a.visit_expr(mut stmt.index)
 			a.visit_expr(mut stmt.expr)
 			a.visit_block(mut stmt.body)
-			if mut else_body := stmt.else_body { a.visit_block(mut else_body) }
+			if mut else_body := stmt.else_body {
+				a.visit_block(mut else_body)
+			}
 		}
 		mypy.TryStmt {
 			a.visit_block(mut stmt.body)
 			for i, mut handler in stmt.handlers {
-				if mut typ := stmt.types[i] { a.visit_expr(mut typ) }
-				if mut var := stmt.vars[i] { a.visit_expr(mut var) }
+				if mut typ := stmt.types[i] {
+					a.visit_expr(mut typ)
+				}
+				if mut var := stmt.vars[i] {
+					a.visit_expr(mut var)
+				}
 				a.visit_block(mut handler)
 			}
-			if mut else_body := stmt.else_body { a.visit_block(mut else_body) }
-			if mut finally_body := stmt.finally_body { a.visit_block(mut finally_body) }
+			if mut else_body := stmt.else_body {
+				a.visit_block(mut else_body)
+			}
+			if mut finally_body := stmt.finally_body {
+				a.visit_block(mut finally_body)
+			}
 		}
 		mypy.WithStmt {
-			for mut expr in stmt.expr { a.visit_expr(mut expr) }
-			for mut target in stmt.target { if mut t := target { a.visit_expr(mut t) } }
+			for mut expr in stmt.expr {
+				a.visit_expr(mut expr)
+			}
+			for mut target in stmt.target {
+				if mut t := target {
+					a.visit_expr(mut t)
+				}
+			}
 			a.visit_block(mut stmt.body)
 		}
-		mypy.FuncDef { a.visit_func_def(mut stmt) }
-		mypy.ClassDef { a.visit_class_def(mut stmt) }
-		mypy.Decorator { a.visit_decorator(mut stmt) }
-		mypy.OverloadedFuncDef { a.visit_overloaded_func_def(mut stmt) }
+		mypy.FuncDef {
+			a.visit_func_def(mut stmt)
+		}
+		mypy.ClassDef {
+			a.visit_class_def(mut stmt)
+		}
+		mypy.Decorator {
+			a.visit_decorator(mut stmt)
+		}
+		mypy.OverloadedFuncDef {
+			a.visit_overloaded_func_def(mut stmt)
+		}
 		else {}
 	}
 }
@@ -121,10 +163,18 @@ fn (mut a MypyPluginAnalyzer) visit_stmt(mut stmt mypy.Statement) {
 fn (mut a MypyPluginAnalyzer) visit_expr(mut expr mypy.Expression) {
 	a.record_checker_type(expr)
 	match mut expr {
-		mypy.NameExpr { a.visit_name_expr(mut expr) }
-		mypy.MemberExpr { a.visit_member_expr(mut expr) }
-		mypy.IndexExpr { a.visit_index_expr(mut expr) }
-		mypy.CallExpr { a.visit_call_expr(mut expr) }
+		mypy.NameExpr {
+			a.visit_name_expr(mut expr)
+		}
+		mypy.MemberExpr {
+			a.visit_member_expr(mut expr)
+		}
+		mypy.IndexExpr {
+			a.visit_index_expr(mut expr)
+		}
+		mypy.CallExpr {
+			a.visit_call_expr(mut expr)
+		}
 		mypy.OpExpr {
 			a.visit_expr(mut expr.left)
 			a.visit_expr(mut expr.right)
@@ -249,8 +299,8 @@ fn (mut a MypyPluginAnalyzer) visit_var(node mypy.Var) {
 	}
 	mut info := MypyCollectedMutability{
 		is_reassigned: false
-		is_final: node.is_final
-		is_mutated: false
+		is_final:      node.is_final
+		is_mutated:    false
 	}
 	a.store.collect_mutability(node.fullname, loc, info)
 	if node.name.len > 0 && node.name != node.fullname {
@@ -285,7 +335,7 @@ fn (mut a MypyPluginAnalyzer) visit_func_def(mut node mypy.FuncDef) {
 		} else {
 			continue
 		}
-		
+
 		a.store.collect_type(arg.variable.fullname, arg_loc, typ_str)
 		if arg.variable.name.len > 0 && arg.variable.name != arg.variable.fullname {
 			a.store.collect_type(arg.variable.name, arg_loc, typ_str)
@@ -344,11 +394,15 @@ fn (mut a MypyPluginAnalyzer) visit_class_def(mut node mypy.ClassDef) {
 fn check_has_decorator(decs []mypy.Expression, name string) bool {
 	for d in decs {
 		if d is mypy.NameExpr {
-			if d.name == name { return true }
+			if d.name == name {
+				return true
+			}
 		} else if d is mypy.CallExpr {
 			callee := d.callee
 			if callee is mypy.NameExpr {
-				if callee.name == name { return true }
+				if callee.name == name {
+					return true
+				}
 			}
 		}
 	}
@@ -435,8 +489,8 @@ fn (mut a MypyPluginAnalyzer) mark_name_mutability(name string, fullname string,
 	loc := '${ctx.line}:${ctx.column}'
 	info := MypyCollectedMutability{
 		is_reassigned: is_reassigned
-		is_final: false
-		is_mutated: is_mutated
+		is_final:      false
+		is_mutated:    is_mutated
 	}
 	a.store.collect_mutability(fullname, loc, info)
 	if name.len > 0 && name != fullname {
@@ -452,11 +506,25 @@ fn (mut a MypyPluginAnalyzer) mark_mutated(mut expr mypy.Expression) {
 
 fn (mut a MypyPluginAnalyzer) visit_lvalue(mut lval mypy.Lvalue) {
 	match mut lval {
-		mypy.NameExpr { a.visit_name_expr(mut lval) }
-		mypy.MemberExpr { a.visit_member_expr(mut lval) }
-		mypy.IndexExpr { a.visit_index_expr(mut lval) }
-		mypy.TupleExpr { for mut item in lval.items { a.visit_expr(mut item) } }
-		mypy.ListExpr { for mut item in lval.items { a.visit_expr(mut item) } }
+		mypy.NameExpr {
+			a.visit_name_expr(mut lval)
+		}
+		mypy.MemberExpr {
+			a.visit_member_expr(mut lval)
+		}
+		mypy.IndexExpr {
+			a.visit_index_expr(mut lval)
+		}
+		mypy.TupleExpr {
+			for mut item in lval.items {
+				a.visit_expr(mut item)
+			}
+		}
+		mypy.ListExpr {
+			for mut item in lval.items {
+				a.visit_expr(mut item)
+			}
+		}
 		else {}
 	}
 }
@@ -478,7 +546,8 @@ fn (mut a MypyPluginAnalyzer) visit_assignment_stmt(mut stmt mypy.AssignmentStmt
 	for mut lval in stmt.lvalues {
 		a.visit_expr(mut lval)
 		if mut lval is mypy.NameExpr {
-			a.mark_name_mutability(lval.name, lval.fullname, lval.get_context(), true, false)
+			a.mark_name_mutability(lval.name, lval.fullname, lval.get_context(), true,
+				false)
 		}
 	}
 }
@@ -504,13 +573,9 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 	mut errors := mypy.new_errors(*options)
 	mut api := mypy.new_api(options, &errors)
 
-	mut file := mypy.bridge(mod) or {
-		return new_mypy_plugin_store()
-	}
+	mut file := mypy.bridge(mod) or { return new_mypy_plugin_store() }
 
-	tc := api.check(mut file, map[string]&mypy.MypyFile{}) or {
-		return new_mypy_plugin_store()
-	}
+	tc := api.check(mut file, map[string]&mypy.MypyFile{}) or { return new_mypy_plugin_store() }
 
 	mut a := new_mypy_plugin_analyzer()
 
@@ -526,7 +591,7 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 			t_str := t.type_str()
 			a.store.collect_type(expr_str, loc, t_str)
 			a.store.collect_type('@', loc, t_str)
-			
+
 			if expr_str.contains('.') {
 				p_parts := expr_str.split('.')
 				if p_parts.len > 0 {
@@ -536,7 +601,7 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 			}
 		}
 	}
-	
+
 	a.collect_file_with_checker(mut file, tc)
 	return a.store
 }

@@ -74,7 +74,9 @@ fn test_create_source_list_respects_explicit_package_bases() {
 	options.explicit_package_bases = true
 	options.mypy_path = [base_dir]
 
-	discovered_sources := create_source_list([module_path], *options, none, false) or { panic(err.msg()) }
+	discovered_sources := create_source_list([module_path], *options, none, false) or {
+		panic(err.msg())
+	}
 
 	assert discovered_sources.len == 1
 	assert discovered_sources[0].module == 'pkg.mod'

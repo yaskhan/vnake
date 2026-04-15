@@ -8,7 +8,8 @@ import os
 // getsite_packages returns a list of site-packages directories
 pub fn getsite_packages(python_exe string) []string {
 	mut p := os.new_process(python_exe)
-	p.set_args(['-c', "import site; print('\\\\n'.join(site.getsitepackages() if hasattr(site, 'getsitepackages') else []))"])
+	p.set_args(['-c',
+		"import site; print('\\\\n'.join(site.getsitepackages() if hasattr(site, 'getsitepackages') else []))"])
 	p.set_redirect_stdio()
 	p.run()
 	p.wait()

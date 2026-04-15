@@ -68,7 +68,9 @@ pub fn (mut a NewTypeAnalyzer) analyze_newtype_declaration(s &AssignmentStmt) (s
 }
 
 pub fn (mut a NewTypeAnalyzer) check_newtype_args(name string, call Expression, ctx Context) (?MypyTypeNode, bool) {
-	if call !is CallExpr { return none, false }
+	if call !is CallExpr {
+		return none, false
+	}
 	c := call as CallExpr
 	args := c.args
 	if args.len != 2 {

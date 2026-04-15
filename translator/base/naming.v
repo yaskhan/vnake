@@ -51,7 +51,7 @@ pub fn to_snake_case(name string) string {
 				}
 			}
 			if ch == `_` {
-				if i > 0 && name[i-1] == `_` {
+				if i > 0 && name[i - 1] == `_` {
 					continue
 				}
 			}
@@ -94,7 +94,9 @@ pub fn to_snake_case(name string) string {
 
 // to_camel_case converts snake_case to camelCase (e.g., run_task -> runTask)
 pub fn to_camel_case(name string) string {
-	if name.len == 0 { return name }
+	if name.len == 0 {
+		return name
+	}
 	mut res := []u8{cap: name.len}
 	mut next_upper := false
 	for i := 0; i < name.len; i++ {
@@ -141,10 +143,10 @@ pub fn get_factory_name(struct_name string, hierarchy map[string][]string) strin
 // This is optimized to use a match Expression for faster lookup.
 pub fn is_v_reserved_keyword(name string) bool {
 	return match name {
-		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface',
-		'enum', 'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared',
-		'spawn', 'assert', 'sizeof', 'typeof', '__global', 'as', 'in', 'is', 'none', 'map',
-		'array', 'string', 'bool', 'Any', 'union', 'layout', 'stop', 'start' {
+		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface', 'enum',
+		'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared', 'spawn',
+		'assert', 'sizeof', 'typeof', '__global', 'as', 'in', 'is', 'none', 'map', 'array',
+		'string', 'bool', 'Any', 'union', 'layout', 'stop', 'start' {
 			true
 		}
 		else {
@@ -157,8 +159,8 @@ pub fn is_v_reserved_keyword(name string) bool {
 // This is optimized to use a match Expression for faster lookup.
 pub fn is_v_reserved_type(name string) bool {
 	return match name {
-		'int', 'string', 'bool', 'f64', 'f32', 'i64', 'byte', 'rune', 'void', 'Any', 'none',
-		'i8', 'i16', 'i32', 'u16', 'u32', 'u64' {
+		'int', 'string', 'bool', 'f64', 'f32', 'i64', 'byte', 'rune', 'void', 'Any', 'none', 'i8',
+		'i16', 'i32', 'u16', 'u32', 'u64' {
 			true
 		}
 		else {
@@ -242,7 +244,7 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 
 	return sanitized
 }
- 
+
 // is_simple_mut_target checks if the Expression is a simple identifier or attribute access that can be marked as mut in V.
 pub fn is_simple_mut_target(expr string) bool {
 	if expr.contains('(') || expr.contains(' ') || expr.contains('{') {

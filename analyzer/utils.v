@@ -30,7 +30,9 @@ pub fn to_camel_case(name string) string {
 
 pub fn expr_name(node ast.Expression) string {
 	return match node {
-		ast.Name { node.id }
+		ast.Name {
+			node.id
+		}
 		ast.Attribute {
 			base := expr_name(node.value)
 			if base.len > 0 {
@@ -273,12 +275,14 @@ pub fn map_python_type_to_v(py_type string) string {
 				mut mapped := []string{}
 				for part in parts {
 					m := map_python_type_to_v(part)
-					if m == 'Any' { return 'Any' }
+					if m == 'Any' {
+						return 'Any'
+					}
 					if m !in mapped {
 						mapped << m
 					}
 				}
-				
+
 				mut non_none := []string{}
 				for m in mapped {
 					if m != 'none' {
@@ -298,23 +302,28 @@ pub fn map_python_type_to_v(py_type string) string {
 				mut mapped := []string{}
 				for p in parts {
 					m := map_python_type_to_v(p)
-					if m == 'Any' { return 'Any' }
+					if m == 'Any' {
+						return 'Any'
+					}
 					if m !in mapped {
 						mapped << m
 					}
 				}
-				
+
 				// Optional check
 				mut has_none := false
 				mut others := []string{}
 				for m in mapped {
-					if m == 'none' { has_none = true }
-					else { others << m }
+					if m == 'none' {
+						has_none = true
+					} else {
+						others << m
+					}
 				}
 				if has_none && others.len == 1 {
 					return '?' + others[0]
 				}
-				
+
 				if mapped.len == 1 {
 					return mapped[0]
 				}

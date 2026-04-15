@@ -53,7 +53,8 @@ pub fn (mut spa SemanticAnalyzerPreAnalysis) visit_file(mut file MypyFile, fnam 
 					}
 				}
 				file.imports = file.imports.filter(it.get_context().line < defn.get_context().line
-					|| (it.get_context().line == defn.get_context().line && it.get_context().column <= defn.get_context().column))
+					|| (it.get_context().line == defn.get_context().line
+					&& it.get_context().column <= defn.get_context().column))
 				file.defs = file.defs[..i + 1]
 				break
 			}
@@ -216,4 +217,3 @@ pub fn (mut spa SemanticAnalyzerPreAnalysis) accept(mut node Node) {
 		spa.visit_for_stmt(mut node)
 	}
 }
-

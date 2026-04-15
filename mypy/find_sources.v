@@ -153,7 +153,9 @@ pub fn (f SourceFinder) is_explicit_package_base(path string) bool {
 pub fn (mut f SourceFinder) find_sources_in_dir(path string) ![]BuildSource {
 	mut sources := []BuildSource{}
 	mut seen := map[string]bool{}
-	mut names := f.list_dir(path) or { return error('Failed to read directory "${path}": ${err.msg()}') }
+	mut names := f.list_dir(path) or {
+		return error('Failed to read directory "${path}": ${err.msg()}')
+	}
 	names.sort_with_compare(fn (a &string, b &string) int {
 		ka := keyfunc(*a)
 		kb := keyfunc(*b)
@@ -292,7 +294,9 @@ fn compile_exclude_patterns(patterns []string) ![]regex.RE {
 		if pattern.len == 0 {
 			continue
 		}
-		re := regex.regex_opt(pattern) or { return error('Invalid exclude pattern "${pattern}": ${err.msg()}') }
+		re := regex.regex_opt(pattern) or {
+			return error('Invalid exclude pattern "${pattern}": ${err.msg()}')
+		}
 		compiled << re
 	}
 	return compiled

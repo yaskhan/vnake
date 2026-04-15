@@ -27,7 +27,7 @@ fn (mut eg ExprGen) infer_generator_target_types(gen ast.Comprehension) {
 	} else if iter_type.starts_with('map[') {
 		elt_type = 'string' // iteration over dict keys
 	} else if iter_type.starts_with('datatypes.Set[') {
-		elt_type = iter_type[14..iter_type.len-1]
+		elt_type = iter_type[14..iter_type.len - 1]
 	}
 
 	if gen.iter is ast.Call {
@@ -257,7 +257,11 @@ pub fn (mut eg ExprGen) visit_list_comp(node ast.ListComp, target_var string) ?s
 					step_val, is_step_const := get_int_const(call.args[2])
 					if is_start_const && is_stop_const && is_step_const {
 						if step_val != 0 {
-							diff := if step_val > 0 { stop_val - start_val } else { start_val - stop_val }
+							diff := if step_val > 0 {
+								stop_val - start_val
+							} else {
+								start_val - stop_val
+							}
 							abs_step := if step_val > 0 { step_val } else { -step_val }
 							if diff > 0 {
 								cap_str = 'cap: ${(diff + abs_step - 1) / abs_step}'
@@ -289,7 +293,7 @@ pub fn (mut eg ExprGen) visit_generator_exp_inline(node ast.GeneratorExp) ?strin
 			eg.infer_generator_target_types(gen)
 			target_id := gen.target.id
 			iter_expr := eg.visit(gen.iter)
-			
+
 			// Remap target_id to 'it' for V map
 			prev_remap := eg.state.name_remap[target_id] or { '' }
 			eg.state.name_remap[target_id] = 'it'
@@ -299,7 +303,7 @@ pub fn (mut eg ExprGen) visit_generator_exp_inline(node ast.GeneratorExp) ?strin
 			} else {
 				eg.state.name_remap.delete(target_id)
 			}
-			
+
 			return '${iter_expr}.map(${elt_expr})'
 		}
 	}

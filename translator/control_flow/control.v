@@ -50,6 +50,7 @@ pub fn (mut m ControlFlowModule) visit_continue(_ ast.Continue) {
 	}
 	m.emit('continue')
 }
+
 pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 	if m.env.state.scope_names.len > 0 {
 		last_scope := m.env.state.scope_names[m.env.state.scope_names.len - 1]
@@ -60,7 +61,7 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 			}
 		}
 	}
-	
+
 	// Ensure we end all active try blocks before returning
 	if m.env.state.vexc_depth > 0 {
 		m.env.state.used_builtins['vexc'] = true
@@ -71,8 +72,8 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 
 	if val := node.value {
 		expr := m.visit_expr(val)
-		if expr == "none" {
-			if m.env.state.current_function_return_type in ["void", ""] {
+		if expr == 'none' {
+			if m.env.state.current_function_return_type in ['void', ''] {
 				m.emit('return')
 			} else {
 				m.emit('return none')
@@ -80,18 +81,20 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 		} else if expr.len > 0 {
 			ret_type := m.env.state.current_function_return_type
 			pure := ret_type.trim_left('?&')
-			is_interface := pure in m.env.state.known_interfaces || pure in m.env.state.class_to_impl
+			is_interface := pure in m.env.state.known_interfaces
+				|| pure in m.env.state.class_to_impl
 			if is_interface && expr != 'none' {
 				mut v_type := 'Any'
 				if f := m.env.guess_type_fn {
 					v_type = f(val)
 				}
-				
+
 				is_opt_target := ret_type.starts_with('?')
 				is_opt_source := v_type.starts_with('?')
-				
+
 				is_any_source := v_type == 'Any' || v_type == ''
-				if is_any_source || is_opt_source || (expr.contains('.') && !expr.contains('(')) || expr == 't' {
+				if is_any_source || is_opt_source
+					|| (expr.contains('.') && !expr.contains('(')) || expr == 't' {
 					m.emit('mut ret_match_val := ?${pure}(none)')
 					// If it's potentially an interface but NOT an Option, don't use 'if mut'
 					if is_opt_source {
@@ -128,16 +131,17 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 						m.emit('return (ret_match_val or { panic("missing return value") }) as ${pure}')
 					}
 				} else {
-				if expr.contains('(') && !expr.starts_with('(') && !expr.contains(' or {') && (v_type.starts_with('?') || v_type == 'Any') {
-					// Add unwrap for potential Option return from method calls when casting to interface
-					m.emit('return (${expr} or { panic("missing return value") }) as ${pure}')
-				} else {
-					m.emit('return ${expr} as ${pure}')
+					if expr.contains('(') && !expr.starts_with('(') && !expr.contains(' or {')
+						&& (v_type.starts_with('?') || v_type == 'Any') {
+						// Add unwrap for potential Option return from method calls when casting to interface
+						m.emit('return (${expr} or { panic("missing return value") }) as ${pure}')
+					} else {
+						m.emit('return ${expr} as ${pure}')
+					}
 				}
+			} else {
+				m.emit('return ${expr}')
 			}
-		} else {
-			m.emit('return ${expr}')
-		}
 		} else {
 			m.emit('return')
 		}

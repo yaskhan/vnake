@@ -2,7 +2,6 @@ module mypy
 
 import os
 
-
 // Node tags
 pub const tag_func_def = u8(30)
 pub const tag_class_def = u8(32)
@@ -121,11 +120,15 @@ pub fn (mut b ASTReadBuffer) read_int_bare() int {
 	mut val := u32(0)
 	mut shift := u32(0)
 	for {
-		if b.pos >= b.data.len { break }
+		if b.pos >= b.data.len {
+			break
+		}
 		bt := b.data[b.pos]
 		b.pos++
 		val |= u32(bt & 0x7f) << shift
-		if (bt & 0x80) == 0 { break }
+		if (bt & 0x80) == 0 {
+			break
+		}
 		shift += 7
 	}
 	return int(val)
@@ -133,7 +136,9 @@ pub fn (mut b ASTReadBuffer) read_int_bare() int {
 
 pub fn (mut b ASTReadBuffer) read_int() int {
 	tag := b.read_tag()
-	if tag != literal_int { return 0 }
+	if tag != literal_int {
+		return 0
+	}
 	return b.read_int_bare()
 }
 
@@ -144,7 +149,9 @@ pub fn (mut b ASTReadBuffer) read_bool() bool {
 
 pub fn (mut b ASTReadBuffer) read_str_bare() string {
 	length := b.read_int_bare()
-	if length <= 0 || b.pos + length > b.data.len { return '' }
+	if length <= 0 || b.pos + length > b.data.len {
+		return ''
+	}
 	s := b.data[b.pos..b.pos + length].bytestr()
 	b.pos += length
 	return s
@@ -152,13 +159,17 @@ pub fn (mut b ASTReadBuffer) read_str_bare() string {
 
 pub fn (mut b ASTReadBuffer) read_str() string {
 	tag := b.read_tag()
-	if tag != literal_str { return '' }
+	if tag != literal_str {
+		return ''
+	}
 	return b.read_str_bare()
 }
 
 pub fn (mut b ASTReadBuffer) read_str_opt() ?string {
 	tag := b.read_tag()
-	if tag == literal_none { return none }
+	if tag == literal_none {
+		return none
+	}
 	return b.read_str_bare()
 }
 
@@ -180,7 +191,9 @@ pub fn (mut b ASTReadBuffer) read_loc(mut node NodeBase) {
 
 pub fn (mut b ASTReadBuffer) expect_tag(expected u8) {
 	tag := b.read_tag()
-	if tag != expected { /* handle error */ }
+	if tag != expected {
+		// handle error
+	}
 }
 
 pub fn (mut b ASTReadBuffer) expect_end_tag() {
@@ -193,67 +206,93 @@ pub fn (mut b ASTReadBuffer) expect_end_tag() {
 
 fn (mut b ASTReadBuffer) read_list_int() []int {
 	tag := b.read_tag()
-	if tag != list_int { return []int{} }
+	if tag != list_int {
+		return []int{}
+	}
 	len := b.read_int_bare()
 	mut res := []int{cap: len}
-	for _ in 0 .. len { res << b.read_int_bare() }
+	for _ in 0 .. len {
+		res << b.read_int_bare()
+	}
 	return res
 }
 
 fn (mut b ASTReadBuffer) read_list_str() []string {
 	tag := b.read_tag()
-	if tag != list_str { return []string{} }
+	if tag != list_str {
+		return []string{}
+	}
 	len := b.read_int_bare()
 	mut res := []string{cap: len}
-	for _ in 0 .. len { res << b.read_str_bare() }
+	for _ in 0 .. len {
+		res << b.read_str_bare()
+	}
 	return res
 }
 
 fn (mut b ASTReadBuffer) read_list_node() []MypyNode {
 	tag := b.read_tag()
-	if tag != list_gen { return []MypyNode{} }
+	if tag != list_gen {
+		return []MypyNode{}
+	}
 	len := b.read_int_bare()
 	mut res := []MypyNode{cap: len}
 	for _ in 0 .. len {
-		if node := b.read_node() { res << node }
+		if node := b.read_node() {
+			res << node
+		}
 	}
 	return res
 }
 
 fn (mut b ASTReadBuffer) read_list_stmt() []Statement {
 	tag := b.read_tag()
-	if tag != list_gen { return []Statement{} }
+	if tag != list_gen {
+		return []Statement{}
+	}
 	len := b.read_int_bare()
 	mut res := []Statement{cap: len}
 	for _ in 0 .. len {
-		if node := b.read_statement() { res << node }
+		if node := b.read_statement() {
+			res << node
+		}
 	}
 	return res
 }
 
 fn (mut b ASTReadBuffer) read_list_expr() []Expression {
 	tag := b.read_tag()
-	if tag != list_gen { return []Expression{} }
+	if tag != list_gen {
+		return []Expression{}
+	}
 	len := b.read_int_bare()
 	mut res := []Expression{cap: len}
 	for _ in 0 .. len {
-		if node := b.read_expression() { res << node }
+		if node := b.read_expression() {
+			res << node
+		}
 	}
 	return res
 }
 
 fn (mut b ASTReadBuffer) read_list_expr_opt() []?Expression {
 	tag := b.read_tag()
-	if tag != list_gen { return []?Expression{} }
+	if tag != list_gen {
+		return []?Expression{}
+	}
 	len := b.read_int_bare()
 	mut res := []?Expression{cap: len}
-	for _ in 0 .. len { res << b.read_expression() }
+	for _ in 0 .. len {
+		res << b.read_expression()
+	}
 	return res
 }
 
 fn (mut b ASTReadBuffer) read_list_block() []Block {
 	tag := b.read_tag()
-	if tag != list_gen { return []Block{} }
+	if tag != list_gen {
+		return []Block{}
+	}
 	len := b.read_int_bare()
 	mut res := []Block{cap: len}
 	for _ in 0 .. len {
@@ -268,20 +307,25 @@ fn (mut b ASTReadBuffer) read_list_block() []Block {
 
 fn (mut b ASTReadBuffer) read_list_import_alias() []ImportAlias {
 	tag := b.read_tag()
-	if tag != list_gen { return []ImportAlias{} }
+	if tag != list_gen {
+		return []ImportAlias{}
+	}
 	len := b.read_int_bare()
 	mut res := []ImportAlias{cap: len}
 	for _ in 0 .. len {
 		res << ImportAlias{
-			name: b.read_str()
+			name:  b.read_str()
 			alias: b.read_str_opt()
 		}
 	}
 	return res
 }
+
 fn (mut b ASTReadBuffer) read_list_type_param() []TypeParam {
 	tag := b.read_tag()
-	if tag != list_gen { return []TypeParam{} }
+	if tag != list_gen {
+		return []TypeParam{}
+	}
 	len := b.read_int_bare()
 	mut res := []TypeParam{cap: len}
 	for _ in 0 .. len {
@@ -292,7 +336,9 @@ fn (mut b ASTReadBuffer) read_list_type_param() []TypeParam {
 
 fn (mut b ASTReadBuffer) read_list_argument() []Argument {
 	tag := b.read_tag()
-	if tag != list_gen { return []Argument{} }
+	if tag != list_gen {
+		return []Argument{}
+	}
 	len := b.read_int_bare()
 	mut res := []Argument{cap: len}
 	for _ in 0 .. len {
@@ -304,7 +350,9 @@ fn (mut b ASTReadBuffer) read_list_argument() []Argument {
 
 fn (mut b ASTReadBuffer) read_list_name_expr_opt() []?NameExpr {
 	tag := b.read_tag()
-	if tag != list_gen { return []?NameExpr{} }
+	if tag != list_gen {
+		return []?NameExpr{}
+	}
 	len := b.read_int_bare()
 	mut res := []?NameExpr{cap: len}
 	for _ in 0 .. len {
@@ -327,7 +375,9 @@ fn (mut b ASTReadBuffer) read_list_name_expr_opt() []?NameExpr {
 
 fn (mut b ASTReadBuffer) read_list_import_base() []ImportBase {
 	tag := b.read_tag()
-	if tag != list_gen { return []ImportBase{} }
+	if tag != list_gen {
+		return []ImportBase{}
+	}
 	len := b.read_int_bare()
 	mut res := []ImportBase{cap: len}
 	for _ in 0 .. len {
@@ -353,25 +403,35 @@ fn (mut b ASTReadBuffer) read_list_import_base() []ImportBase {
 
 fn (mut b ASTReadBuffer) read_list_arg_kind() []ArgKind {
 	tag := b.read_tag()
-	if tag != list_int { return []ArgKind{} }
+	if tag != list_int {
+		return []ArgKind{}
+	}
 	len := b.read_int_bare()
 	mut res := []ArgKind{cap: len}
-	for _ in 0 .. len { res << unsafe { ArgKind(b.read_int_bare()) } }
+	for _ in 0 .. len {
+		res << unsafe { ArgKind(b.read_int_bare()) }
+	}
 	return res
 }
 
 fn (mut b ASTReadBuffer) read_list_str_opt() []string {
 	tag := b.read_tag()
-	if tag != list_gen { return []string{} }
+	if tag != list_gen {
+		return []string{}
+	}
 	len := b.read_int_bare()
 	mut res := []string{cap: len}
-	for _ in 0 .. len { res << b.read_str_opt() or { '' } }
+	for _ in 0 .. len {
+		res << b.read_str_opt() or { '' }
+	}
 	return res
 }
 
 fn (mut b ASTReadBuffer) read_list_pattern() []Pattern {
 	tag := b.read_tag()
-	if tag != list_gen { return []Pattern{} }
+	if tag != list_gen {
+		return []Pattern{}
+	}
 	len := b.read_int_bare()
 	mut res := []Pattern{cap: len}
 	for _ in 0 .. len {
@@ -389,7 +449,9 @@ fn (mut b ASTReadBuffer) read_list_pattern() []Pattern {
 
 pub fn (mut b ASTReadBuffer) read_node() ?MypyNode {
 	tag := b.read_tag()
-	if tag == literal_none || tag == end_tag { return none }
+	if tag == literal_none || tag == end_tag {
+		return none
+	}
 	node := b.read_node_tagged(tag)
 	b.expect_end_tag()
 	return node
@@ -472,19 +534,27 @@ fn (mut b ASTReadBuffer) read_node_tagged(tag u8) ?MypyNode {
 
 pub fn (mut b ASTReadBuffer) read_statement() ?Statement {
 	tag := b.read_tag()
-	if tag == literal_none || tag == end_tag { return none }
+	if tag == literal_none || tag == end_tag {
+		return none
+	}
 	node := b.read_node_tagged(tag) or { return none }
 	b.expect_end_tag()
-	if st := node.as_statement() { return st }
+	if st := node.as_statement() {
+		return st
+	}
 	return none
 }
 
 pub fn (mut b ASTReadBuffer) read_expression() ?Expression {
 	tag := b.read_tag()
-	if tag == literal_none || tag == end_tag { return none }
+	if tag == literal_none || tag == end_tag {
+		return none
+	}
 	node := b.read_node_tagged(tag) or { return none }
 	b.expect_end_tag()
-	if ex := node.as_expression() { return ex }
+	if ex := node.as_expression() {
+		return ex
+	}
 	return none
 }
 
@@ -502,7 +572,11 @@ fn (mut b ASTReadBuffer) read_block() Block {
 fn (mut b ASTReadBuffer) read_expression_stmt() ExpressionStmt {
 	mut node := ExpressionStmt{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -510,7 +584,11 @@ fn (mut b ASTReadBuffer) read_assignment_stmt() AssignmentStmt {
 	mut node := AssignmentStmt{}
 	b.read_loc(mut node.base)
 	node.lvalues = b.read_list_expr()
-	node.rvalue = b.read_expression() or { NameExpr{name: 'None'} }
+	node.rvalue = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	node.is_final_def = b.read_bool()
 	node.is_alias_def = b.read_bool()
 	return node
@@ -544,7 +622,11 @@ fn (mut b ASTReadBuffer) read_str_expr() StrExpr {
 fn (mut b ASTReadBuffer) read_member_expr() MemberExpr {
 	mut node := MemberExpr{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	node.name = b.read_str()
 	node.fullname = b.read_str()
 	node.kind = b.read_int()
@@ -554,7 +636,11 @@ fn (mut b ASTReadBuffer) read_member_expr() MemberExpr {
 fn (mut b ASTReadBuffer) read_call_expr() CallExpr {
 	mut node := CallExpr{}
 	b.read_loc(mut node.base)
-	node.callee = b.read_expression() or { NameExpr{name: 'None'} }
+	node.callee = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	node.args = b.read_list_expr()
 	node.arg_kinds = b.read_list_arg_kind()
 	node.arg_names = b.read_list_str_opt()
@@ -678,7 +764,11 @@ fn (mut b ASTReadBuffer) read_import_all() ImportAll {
 fn (mut b ASTReadBuffer) read_while_stmt() WhileStmt {
 	mut node := WhileStmt{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'True'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'True'
+		}
+	}
 	node.body = b.read_block()
 	b.expect_end_tag()
 	if b.read_bool() {
@@ -691,8 +781,16 @@ fn (mut b ASTReadBuffer) read_while_stmt() WhileStmt {
 fn (mut b ASTReadBuffer) read_for_stmt() ForStmt {
 	mut node := ForStmt{}
 	b.read_loc(mut node.base)
-	node.index = b.read_expression() or { NameExpr{name: '_'} }
-	node.expr = b.read_expression() or { NameExpr{name: '[]'} }
+	node.index = b.read_expression() or {
+		NameExpr{
+			name: '_'
+		}
+	}
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: '[]'
+		}
+	}
 	node.body = b.read_block()
 	b.expect_end_tag()
 	if b.read_bool() {
@@ -737,7 +835,11 @@ fn (mut b ASTReadBuffer) read_with_stmt() WithStmt {
 fn (mut b ASTReadBuffer) read_match_stmt() MatchStmt {
 	mut node := MatchStmt{}
 	b.read_loc(mut node.base)
-	node.subject = b.read_expression() or { NameExpr{name: '_'} }
+	node.subject = b.read_expression() or {
+		NameExpr{
+			name: '_'
+		}
+	}
 	node.patterns = b.read_list_pattern()
 	node.guards = b.read_list_expr_opt()
 	node.bodies = b.read_list_block()
@@ -748,8 +850,16 @@ fn (mut b ASTReadBuffer) read_op_expr() OpExpr {
 	mut node := OpExpr{}
 	b.read_loc(mut node.base)
 	node.op = b.read_str()
-	node.left = b.read_expression() or { NameExpr{name: 'None'} }
-	node.right = b.read_expression() or { NameExpr{name: 'None'} }
+	node.left = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
+	node.right = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -765,7 +875,11 @@ fn (mut b ASTReadBuffer) read_unary_expr() UnaryExpr {
 	mut node := UnaryExpr{}
 	b.read_loc(mut node.base)
 	node.op = b.read_str()
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -781,9 +895,20 @@ fn (mut b ASTReadBuffer) read_dict_expr() DictExpr {
 	b.read_loc(mut node.base)
 	len := b.read_int_bare()
 	for _ in 0 .. len {
-		key := b.read_expression() or { NameExpr{name: 'None'} }
-		val := b.read_expression() or { NameExpr{name: 'None'} }
-		node.items << DictEntry{key: key, value: val}
+		key := b.read_expression() or {
+			NameExpr{
+				name: 'None'
+			}
+		}
+		val := b.read_expression() or {
+			NameExpr{
+				name: 'None'
+			}
+		}
+		node.items << DictEntry{
+			key:   key
+			value: val
+		}
 	}
 	return node
 }
@@ -805,7 +930,11 @@ fn (mut b ASTReadBuffer) read_set_expr() SetExpr {
 fn (mut b ASTReadBuffer) read_generator_expr() GeneratorExpr {
 	mut node := GeneratorExpr{}
 	b.read_loc(mut node.base)
-	node.left_expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.left_expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -815,7 +944,11 @@ fn (mut b ASTReadBuffer) read_lambda_expr() LambdaExpr {
 	node.arguments = b.read_list_argument()
 	node.arg_names = b.read_list_str_opt()
 	node.arg_kinds = b.read_list_arg_kind()
-	node.body = b.read_expression() or { NameExpr{name: 'None'} }
+	node.body = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	node.is_generator = b.read_bool()
 	return node
 }
@@ -823,25 +956,45 @@ fn (mut b ASTReadBuffer) read_lambda_expr() LambdaExpr {
 fn (mut b ASTReadBuffer) read_conditional_expr() ConditionalExpr {
 	mut node := ConditionalExpr{}
 	b.read_loc(mut node.base)
-	node.cond = b.read_expression() or { NameExpr{name: 'None'} }
-	node.if_expr = b.read_expression() or { NameExpr{name: 'None'} }
-	node.else_expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.cond = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
+	node.if_expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
+	node.else_expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
 fn (mut b ASTReadBuffer) read_slice_expr() SliceExpr {
 	mut node := SliceExpr{}
 	b.read_loc(mut node.base)
-	if b.read_bool() { node.begin = b.read_expression() }
-	if b.read_bool() { node.end = b.read_expression() }
-	if b.read_bool() { node.step = b.read_expression() }
+	if b.read_bool() {
+		node.begin = b.read_expression()
+	}
+	if b.read_bool() {
+		node.end = b.read_expression()
+	}
+	if b.read_bool() {
+		node.step = b.read_expression()
+	}
 	return node
 }
 
 fn (mut b ASTReadBuffer) read_return_stmt() ReturnStmt {
 	mut node := ReturnStmt{}
 	b.read_loc(mut node.base)
-	if b.read_bool() { node.expr = b.read_expression() }
+	if b.read_bool() {
+		node.expr = b.read_expression()
+	}
 	return node
 }
 
@@ -866,15 +1019,23 @@ fn (mut b ASTReadBuffer) read_pass_stmt() PassStmt {
 fn (mut b ASTReadBuffer) read_raise_stmt() RaiseStmt {
 	mut node := RaiseStmt{}
 	b.read_loc(mut node.base)
-	if b.read_bool() { node.expr = b.read_expression() }
-	if b.read_bool() { node.from_node = b.read_expression() }
+	if b.read_bool() {
+		node.expr = b.read_expression()
+	}
+	if b.read_bool() {
+		node.from_node = b.read_expression()
+	}
 	return node
 }
 
 fn (mut b ASTReadBuffer) read_del_stmt() DelStmt {
 	mut node := DelStmt{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -895,8 +1056,14 @@ fn (mut b ASTReadBuffer) read_nonlocal_decl() NonlocalDecl {
 fn (mut b ASTReadBuffer) read_assert_stmt() AssertStmt {
 	mut node := AssertStmt{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'True'} }
-	if b.read_bool() { node.msg = b.read_expression() }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'True'
+		}
+	}
+	if b.read_bool() {
+		node.msg = b.read_expression()
+	}
 	return node
 }
 
@@ -909,7 +1076,11 @@ fn (mut b ASTReadBuffer) read_ellipsis_expr() EllipsisExpr {
 fn (mut b ASTReadBuffer) read_star_expr() StarExpr {
 	mut node := StarExpr{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	node.valid = b.read_bool()
 	return node
 }
@@ -917,21 +1088,31 @@ fn (mut b ASTReadBuffer) read_star_expr() StarExpr {
 fn (mut b ASTReadBuffer) read_yield_expr() YieldExpr {
 	mut node := YieldExpr{}
 	b.read_loc(mut node.base)
-	if b.read_bool() { node.expr = b.read_expression() }
+	if b.read_bool() {
+		node.expr = b.read_expression()
+	}
 	return node
 }
 
 fn (mut b ASTReadBuffer) read_yield_from_expr() YieldFromExpr {
 	mut node := YieldFromExpr{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
 fn (mut b ASTReadBuffer) read_reveal_expr() RevealExpr {
 	mut node := RevealExpr{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	node.kind = b.read_int()
 	return node
 }
@@ -946,15 +1127,27 @@ fn (mut b ASTReadBuffer) read_super_expr() SuperExpr {
 fn (mut b ASTReadBuffer) read_assignment_expr() AssignmentExpr {
 	mut node := AssignmentExpr{}
 	b.read_loc(mut node.base)
-	node.target = b.read_expression() or { NameExpr{name: 'None'} }
-	node.value = b.read_expression() or { NameExpr{name: 'None'} }
+	node.target = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
+	node.value = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
 fn (mut b ASTReadBuffer) read_await_expr() AwaitExpr {
 	mut node := AwaitExpr{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -976,8 +1169,12 @@ fn (mut b ASTReadBuffer) read_pattern() ?Pattern {
 fn (mut b ASTReadBuffer) read_as_pattern() AsPattern {
 	mut node := AsPattern{}
 	b.read_loc(mut node.pbase.base)
-	if b.read_bool() { node.pattern = b.read_pattern_node() }
-	if b.read_bool() { node.name = b.read_name_expr() }
+	if b.read_bool() {
+		node.pattern = b.read_pattern_node()
+	}
+	if b.read_bool() {
+		node.name = b.read_name_expr()
+	}
 	return node
 }
 
@@ -1005,7 +1202,11 @@ fn (mut b ASTReadBuffer) read_or_pattern() OrPattern {
 fn (mut b ASTReadBuffer) read_value_pattern() ValuePattern {
 	mut node := ValuePattern{}
 	b.read_loc(mut node.pbase.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -1036,15 +1237,27 @@ fn (mut b ASTReadBuffer) read_mapping_pattern() MappingPattern {
 fn (mut b ASTReadBuffer) read_class_pattern() ClassPattern {
 	mut node := ClassPattern{}
 	b.read_loc(mut node.pbase.base)
-	node.class_ref = b.read_expression() or { NameExpr{name: 'None'} }
+	node.class_ref = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
 fn (mut b ASTReadBuffer) read_index_expr() IndexExpr {
 	mut node := IndexExpr{}
 	b.read_loc(mut node.base)
-	node.base_ = b.read_expression() or { NameExpr{name: 'None'} }
-	node.index = b.read_expression() or { NameExpr{name: 'None'} }
+	node.base_ = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
+	node.index = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -1084,15 +1297,27 @@ fn (mut b ASTReadBuffer) read_set_comprehension() SetComprehension {
 fn (mut b ASTReadBuffer) read_dictionary_comprehension() DictionaryComprehension {
 	mut node := DictionaryComprehension{}
 	b.read_loc(mut node.base)
-	node.key = b.read_expression() or { NameExpr{name: 'None'} }
-	node.value = b.read_expression() or { NameExpr{name: 'None'} }
+	node.key = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
+	node.value = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
 fn (mut b ASTReadBuffer) read_type_application() TypeApplication {
 	mut node := TypeApplication{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -1161,8 +1386,16 @@ fn (mut b ASTReadBuffer) read_operator_assignment_stmt() OperatorAssignmentStmt 
 	mut node := OperatorAssignmentStmt{}
 	b.read_loc(mut node.base)
 	node.op = b.read_str()
-	node.lvalue = b.read_lvalue() or { NameExpr{name: '_'} }
-	node.rvalue = b.read_expression() or { NameExpr{name: 'None'} }
+	node.lvalue = b.read_lvalue() or {
+		NameExpr{
+			name: '_'
+		}
+	}
+	node.rvalue = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -1182,7 +1415,11 @@ fn (mut b ASTReadBuffer) read_lvalue() ?Lvalue {
 fn (mut b ASTReadBuffer) read_cast_expr() CastExpr {
 	mut node := CastExpr{}
 	b.read_loc(mut node.base)
-	node.expr = b.read_expression() or { NameExpr{name: 'None'} }
+	node.expr = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -1191,7 +1428,11 @@ fn (mut b ASTReadBuffer) read_type_alias_stmt() TypeAliasStmt {
 	b.read_loc(mut node.base)
 	node.name = b.read_name_expr()
 	node.type_args = b.read_list_type_param()
-	node.value = b.read_expression() or { NameExpr{name: 'None'} }
+	node.value = b.read_expression() or {
+		NameExpr{
+			name: 'None'
+		}
+	}
 	return node
 }
 
@@ -1225,7 +1466,9 @@ fn (mut b ASTReadBuffer) read_symbol_table() SymbolTable {
 		key := b.read_str_bare()
 		res[key] = b.read_symbol_table_node()
 	}
-	return SymbolTable{symbols: res}
+	return SymbolTable{
+		symbols: res
+	}
 }
 
 fn (mut b ASTReadBuffer) read_symbol_table_node() SymbolTableNode {
@@ -1243,7 +1486,9 @@ fn (mut b ASTReadBuffer) read_symbol_table_node() SymbolTableNode {
 
 fn (mut b ASTReadBuffer) read_symbol_node_ref() ?SymbolNodeRef {
 	tag := b.read_tag()
-	if tag == literal_none { return none }
+	if tag == literal_none {
+		return none
+	}
 	match tag {
 		tag_class_def { return SymbolNodeRef(b.read_class_def()) }
 		tag_func_def { return SymbolNodeRef(b.read_func_def()) }
@@ -1273,11 +1518,10 @@ pub fn native_parse(filename string, options Options, skip_function_bodies bool,
 }
 
 fn (mut b ASTReadBuffer) read_u8_or_zero() u8 {
-	if b.pos >= b.data.len { return 0 }
+	if b.pos >= b.data.len {
+		return 0
+	}
 	v := b.data[b.pos]
 	b.pos++
 	return v
 }
-
-
-

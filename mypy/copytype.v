@@ -17,11 +17,17 @@ pub fn type_shallow_copy(t MypyTypeNode) !MypyTypeNode {
 		}
 		NoneType {
 			MypyTypeNode(NoneType{
-				line:   t.line
+				line: t.line
 			})
 		}
 		Instance {
-			info := if ti := t.type_ { ti } else if ty := t.typ { ty } else { panic('No type info in Instance') }
+			info := if ti := t.type_ {
+				ti
+			} else if ty := t.typ {
+				ty
+			} else {
+				panic('No type info in Instance')
+			}
 			MypyTypeNode(Instance{
 				typ:       info
 				type_:     info

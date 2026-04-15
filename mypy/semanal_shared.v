@@ -11,7 +11,7 @@ pub const allow_incompatible_override = ['__slots__', '__deletable__', '__match_
 pub const priority_fallbacks = 1
 
 pub interface SemanticAnalyzerCoreInterface {
-	mut:
+mut:
 	lookup_qualified(name string, ctx Context, suppress_errors bool) ?&SymbolTableNode
 	lookup_fully_qualified(fullname string) &SymbolTableNode
 	lookup_fully_qualified_or_none(fullname string) ?&SymbolTableNode
@@ -29,7 +29,7 @@ pub interface SemanticAnalyzerCoreInterface {
 }
 
 pub interface SemanticAnalyzerInterface {
-	mut:
+mut:
 	// Inherit (manually) CoreInterface methods
 	lookup_qualified(name string, ctx Context, suppress_errors bool) ?&SymbolTableNode
 	lookup_fully_qualified(fullname string) &SymbolTableNode
@@ -204,8 +204,8 @@ fn find_dataclass_transform_spec_from_info(info &TypeInfo) ?&DataclassTransformS
 pub fn require_bool_literal_argument(mut api SemanticAnalyzerInterface, expr Expression, name string, default ?bool) ?bool {
 	val := api.parse_bool(expr)
 	if val == none {
-		api.fail('"${name}" argument must be a True or False literal', expr.get_context(), false, false,
-			literal_req)
+		api.fail('"${name}" argument must be a True or False literal', expr.get_context(),
+			false, false, literal_req)
 		return default
 	}
 	return val

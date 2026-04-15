@@ -49,23 +49,31 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 				if base_expr.slice is ast.Tuple {
 					for elt in base_expr.slice.elements {
 						gn := env.visit_expr_fn(elt)
-						if gn.len > 0 { py_generics << gn }
+						if gn.len > 0 {
+							py_generics << gn
+						}
 					}
 				} else {
 					gn := env.visit_expr_fn(base_expr.slice)
-					if gn.len > 0 { py_generics << gn }
+					if gn.len > 0 {
+						py_generics << gn
+					}
 				}
 			} else {
 				// Handle TypeVars in Base[T]
 				if base_expr.slice is ast.Name {
 					if base_expr.slice.id in env.state.type_vars {
-						if base_expr.slice.id !in py_generics { py_generics << base_expr.slice.id }
+						if base_expr.slice.id !in py_generics {
+							py_generics << base_expr.slice.id
+						}
 					}
 				} else if base_expr.slice is ast.Tuple {
 					for elt in base_expr.slice.elements {
 						if elt is ast.Name {
 							if elt.id in env.state.type_vars {
-								if elt.id !in py_generics { py_generics << elt.id }
+								if elt.id !in py_generics {
+									py_generics << elt.id
+								}
 							}
 						}
 					}
@@ -76,10 +84,12 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 
 	env.state.current_class = struct_name
 	env.state.current_class_body = node.body.clone()
-	
+
 	mut all_class_generics := prev_generics.clone()
 	for pg in py_generics {
-		if pg !in all_class_generics { all_class_generics << pg }
+		if pg !in all_class_generics {
+			all_class_generics << pg
+		}
 	}
 	env.state.current_class_generics = all_class_generics.clone()
 	env.state.current_class_generic_map = map[string]string{}
@@ -89,38 +99,35 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 
 	if py_generics.len > 0 {
 		mut parent_maps := []map[string]string{}
-		if prev_generic_map.len > 0 { parent_maps << prev_generic_map }
+		if prev_generic_map.len > 0 {
+			parent_maps << prev_generic_map
+		}
 		env.state.current_class_generic_map = base.get_generic_map(py_generics, parent_maps)
 	}
 	env.state.generic_scopes << env.state.current_class_generic_map
 	defer { env.state.generic_scopes.pop() }
 
 	if classes.pydantic_handler.is_pydantic_model(node) {
-		mut p_env := pydantic_support.new_pydantic_visit_env(
-			env.state,
-			env.analyzer,
-			env.visit_stmt_fn,
-			env.visit_expr_fn,
-			env.emit_struct_fn,
-			env.emit_function_fn,
-			env.emit_constant_fn,
-			env.map_type_fn,
-			env.map_annotation_fn,
-			env.source_mapping,
-		)
+		mut p_env := pydantic_support.new_pydantic_visit_env(env.state, env.analyzer,
+			env.visit_stmt_fn, env.visit_expr_fn, env.emit_struct_fn, env.emit_function_fn,
+			env.emit_constant_fn, env.map_type_fn, env.map_annotation_fn, env.source_mapping)
 		processor := pydantic_support.new_pydantic_model_processor()
 		processor.process_model(node, mut p_env)
 		env.state.defined_classes[struct_name]['is_pydantic'] = true
 		return
 	}
 
-	decorators_raw, is_dataclass, is_deprecated, is_disjoint_base, deprecated_message := classes.class_decorator_handler.process_decorators(node, mut env)
+	decorators_raw, is_dataclass, is_deprecated, is_disjoint_base, deprecated_message := classes.class_decorator_handler.process_decorators(node, mut
+		env)
 	mut decorators := decorators_raw.clone()
-	metaclass_decorators := classes.class_decorator_handler.process_metaclass(node, mut env)
+	metaclass_decorators := classes.class_decorator_handler.process_metaclass(node, mut
+		env)
 	decorators << metaclass_decorators
 
 	dataclass_metadata := if is_dataclass {
-		classes.class_fields_handler.get_dataclass_metadata(node, struct_name, &env) or { map[string]string{} }
+		classes.class_fields_handler.get_dataclass_metadata(node, struct_name, &env) or {
+			map[string]string{}
+		}
 	} else {
 		map[string]string{}
 	}
@@ -133,18 +140,23 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 	mut added_fields := map[string]bool{}
 
 	if is_main_struct {
-		mixin_fields := classes.class_fields_handler.collect_mixin_fields(struct_name, mut added_fields,
-			is_main_struct, mut env)
-		for f in mixin_fields { fields << f }
+		mixin_fields := classes.class_fields_handler.collect_mixin_fields(struct_name, mut
+			added_fields, is_main_struct, mut env)
+		for f in mixin_fields {
+			fields << f
+		}
 	}
 
-	base_fields, current_class_bases, is_enum, is_int_enum, is_flag, is_unittest, is_protocol, _, is_typed_dict := classes.class_bases_handler.process_bases(node, struct_name, mut env)
+	base_fields, current_class_bases, is_enum, is_int_enum, is_flag, is_unittest, is_protocol, _, is_typed_dict := classes.class_bases_handler.process_bases(node,
+		struct_name, mut env)
 
 	if is_enum || is_int_enum {
-		env.state.defined_classes[struct_name]["is_enum"] = true
+		env.state.defined_classes[struct_name]['is_enum'] = true
 	}
 	env.state.current_class_bases = current_class_bases
-	for f in base_fields { fields << f }
+	for f in base_fields {
+		fields << f
+	}
 
 	if is_typed_dict {
 		env.state.readonly_fields[struct_name] = map[string]bool{}
@@ -165,7 +177,8 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 	}
 	body = filtered_body.clone()
 	has_init, has_new, static_methods, class_methods := classes.class_methods_handler.extract_method_info(node)
-	classes.class_methods_handler.register_class_info(struct_name, has_init, has_new, static_methods, class_methods, false, mut env)
+	classes.class_methods_handler.register_class_info(struct_name, has_init, has_new,
+		static_methods, class_methods, false, mut env)
 
 	mut abs_methods := []string{}
 	for base_name in current_class_bases {
@@ -182,13 +195,15 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		mut is_abs := false
 		for dec in method.decorator_list {
 			d_name := env.visit_expr_fn(dec)
-			if d_name in ["abstractmethod", "abc.abstractmethod"] {
+			if d_name in ['abstractmethod', 'abc.abstractmethod'] {
 				is_abs = true
 				break
 			}
 		}
 		if is_abs {
-			if method.name !in abs_methods { abs_methods << method.name }
+			if method.name !in abs_methods {
+				abs_methods << method.name
+			}
 		} else {
 			mut is_pass := false
 			if method.body.len == 1 {
@@ -206,7 +221,9 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			if !is_pass {
 				mut new_abs := []string{}
 				for m in abs_methods {
-					if m != method.name { new_abs << m }
+					if m != method.name {
+						new_abs << m
+					}
 				}
 				abs_methods = new_abs.clone()
 			}
@@ -230,30 +247,42 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 	}
 
 	if is_dataclass && dataclass_metadata.len > 0 {
-		dc_fields := classes.class_fields_handler.process_dataclass_fields(
-			body, struct_name, dataclass_metadata, mut added_fields, mut dataclass_field_order, mut env)
-		for f in dc_fields { fields << f }
+		dc_fields := classes.class_fields_handler.process_dataclass_fields(body, struct_name,
+			dataclass_metadata, mut added_fields, mut dataclass_field_order, mut env)
+		for f in dc_fields {
+			fields << f
+		}
 	}
 
-	class_attr_fields := classes.class_fields_handler.process_class_attributes(body, struct_name,
-		mut added_fields, is_dataclass, is_typed_dict, dataclass_metadata, mut dataclass_field_order, mut env)
-	for f in class_attr_fields { fields << f }
+	class_attr_fields := classes.class_fields_handler.process_class_attributes(body, struct_name, mut
+		added_fields, is_dataclass, is_typed_dict, dataclass_metadata, mut dataclass_field_order, mut
+		env)
+	for f in class_attr_fields {
+		fields << f
+	}
 
 	namedtuple_metadata := if !is_dataclass {
-		classes.class_fields_handler.get_namedtuple_metadata(node, struct_name, &env) or { map[string]string{} }
+		classes.class_fields_handler.get_namedtuple_metadata(node, struct_name, &env) or {
+			map[string]string{}
+		}
 	} else {
 		map[string]string{}
 	}
 	if namedtuple_metadata.len > 0 {
-		nt_fields := classes.class_fields_handler.process_namedtuple_fields(
-			struct_name, namedtuple_metadata, mut added_fields, mut env)
-		for f in nt_fields { fields << f }
+		nt_fields := classes.class_fields_handler.process_namedtuple_fields(struct_name,
+			namedtuple_metadata, mut added_fields, mut env)
+		for f in nt_fields {
+			fields << f
+		}
 	}
 
 	// For non-enums and non-unittests, we might have __init__ fields
 	if !is_enum && !is_int_enum && !is_flag && !is_unittest {
-		init_fields := classes.class_fields_handler.collect_init_fields(node, mut added_fields, struct_name, mut env)
-		for f in init_fields { fields << f }
+		init_fields := classes.class_fields_handler.collect_init_fields(node, mut added_fields,
+			struct_name, mut env)
+		for f in init_fields {
+			fields << f
+		}
 	}
 
 	// Register dataclass/typeddict field order
@@ -268,13 +297,14 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 	if is_protocol {
 		generics_str := get_generics_with_variance_str(&env)
 		is_exported := env.state.is_exported(node.name)
-		
+
 		mut interface_fields_str := []string{}
-		classes.class_fields_handler.build_visibility_blocks(fields, mut interface_fields_str, is_typed_dict)
-		
+		classes.class_fields_handler.build_visibility_blocks(fields, mut interface_fields_str,
+			is_typed_dict)
+
 		interface_def := classes.special_classes_handler.generate_interface_definition(struct_name,
-			methods, doc_comment, decorators, generics_str, is_exported, env.source_mapping, node,
-			interface_fields_str, mut env)
+			methods, doc_comment, decorators, generics_str, is_exported, env.source_mapping,
+			node, interface_fields_str, mut env)
 		env.emit_struct_fn(interface_def)
 		if !node.name.ends_with('Mixin') && node.name in env.state.class_hierarchy {
 			impl_name := '${struct_name}_Impl'
@@ -300,14 +330,16 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			env.visit_stmt_fn(method)
 		}
 	} else if is_enum || is_int_enum || is_flag {
-		enum_fields := classes.special_classes_handler.process_enum_body(node, is_flag, mut env)
+		enum_fields := classes.special_classes_handler.process_enum_body(node, is_flag, mut
+			env)
 		is_exported := env.state.is_exported(node.name)
 		env.emit_struct_fn(classes.special_classes_handler.generate_enum_definition(struct_name,
 			enum_fields, is_flag, is_int_enum, is_exported))
 	} else {
 		mut struct_name_for_body := struct_name
 		mut struct_fields_str := []string{}
-		classes.class_fields_handler.build_visibility_blocks(fields, mut struct_fields_str, is_typed_dict)
+		classes.class_fields_handler.build_visibility_blocks(fields, mut struct_fields_str,
+			is_typed_dict)
 
 		mut is_base_for_others := false
 		for _, bases in env.state.class_hierarchy {
@@ -322,7 +354,8 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			}
 		}
 
-		if (is_base_for_others || is_protocol || is_abc || env.state.known_interfaces[struct_name]) && !node.name.ends_with('Mixin') {
+		if (is_base_for_others || is_protocol || is_abc || env.state.known_interfaces[struct_name])
+			&& !node.name.ends_with('Mixin') {
 			struct_name_for_body = '${struct_name}_Impl'
 			env.state.current_class = struct_name_for_body
 			env.state.class_to_impl[struct_name] = struct_name_for_body
@@ -376,7 +409,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			meta_parts << 'pub struct ${meta_struct_name} {'
 			meta_parts << 'pub mut:'
 			for cvar in class_vars {
-				meta_parts << '    ${cvar["name"]} ${cvar["type"]} = ${cvar["value"]}'
+				meta_parts << '    ${cvar['name']} ${cvar['type']} = ${cvar['value']}'
 			}
 			meta_parts << '}'
 			env.emit_struct_fn(meta_parts.join('\n'))
@@ -387,16 +420,16 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		if !is_enum && !is_flag {
 			ov_key_init := '${struct_name}.__init__'
 			ov_key_new := '${struct_name}.__new__'
-			
+
 			has_init_ov := ov_key_init in env.state.overloaded_signatures
 			has_new_ov := ov_key_new in env.state.overloaded_signatures
-			
+
 			if has_init_ov || has_new_ov {
 				ov_key := if has_init_ov { ov_key_init } else { ov_key_new }
 				sigs := env.state.overloaded_signatures[ov_key]
 				prefix := if env.state.is_exported(struct_name) { 'pub ' } else { '' }
 				generics := get_generics_with_variance_str(&env)
-				
+
 				is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
 				for sig in sigs {
 					mut type_suffix_parts := []string{}
@@ -404,33 +437,43 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					mut factory_assignments := []string{}
 					mut anno_parts := []string{}
 					for k, v in sig {
-						if k == 'return' || k in ['self', 'cls'] { continue }
-						arg_name := base.sanitize_name(k, false, map[string]bool{}, "", map[string]bool{})
+						if k == 'return' || k in ['self', 'cls'] {
+							continue
+						}
+						arg_name := base.sanitize_name(k, false, map[string]bool{}, '',
+							map[string]bool{})
 						v_type := env.map_type_fn(v, struct_name, false, true, false)
-						
+
 						mut clean_type := v_type
 						for tv, _ in env.state.type_vars {
 							clean_type = clean_type.replace(tv, 'generic')
 						}
-						clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[', '_').replace(']', '').replace('.', '_')
+						clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[',
+							'_').replace(']', '').replace('.', '_')
 						type_suffix_parts << clean_type
 
 						factory_args << '${arg_name} ${v_type}'
 						factory_assignments << 'self.${arg_name} = ${arg_name}'
 						anno_parts << "'${arg_name}': '${v_type}'"
 					}
-					
+
 					mut mangled_factory := 'new_${base.to_snake_case(struct_name).to_lower()}'
-					if mangled_factory.ends_with('_impl') { mangled_factory = mangled_factory[..mangled_factory.len - 5] }
+					if mangled_factory.ends_with('_impl') {
+						mangled_factory = mangled_factory[..mangled_factory.len - 5]
+					}
 					if type_suffix_parts.len > 0 {
-						mangled_factory = '${mangled_factory}_${type_suffix_parts.join("_")}'
+						mangled_factory = '${mangled_factory}_${type_suffix_parts.join('_')}'
 					} else {
 						mangled_factory = '${mangled_factory}_noargs'
 					}
-					
+
 					mut f_code := []string{}
-					factory_ret := if is_pydantic { '!&${struct_name_for_body}${generics}' } else { '&${struct_name_for_body}${generics}' }
-					f_code << '${prefix}fn ${mangled_factory}${generics}(${factory_args.join(", ")}) ${factory_ret} {'
+					factory_ret := if is_pydantic {
+						'!&${struct_name_for_body}${generics}'
+					} else {
+						'&${struct_name_for_body}${generics}'
+					}
+					f_code << '${prefix}fn ${mangled_factory}${generics}(${factory_args.join(', ')}) ${factory_ret} {'
 					f_code << '    mut self := &${struct_name_for_body}${generics}{}'
 					if factory_assignments.len > 0 {
 						f_code << '    ' + factory_assignments.join('\n    ')
@@ -444,18 +487,26 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 
 					const_name := base.to_snake_case('${struct_name_for_body}_${mangled_factory}_annotations').trim_left('_')
 					if anno_parts.len > 0 {
-						env.emit_constant_fn('pub const ${const_name} = { ${anno_parts.join(", ")} }')
-						env.emit_constant_fn('const ${const_name} = { ${anno_parts.join(", ")}, \'return\': \'&${struct_name_for_body}${generics}\' }')
+						env.emit_constant_fn('pub const ${const_name} = { ${anno_parts.join(', ')} }')
+						env.emit_constant_fn('const ${const_name} = { ${anno_parts.join(', ')}, \'return\': \'&${struct_name_for_body}${generics}\' }')
 					}
 				}
 			} else {
-				if !classes.class_methods_handler.has_method(methods, '__init__') && !classes.class_methods_handler.has_method(methods, '__new__') && !is_dataclass && !is_protocol && !is_typed_dict && !is_unittest {
+				if !classes.class_methods_handler.has_method(methods, '__init__')
+					&& !classes.class_methods_handler.has_method(methods, '__new__')
+					&& !is_dataclass && !is_protocol && !is_typed_dict && !is_unittest {
 					prefix := if env.state.is_exported(struct_name) { 'pub ' } else { '' }
 					generics := get_generics_with_variance_str(&env)
 					mangled_factory := base.get_factory_name(struct_name, env.state.class_hierarchy)
-					is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or { false }
-					factory_ret := if is_pydantic { '!&${struct_name_for_body}${generics}' } else { '&${struct_name_for_body}${generics}' }
-					
+					is_pydantic := env.state.defined_classes[struct_name]['is_pydantic'] or {
+						false
+					}
+					factory_ret := if is_pydantic {
+						'!&${struct_name_for_body}${generics}'
+					} else {
+						'&${struct_name_for_body}${generics}'
+					}
+
 					mut f_code := []string{}
 					f_code << '${prefix}fn ${mangled_factory}${generics}() ${factory_ret} {'
 					f_code << '    mut self := &${struct_name_for_body}${generics}{}'
@@ -470,8 +521,9 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		}
 
 		if is_dataclass && has_post_init {
-			if factory_code := classes.class_fields_handler.generate_dataclass_factory(
-				struct_name, dataclass_metadata, body, has_post_init, mut env) {
+			if factory_code := classes.class_fields_handler.generate_dataclass_factory(struct_name,
+				dataclass_metadata, body, has_post_init, mut env)
+			{
 				env.emit_function_fn(factory_code)
 			}
 		}
@@ -504,9 +556,11 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 	}
 	if py_generics.len > 0 {
 		mut gen_list := []string{}
-		for g in py_generics { gen_list << "'${g}'" }
+		for g in py_generics {
+			gen_list << "'${g}'"
+		}
 		const_name := base.to_snake_case('${struct_name}_type_params').trim_left('_')
-		env.emit_constant_fn('pub const ${const_name} = [ ${gen_list.join(", ")} ]')
+		env.emit_constant_fn('pub const ${const_name} = [ ${gen_list.join(', ')} ]')
 	}
 
 	defer {
@@ -524,7 +578,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		env.state.current_class_generic_bases = prev_generic_bases.clone()
 		env.state.current_class_is_unittest = prev_is_unittest
 		env.state.current_class_body = prev_body
-		classes.class_methods_handler.register_class_info(prev_class, false, false, []string{}, []string{}, false,
-			mut env)
+		classes.class_methods_handler.register_class_info(prev_class, false, false, []string{},
+			[]string{}, false, mut env)
 	}
 }

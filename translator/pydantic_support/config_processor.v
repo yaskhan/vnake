@@ -11,8 +11,8 @@ pub fn new_pydantic_config_processor() PydanticConfigProcessor {
 pub fn (p PydanticConfigProcessor) extract(node ast.ClassDef, mut env PydanticVisitEnv) PydanticConfigInfo {
 	_ = p
 	mut info := PydanticConfigInfo{
-		extra:          'ignore'
-		allow_mutation: true
+		extra:             'ignore'
+		allow_mutation:    true
 		min_anystr_length: -1
 		max_anystr_length: -1
 	}
@@ -37,8 +37,8 @@ pub fn (p PydanticConfigProcessor) extract(node ast.ClassDef, mut env PydanticVi
 pub fn (p PydanticConfigProcessor) extract_from_config_dict(node ast.Call, mut env PydanticVisitEnv) PydanticConfigInfo {
 	_ = p
 	mut info := PydanticConfigInfo{
-		extra:          'ignore'
-		allow_mutation: true
+		extra:             'ignore'
+		allow_mutation:    true
 		min_anystr_length: -1
 		max_anystr_length: -1
 	}

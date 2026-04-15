@@ -60,14 +60,14 @@ pub fn merge_mro(seqs [][]&TypeInfo) []&TypeInfo {
 				active_seqs << s
 			}
 		}
-		
+
 		if active_seqs.len == 0 {
 			break
 		}
-		
+
 		work_seqs = active_seqs.clone()
 
-		mut head := voidptr(0)
+		mut head := unsafe { nil }
 		mut found := false
 
 		// Find a valid head element

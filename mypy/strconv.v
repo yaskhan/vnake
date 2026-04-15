@@ -134,8 +134,10 @@ fn dump_tagged(nodes []DumpNode, tag string, mut str_conv StrConv) string {
 			else {
 				// Simplified representation
 				match n {
-					Expression { a << indent(typeof(n).name + ':' + n.get_context().line.str(), 2) }
-					Statement { a << indent(typeof(n).name + ':' + n.get_context().line.str(), 2) }
+					Expression { a << indent(typeof(n).name + ':' + n.get_context().line.str(),
+							2) }
+					Statement { a << indent(typeof(n).name + ':' + n.get_context().line.str(),
+							2) }
 					else { a << indent('Node(...)', 2) }
 				}
 			}

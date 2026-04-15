@@ -144,7 +144,6 @@ pub fn cache_meta_deserialize(meta map[string]CacheValue, data_file string) ?Cac
 	}
 }
 
-
 // read_literal reads a literal from buffer
 pub fn read_literal(data []u8, tag u8) CacheValue {
 	if tag == literal_int {
@@ -358,8 +357,18 @@ pub fn read_errors(mut data []u8) []ErrorInfo {
 			file:       if has_file { read_str_bare(mut data) } else { '' }
 			line:       read_int(mut data)
 			column:     read_int(mut data)
-			end_line:   (fn (v int) ?int { if v == -1 { return none } return v }(read_int(mut data)))
-			end_column: (fn (v int) ?int { if v == -1 { return none } return v }(read_int(mut data)))
+			end_line:   (fn (v int) ?int {
+				if v == -1 {
+					return none
+				}
+				return v
+			}(read_int(mut data)))
+			end_column: (fn (v int) ?int {
+				if v == -1 {
+					return none
+				}
+				return v
+			}(read_int(mut data)))
 			severity:   read_str(mut data)
 			message:    read_str(mut data)
 			code:       if read_bool(mut data) { read_str_bare(mut data) } else { none }

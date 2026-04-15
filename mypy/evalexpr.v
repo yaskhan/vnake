@@ -84,12 +84,12 @@ pub fn (mut e NodeEvaluator) visit_comparison_expr(mut o ComparisonExpr) !AnyNod
 
 // visit_cast_expr evaluates CastExpr
 pub fn (mut e NodeEvaluator) visit_cast_expr(mut o CastExpr) !AnyNode {
-	return (o.expr.accept(mut e)! as string)
+	return o.expr.accept(mut e)! as string
 }
 
 // visit_assert_type_expr evaluates AssertTypeExpr
 pub fn (mut e NodeEvaluator) visit_assert_type_expr(mut o AssertTypeExpr) !AnyNode {
-	return (o.expr.accept(mut e)! as string)
+	return o.expr.accept(mut e)! as string
 }
 
 // visit_reveal_expr evaluates RevealExpr

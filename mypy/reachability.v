@@ -249,9 +249,23 @@ pub fn consider_sys_platform(expr Expression, platform string) int {
 // fixed_comparison performs value comparison
 pub fn fixed_comparison(left string, op string, right string) int {
 	return match op {
-		'==' { if left == right { always_true } else { always_false } }
-		'!=' { if left != right { always_true } else { always_false } }
-		else { truth_value_unknown }
+		'==' {
+			if left == right {
+				always_true
+			} else {
+				always_false
+			}
+		}
+		'!=' {
+			if left != right {
+				always_true
+			} else {
+				always_false
+			}
+		}
+		else {
+			truth_value_unknown
+		}
 	}
 }
 

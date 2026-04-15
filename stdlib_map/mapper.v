@@ -10,7 +10,7 @@ pub mut:
 // new_stdlib_mapper creates a new StdLibMapper instance
 pub fn new_stdlib_mapper() &StdLibMapper {
 	mut mapper := &StdLibMapper{
-		mappings: map[string]map[string]string{}
+		mappings:  map[string]map[string]string{}
 		v_imports: map[string][]string{}
 	}
 	mapper.init_mappings()
@@ -22,26 +22,26 @@ pub fn new_stdlib_mapper() &StdLibMapper {
 fn (mut m StdLibMapper) init_mappings() {
 	// Math
 	m.mappings['math'] = {
-		'sqrt': 'math.sqrt'
-		'sin': 'math.sin'
-		'cos': 'math.cos'
-		'tan': 'math.tan'
-		'asin': 'math.asin'
-		'acos': 'math.acos'
-		'atan': 'math.atan'
-		'atan2': 'math.atan2'
-		'sinh': 'math.sinh'
-		'cosh': 'math.cosh'
-		'tanh': 'math.tanh'
-		'exp': 'math.exp'
-		'log': 'math.log'
-		'log10': 'math.log10'
-		'pow': 'math.pow(f64(__ARG0__), f64(__ARG1__))'
-		'ceil': 'math.ceil'
-		'floor': 'math.floor'
-		'fabs': 'math.abs'
-		'pi': 'math.pi'
-		'e': 'math.e'
+		'sqrt':    'math.sqrt'
+		'sin':     'math.sin'
+		'cos':     'math.cos'
+		'tan':     'math.tan'
+		'asin':    'math.asin'
+		'acos':    'math.acos'
+		'atan':    'math.atan'
+		'atan2':   'math.atan2'
+		'sinh':    'math.sinh'
+		'cosh':    'math.cosh'
+		'tanh':    'math.tanh'
+		'exp':     'math.exp'
+		'log':     'math.log'
+		'log10':   'math.log10'
+		'pow':     'math.pow(f64(__ARG0__), f64(__ARG1__))'
+		'ceil':    'math.ceil'
+		'floor':   'math.floor'
+		'fabs':    'math.abs'
+		'pi':      'math.pi'
+		'e':       'math.e'
 		'degrees': 'math.degrees'
 		'radians': 'math.radians'
 	}
@@ -49,13 +49,13 @@ fn (mut m StdLibMapper) init_mappings() {
 	// Random
 	m.mappings['random'] = {
 		'randint': 'rand.intn'
-		'random': 'rand.f64'
-		'choice': 'py_random_choice'
-		'seed': 'rand.seed'
-		'sample': 'py_random_sample'
+		'random':  'rand.f64'
+		'choice':  'py_random_choice'
+		'seed':    'rand.seed'
+		'sample':  'py_random_sample'
 		'shuffle': 'rand.shuffle'
 		'uniform': 'rand.f64_in_range'
-		'gauss': 'rand.normal'
+		'gauss':   'rand.normal'
 	}
 
 	// JSON
@@ -66,23 +66,23 @@ fn (mut m StdLibMapper) init_mappings() {
 
 	// Time
 	m.mappings['time'] = {
-		'time': 'time.now'
+		'time':  'time.now'
 		'sleep': 'time.sleep'
 	}
 
 	// DateTime
 	m.mappings['datetime'] = {
 		'datetime.now': 'time.now'
-		'date.today': 'time.now'
-		'datetime': 'time.Time'
-		'date': 'time.Time'
+		'date.today':   'time.now'
+		'datetime':     'time.Time'
+		'date':         'time.Time'
 	}
 
 	// Sys
 	m.mappings['sys'] = {
-		'exit': 'exit'
-		'argv': 'os.args'
-		'platform': 'os.user_os'
+		'exit':         'exit'
+		'argv':         'os.args'
+		'platform':     'os.user_os'
 		'version_info': 'sys_version_info'
 	}
 
@@ -93,64 +93,64 @@ fn (mut m StdLibMapper) init_mappings() {
 
 	// OS
 	m.mappings['os'] = {
-		'environ': 'os.environ'
-		'getcwd': 'os.getwd'
-		'system': 'py_os_system'
-		'getenv': 'os.getenv'
-		'mkdir': 'os.mkdir'
-		'makedirs': 'os.mkdir_all'
-		'remove': 'os.rm'
-		'rmdir': 'os.rmdir'
-		'listdir': 'os.ls'
-		'path.join': 'os.join_path'
-		'path.exists': 'os.exists'
-		'path.isfile': 'os.is_file'
-		'path.isdir': 'os.is_dir'
-		'path.abspath': 'os.abs_path'
+		'environ':       'os.environ'
+		'getcwd':        'os.getwd'
+		'system':        'py_os_system'
+		'getenv':        'os.getenv'
+		'mkdir':         'os.mkdir'
+		'makedirs':      'os.mkdir_all'
+		'remove':        'os.rm'
+		'rmdir':         'os.rmdir'
+		'listdir':       'os.ls'
+		'path.join':     'os.join_path'
+		'path.exists':   'os.exists'
+		'path.isfile':   'os.is_file'
+		'path.isdir':    'os.is_dir'
+		'path.abspath':  'os.abs_path'
 		'path.basename': 'os.base'
-		'path.dirname': 'os.dir'
+		'path.dirname':  'os.dir'
 	}
 
 	// Re
 	m.mappings['re'] = {
-		'match': 'regex.regex_opt'
-		'search': 'regex.regex_opt'
+		'match':   'regex.regex_opt'
+		'search':  'regex.regex_opt'
 		'compile': 'regex.regex_opt'
 	}
 
 	// Shutil
 	m.mappings['shutil'] = {
-		'copy':      'os.cp(__ARGS__) or { panic(err) }'
-		'copy2':     'os.cp'
-		'copyfile':  'os.cp'
-		'move':      'os.mv(__ARGS__) or { panic(err) }'
-		'rmtree':    'os.rmdir_all(__ARGS__) or { panic(err) }'
-		'copytree':  'os.cp_all(__ARGS__, true) or { panic(err) }'
-		'which':     'os.find_abs_path_of_executable(__ARGS__) or { \'\' }'
-		'chown':     'os.chown(__ARGS__) or { panic(err) }'
+		'copy':     'os.cp(__ARGS__) or { panic(err) }'
+		'copy2':    'os.cp'
+		'copyfile': 'os.cp'
+		'move':     'os.mv(__ARGS__) or { panic(err) }'
+		'rmtree':   'os.rmdir_all(__ARGS__) or { panic(err) }'
+		'copytree': 'os.cp_all(__ARGS__, true) or { panic(err) }'
+		'which':    "os.find_abs_path_of_executable(__ARGS__) or { '' }"
+		'chown':    'os.chown(__ARGS__) or { panic(err) }'
 	}
 
 	// Tempfile
 	m.mappings['tempfile'] = {
 		'gettempdir': 'os.temp_dir'
-		'mkdtemp': 'os.mkdir_temp'
+		'mkdtemp':    'os.mkdir_temp'
 	}
 
 	// Logging
 	m.mappings['logging'] = {
-		'getLogger': 'py_get_logger'
+		'getLogger':  'py_get_logger'
 		'get_logger': 'py_get_logger'
-		'info': 'log.info'
-		'warning': 'log.warn'
-		'error': 'log.error'
-		'debug': 'log.debug'
-		'critical': 'log.error'
+		'info':       'log.info'
+		'warning':    'log.warn'
+		'error':      'log.error'
+		'debug':      'log.debug'
+		'critical':   'log.error'
 	}
 
 	// Argparse
 	m.mappings['argparse'] = {
 		'ArgumentParser': 'py_argparse_new'
-		'add_argument':  'parser.add_argument(__ARGS__)'
+		'add_argument':   'parser.add_argument(__ARGS__)'
 	}
 
 	// UUID
@@ -161,15 +161,15 @@ fn (mut m StdLibMapper) init_mappings() {
 	// Collections
 	m.mappings['collections'] = {
 		'defaultdict': 'map[string]int'
-		'Counter': 'py_counter'
+		'Counter':     'py_counter'
 	}
 
 	// Itertools
 	m.mappings['itertools'] = {
-		'chain': 'py_chain'
+		'chain':  'py_chain'
 		'repeat': 'py_repeat'
-		'count': 'py_count'
-		'cycle': 'py_cycle'
+		'count':  'py_count'
+		'cycle':  'py_cycle'
 	}
 
 	// Functools
@@ -179,47 +179,47 @@ fn (mut m StdLibMapper) init_mappings() {
 
 	// Operator
 	m.mappings['operator'] = {
-		'add': 'py_op_add'
-		'sub': 'py_op_sub'
-		'mul': 'py_op_mul'
-		'truediv': 'py_op_div'
+		'add':      'py_op_add'
+		'sub':      'py_op_sub'
+		'mul':      'py_op_mul'
+		'truediv':  'py_op_div'
 		'floordiv': 'py_op_div'
-		'mod': 'py_op_mod'
-		'pow': 'math.pow(f64(__ARG0__), f64(__ARG1__))'
-		'eq': 'py_op_eq'
-		'ne': 'py_op_ne'
-		'lt': 'py_op_lt'
-		'le': 'py_op_le'
-		'gt': 'py_op_gt'
-		'ge': 'py_op_ge'
-		'not_': 'py_op_not'
-		'and_': 'py_op_and'
-		'or_': 'py_op_or'
-		'xor': 'py_op_xor'
+		'mod':      'py_op_mod'
+		'pow':      'math.pow(f64(__ARG0__), f64(__ARG1__))'
+		'eq':       'py_op_eq'
+		'ne':       'py_op_ne'
+		'lt':       'py_op_lt'
+		'le':       'py_op_le'
+		'gt':       'py_op_gt'
+		'ge':       'py_op_ge'
+		'not_':     'py_op_not'
+		'and_':     'py_op_and'
+		'or_':      'py_op_or'
+		'xor':      'py_op_xor'
 	}
 
 	// Logging
 	m.mappings['logging'] = {
-		'getLogger': 'py_get_logger'
+		'getLogger':  'py_get_logger'
 		'get_logger': 'py_get_logger'
-		'info': 'log.info'
-		'error': 'log.error'
-		'warning': 'log.warn'
-		'warn': 'log.warn'
-		'debug': 'log.debug'
-		'critical': 'log.error'
+		'info':       'log.info'
+		'error':      'log.error'
+		'warning':    'log.warn'
+		'warn':       'log.warn'
+		'debug':      'log.debug'
+		'critical':   'log.error'
 	}
 
 	// Threading
 	m.mappings['threading'] = {
 		'Thread': 'PyThread'
-		'Lock': 'sync.new_mutex'
+		'Lock':   'sync.new_mutex'
 	}
 
 	// Socket
 	m.mappings['socket'] = {
-		'socket': 'py_socket_new'
-		'AF_INET': 'py_AF_INET'
+		'socket':      'py_socket_new'
+		'AF_INET':     'py_AF_INET'
 		'SOCK_STREAM': 'py_SOCK_STREAM'
 	}
 
@@ -251,65 +251,65 @@ fn (mut m StdLibMapper) init_mappings() {
 
 	// Subprocess
 	m.mappings['subprocess'] = {
-		'run': 'py_subprocess_run'
+		'run':  'py_subprocess_run'
 		'call': 'py_subprocess_call'
 	}
 
 	// Platform
 	m.mappings['platform'] = {
-		'system': 'os.user_os'
-		'machine': 'py_platform_machine'
+		'system':                'os.user_os'
+		'machine':               'py_platform_machine'
 		'python_implementation': 'py_platform_python_implementation'
 	}
 
 	// Hashlib
 	m.mappings['hashlib'] = {
 		'sha256': 'py_hash_sha256'
-		'md5': 'py_hash_md5'
+		'md5':    'py_hash_md5'
 	}
 
 	// Base64
 	m.mappings['base64'] = {
-		'b64encode': 'base64.encode'
-		'b64decode': 'base64.decode'
+		'b64encode':          'base64.encode'
+		'b64decode':          'base64.decode'
 		'standard_b64encode': 'base64.encode'
 		'standard_b64decode': 'base64.decode'
-		'urlsafe_b64encode': 'base64.url_encode'
-		'urlsafe_b64decode': 'base64.url_decode'
+		'urlsafe_b64encode':  'base64.url_encode'
+		'urlsafe_b64decode':  'base64.url_decode'
 	}
 
 	// URLlib Parse
 	m.mappings['urllib.parse'] = {
-		'urlparse': 'py_urlparse'
-		'quote': 'urllib.query_escape'
-		'quote_plus': 'urllib.query_escape'
-		'unquote': 'py_urllib_unquote'
+		'urlparse':     'py_urlparse'
+		'quote':        'urllib.query_escape'
+		'quote_plus':   'urllib.query_escape'
+		'unquote':      'py_urllib_unquote'
 		'unquote_plus': 'py_urllib_unquote'
-		'urlencode': 'py_urlencode'
+		'urlencode':    'py_urlencode'
 	}
 
 	// Zlib
 	m.mappings['zlib'] = {
-		'compress': 'py_zlib_compress'
+		'compress':   'py_zlib_compress'
 		'decompress': 'py_zlib_decompress'
 	}
 
 	// Gzip
 	m.mappings['gzip'] = {
-		'compress': 'py_gzip_compress'
+		'compress':   'py_gzip_compress'
 		'decompress': 'py_gzip_decompress'
 	}
 
 	// Copy
 	m.mappings['copy'] = {
-		'copy': 'py_copy'
+		'copy':     'py_copy'
 		'deepcopy': 'py_deepcopy'
 	}
 
 	// Struct
 	m.mappings['struct'] = {
-		'pack': 'py_struct_pack'
-		'unpack': 'py_struct_unpack'
+		'pack':     'py_struct_pack'
+		'unpack':   'py_struct_unpack'
 		'calcsize': 'py_struct_calcsize'
 	}
 
@@ -325,46 +325,46 @@ fn (mut m StdLibMapper) init_mappings() {
 
 	// Statistics
 	m.mappings['statistics'] = {
-		'mean': 'py_statistics_mean'
-		'median': 'py_statistics_median'
-		'mode': 'py_statistics_mode'
-		'stdev': 'py_statistics_stdev'
+		'mean':     'py_statistics_mean'
+		'median':   'py_statistics_median'
+		'mode':     'py_statistics_mode'
+		'stdev':    'py_statistics_stdev'
 		'variance': 'py_statistics_variance'
 	}
 
 	// Decimal
 	m.mappings['decimal'] = {
-		'Decimal': 'py_decimal'
+		'Decimal':      'py_decimal'
 		'localcontext': 'py_decimal_localcontext'
-		'getcontext': 'py_decimal_getcontext'
+		'getcontext':   'py_decimal_getcontext'
 	}
 
 	// Pickle
 	m.mappings['pickle'] = {
 		'dumps': 'py_pickle_dumps'
 		'loads': 'py_pickle_loads'
-		'dump': 'py_pickle_dump'
-		'load': 'py_pickle_load'
+		'dump':  'py_pickle_dump'
+		'load':  'py_pickle_load'
 	}
 
 	// Contextlib
 	m.mappings['contextlib'] = {
-		'closing': 'py_contextlib_closing'
-		'nullcontext': 'py_contextlib_nullcontext'
-		'suppress': 'py_contextlib_suppress'
+		'closing':         'py_contextlib_closing'
+		'nullcontext':     'py_contextlib_nullcontext'
+		'suppress':        'py_contextlib_suppress'
 		'redirect_stdout': 'py_contextlib_redirect_stdout'
 	}
 
 	// Typing
 	m.mappings['typing'] = {
-		'cast': 'py_typing_cast'
+		'cast':           'py_typing_cast'
 		'get_type_hints': 'py_get_type_hints'
 	}
 
 	// Annotationlib
 	m.mappings['annotationlib'] = {
 		'get_annotations': 'py_get_type_hints'
-		'Format': 'PyAnnotationFormat'
+		'Format':          'PyAnnotationFormat'
 	}
 }
 
@@ -440,7 +440,7 @@ pub fn (m &StdLibMapper) get_mapping(mod_name string, func string, args []string
 	if res.contains('(') {
 		return res
 	}
-	return '${res}(${args.join(", ")})'
+	return '${res}(${args.join(', ')})'
 }
 
 pub fn (m &StdLibMapper) get_constant_mapping(mod_name string, name string) ?string {

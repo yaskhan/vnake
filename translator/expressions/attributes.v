@@ -5,7 +5,7 @@ import base
 import stdlib_map
 
 fn narrowed_option_attr_expr(var_name string, attr_name string) string {
-	return "${var_name}.${attr_name}"
+	return '${var_name}.${attr_name}'
 }
 
 pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
@@ -103,7 +103,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		if mapped_narrowed_type != 'Any'
 			&& (mapped_base_type == 'Any' || mapped_base_type.contains('|')
 			|| mapped_base_type.starts_with('SumType_')) {
-			obj = "(${obj} as ${mapped_narrowed_type})"
+			obj = '(${obj} as ${mapped_narrowed_type})'
 			obj_type = narrowed_receiver_type
 		}
 	}
@@ -156,9 +156,9 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 	}
 
-	mut res := "${obj}.${attr_name}"
+	mut res := '${obj}.${attr_name}'
 	obj_type_name := obj_type.trim_left('?&').all_before('[')
-	
+
 	obj_name := eg.analyzer.render_expr(node.value)
 	full_name := '${obj_name}.${node.attr}'
 	if remapped := eg.state.name_remap[full_name] {
@@ -179,14 +179,15 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	}
 
 	mut current := v_attr_base
-	res = "${obj}.${attr_name}"
+	res = '${obj}.${attr_name}'
 	if eg.state.in_assignment_lhs {
 		obj_type = eg.guess_type(node.value)
 		mapped_check := eg.map_python_type(obj_type, false)
-		if obj == 'pkt' || obj == 'pkt_mut' || obj in ['work', 'dev', 'w', 'wkq'] || mapped_check.starts_with('?') {
-			res = "${obj}.${attr_name}"
+		if obj == 'pkt' || obj == 'pkt_mut' || obj in ['work', 'dev', 'w', 'wkq']
+			|| mapped_check.starts_with('?') {
+			res = '${obj}.${attr_name}'
 		} else {
-			res = "${obj}.${attr_name}"
+			res = '${obj}.${attr_name}'
 		}
 	} else {
 		if narrowed := eg.analyzer.location_map[loc_key] {
@@ -197,59 +198,68 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 			}
 		}
 
-		
 		mut mapped_check := eg.map_python_type(obj_type, false)
-		if narrowed_receiver_type != '' { mapped_check = eg.map_python_type(narrowed_receiver_type, false) }
-		
-		mut base_access := "${obj}.${attr_name}"
-		eprintln("DEBUG: visit_attribute obj=${obj} type=${obj_type} mapped=${mapped_check} narrowed=${eg.state.narrowed_vars.keys()}")
-		if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && obj != 'w' && obj != 'wkq' {
+		if narrowed_receiver_type != '' {
+			mapped_check = eg.map_python_type(narrowed_receiver_type, false)
+		}
+
+		mut base_access := '${obj}.${attr_name}'
+		eprintln('DEBUG: visit_attribute obj=${obj} type=${obj_type} mapped=${mapped_check} narrowed=${eg.state.narrowed_vars.keys()}')
+		if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && obj != 'w'
+			&& obj != 'wkq' {
 			name_node := node.value
 			if name_node is ast.Name {
-				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{}, '', map[string]bool{})
-				if sanitized in eg.state.narrowed_vars || sanitized.ends_with('_mut') || obj.ends_with('_mut') || eg.state.in_assignment_lhs {
+				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
+					'', map[string]bool{})
+				if sanitized in eg.state.narrowed_vars || sanitized.ends_with('_mut')
+					|| obj.ends_with('_mut') || eg.state.in_assignment_lhs {
 					// Use base_access implicitly narrowed by V
 				} else {
 					base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
 				}
 			} else {
 				if eg.state.in_assignment_lhs {
-					base_access = "${obj}.${attr_name}"
+					base_access = '${obj}.${attr_name}'
 				} else {
 					base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
 				}
 			}
 		}
-		
+
 		res = base_access
-		
+
 		if current != 'Any' {
 			mut should_cast := original_type.contains('|') || original_type == 'Any'
-			if !should_cast && (eg.state.current_file_name.contains('narrowing') || eg.state.current_file_name.contains('Narrowing')) {
+			if !should_cast && (eg.state.current_file_name.contains('narrowing')
+				|| eg.state.current_file_name.contains('Narrowing')) {
 				should_cast = true
 			}
-			if !eg.state.in_assignment_lhs && should_cast && (current != original_type || eg.state.current_file_name.contains('narrowing')) {
+			if !eg.state.in_assignment_lhs && should_cast
+				&& (current != original_type || eg.state.current_file_name.contains('narrowing')) {
 				if original_type.starts_with('?') && !current.starts_with('?') {
 					res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
 				} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-					res = "(${res} as ${current})"
+					res = '(${res} as ${current})'
 				}
-			} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+			} else if !eg.state.in_assignment_lhs && original_type.starts_with('?')
+				&& !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
 				res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 			}
-		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?') && !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?')
+			&& !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
 			res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 		}
 	}
 
 	// ALWAYS apply interface parens at the VERY END if needed
-	mut is_interface := obj_type_name in eg.state.known_interfaces || obj_type_name in eg.state.class_to_impl
+	mut is_interface := obj_type_name in eg.state.known_interfaces
+		|| obj_type_name in eg.state.class_to_impl
 	if is_interface && !res.ends_with(')') {
-		if res.ends_with(".${attr_name}") {
-			res = res + "()"
-		} else if res.contains(".${attr_name}") && !res.contains(".${attr_name}(") {
+		if res.ends_with('.${attr_name}') {
+			res = res + '()'
+		} else if res.contains('.${attr_name}') && !res.contains('.${attr_name}(') {
 			// Handle cases like (obj or {panic}).attr
-			res = res.replace(".${attr_name}", ".${attr_name}()")
+			res = res.replace('.${attr_name}', '.${attr_name}()')
 		}
 	}
 

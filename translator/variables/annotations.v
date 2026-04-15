@@ -23,7 +23,8 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		if m.state.in_main && node.target is ast.Name {
 			if annotation_str == 'TypeAlias' || annotation_str == 'typing.TypeAlias'
 				|| annotation_str == 'typing_extensions.TypeAlias' {
-				rhs_v_type := m.map_python_type(m.visit_expr(value_expr), true, true, false)
+				rhs_v_type := m.map_python_type(m.visit_expr(value_expr), true, true,
+					false)
 				pub_prefix := if m.is_exported(node.target.id) { 'pub ' } else { '' }
 				m.emitter.add_struct('${pub_prefix}type ${target_expr} = ${rhs_v_type}')
 				return
@@ -33,17 +34,19 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		if annotation_str == 'LiteralString' || annotation_str == 'typing.LiteralString'
 			|| annotation_str == 'typing_extensions.LiteralString' {
 			if !m.is_literal_string_expr(value_expr) {
-				msg := if value_expr is ast.Call && value_expr.func is ast.Name && value_expr.func.id == 'input' {
+				msg := if value_expr is ast.Call && value_expr.func is ast.Name
+					&& value_expr.func.id == 'input' {
 					"LiteralString variable '${target_expr}' receives value from input()"
 				} else {
 					"LiteralString variable '${target_expr}' receives non-literal value."
 				}
-				m.emit("//##LLM@@ ${msg}")
+				m.emit('//##LLM@@ ${msg}')
 			}
 		}
 
 		if value_expr is ast.List {
-			if (v_type.starts_with('[]') || v_type.starts_with('?[]')) && value_expr.elements.len > 0 {
+			if (v_type.starts_with('[]') || v_type.starts_with('?[]'))
+				&& value_expr.elements.len > 0 {
 				prev_type := m.current_assignment_type
 				m.current_assignment_type = v_type
 				rhs := m.visit_expr(value_expr)
@@ -52,7 +55,8 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 				return
 			}
 		} else if value_expr is ast.Tuple {
-			if (v_type.starts_with('[]') || v_type.starts_with('?[]')) && value_expr.elements.len > 0 {
+			if (v_type.starts_with('[]') || v_type.starts_with('?[]'))
+				&& value_expr.elements.len > 0 {
 				prev_type := m.current_assignment_type
 				m.current_assignment_type = v_type
 				rhs := m.visit_expr(value_expr)
@@ -164,13 +168,15 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 				m.emitter.add_init_statement('${target_expr} = ${rhs}')
 				return
 			}
-			
+
 			mut v_type_for_global := v_type
 			if v_type_for_global == 'unknown' || v_type_for_global == 'Any' {
 				v_type_for_global = m.guess_type(value_expr, true)
 			}
-			if v_type_for_global == 'unknown' { v_type_for_global = 'Any' }
-			
+			if v_type_for_global == 'unknown' {
+				v_type_for_global = 'Any'
+			}
+
 			m.emitter.add_global('__global ${target_expr} ${v_type_for_global}')
 			m.emit('${target_expr} = ${rhs}')
 			m.local_vars_in_scope[target_expr] = true
@@ -181,10 +187,10 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		is_optional_annotation := v_type.starts_with('?')
 		// Also check raw annotation string for Optional[...]
 		if !is_optional_annotation {
-			is_optional_annotation = annotation_str.starts_with('Optional[') || 
-				annotation_str.starts_with('typing.Optional[')
+			is_optional_annotation = annotation_str.starts_with('Optional[')
+				|| annotation_str.starts_with('typing.Optional[')
 		}
-		
+
 		if is_optional_annotation {
 			mut opt_type := if v_type.starts_with('?') { v_type } else { '?${v_type}' }
 			mut init_rhs := rhs

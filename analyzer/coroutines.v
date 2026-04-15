@@ -475,16 +475,16 @@ fn (mut y YieldFinder) visit_expr(node ast.Expression) {
 
 pub struct CoroutineHandler {
 pub mut:
-	generators       map[string]string
-	active_channel   ?string
+	generators        map[string]string
+	active_channel    ?string
 	active_in_channel ?string
-	temp_var_counter int
+	temp_var_counter  int
 }
 
 pub fn new_coroutine_handler() CoroutineHandler {
 	return CoroutineHandler{
-		generators:       map[string]string{}
-		active_channel:   none
+		generators:        map[string]string{}
+		active_channel:    none
 		active_in_channel: none
 		temp_var_counter:  0
 	}

@@ -62,32 +62,21 @@ fn (mut t Translator) visit_raise(node ast.Raise) {
 }
 
 fn (mut t Translator) get_control_flow_env() control_flow.ControlFlowVisitEnv {
-	return control_flow.new_control_flow_visit_env(
-		t.state,
-		t.analyzer,
-		fn [mut t] (stmt ast.Statement) {
-			t.visit_stmt(stmt)
-		},
-		fn [mut t] (expr ast.Expression) string {
-			return t.visit_expr(expr)
-		},
-		fn [mut t] (line string) {
-			t.emit_indented(line)
-		},
-		fn [mut t] () string {
-			return t.indent()
-		},
-		fn [mut t] (name string) {
-			t.declare_local(name)
-		},
-		fn [mut t] (name string) bool {
-			return t.is_declared_local(name)
-		},
-		fn [mut t] (node ast.Expression) string {
-			return t.guess_type(node)
-		},
-		fn [mut t] (node ast.Expression) string {
-			return t.map_annotation(node)
-		}
-	)
+	return control_flow.new_control_flow_visit_env(t.state, t.analyzer, fn [mut t] (stmt ast.Statement) {
+		t.visit_stmt(stmt)
+	}, fn [mut t] (expr ast.Expression) string {
+		return t.visit_expr(expr)
+	}, fn [mut t] (line string) {
+		t.emit_indented(line)
+	}, fn [mut t] () string {
+		return t.indent()
+	}, fn [mut t] (name string) {
+		t.declare_local(name)
+	}, fn [mut t] (name string) bool {
+		return t.is_declared_local(name)
+	}, fn [mut t] (node ast.Expression) string {
+		return t.guess_type(node)
+	}, fn [mut t] (node ast.Expression) string {
+		return t.map_annotation(node)
+	})
 }

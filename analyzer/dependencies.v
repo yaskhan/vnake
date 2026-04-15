@@ -5,8 +5,8 @@ import os
 pub struct DependencyAnalyzer {
 pub mut:
 	dependencies []string
-	file_index    map[string]bool
-	dir_index     map[string]bool
+	file_index   map[string]bool
+	dir_index    map[string]bool
 }
 
 pub fn new_dependency_analyzer() DependencyAnalyzer {

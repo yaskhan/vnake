@@ -32,7 +32,7 @@ fn (mut r BinaryReader) read_tag() u8 {
 fn (mut r BinaryReader) expect_tag(expected u8) {
 	tag := r.read_tag()
 	if tag != expected {
-		panic('Expected tag ${expected}, but got ${tag} at pos ${r.pos-1}')
+		panic('Expected tag ${expected}, but got ${tag} at pos ${r.pos - 1}')
 	}
 }
 
@@ -40,11 +40,15 @@ fn (mut r BinaryReader) read_int_bare() int {
 	mut res := u32(0)
 	mut shift := u32(0)
 	for {
-		if r.pos >= r.data.len { break }
+		if r.pos >= r.data.len {
+			break
+		}
 		byte := r.data[r.pos]
 		r.pos++
 		res |= (u32(byte & 0x7F) << shift)
-		if (byte & 0x80) == 0 { break }
+		if (byte & 0x80) == 0 {
+			break
+		}
 		shift += 7
 	}
 	return int(res)
@@ -57,7 +61,9 @@ fn (mut r BinaryReader) read_int() int {
 
 fn (mut r BinaryReader) read_str_bare() string {
 	len := r.read_int_bare()
-	if len <= 0 { return '' }
+	if len <= 0 {
+		return ''
+	}
 	start := r.pos
 	r.pos += len
 	return r.data[start..r.pos].bytestr()
@@ -86,7 +92,9 @@ fn test_serialize_simple() {
 
 	bytes := serialize_source(source, filename)
 	assert bytes.len > 0
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	assert r.read_int() == 2 // x=1 and def f
 }
 
@@ -117,7 +125,9 @@ fn test_serialize_functiondef_with_decorators() {
 fn test_serialize_classdef() {
 	source := 'class MyClass(Base1, Base2):\n    def method(self):\n        pass\n'
 	bytes := serialize_source(source, 'class.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_class_def)
 	assert r.read_str() == 'MyClass'
@@ -218,7 +228,9 @@ fn test_serialize_while_else() {
 fn test_serialize_for() {
 	source := 'for i in range(10):\n    print(i)\n'
 	bytes := serialize_source(source, 'for.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_for_stmt)
 	// target
@@ -242,7 +254,9 @@ fn test_serialize_for_else() {
 fn test_serialize_with() {
 	source := 'with open("f.txt") as f:\n    data = f.read()\n'
 	bytes := serialize_source(source, 'with.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_with_stmt)
 	r.expect_tag(list_gen)
@@ -393,7 +407,9 @@ fn test_serialize_nonlocal() {
 fn test_serialize_match_value() {
 	source := 'match x:\n    case 1:\n        print("one")\n'
 	bytes := serialize_source(source, 'match_value.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_match_stmt)
 	r.expect_tag(nodes_name_expr)
@@ -468,7 +484,9 @@ fn test_serialize_typealias() {
 fn test_serialize_name_expr() {
 	source := 'x = y\n'
 	bytes := serialize_source(source, 'name.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_assignment_stmt)
 	r.expect_tag(list_gen)
@@ -481,7 +499,9 @@ fn test_serialize_name_expr() {
 fn test_serialize_int() {
 	source := 'x = 42\n'
 	bytes := serialize_source(source, 'int.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_assignment_stmt)
 	r.expect_tag(list_gen)
@@ -765,7 +785,9 @@ fn test_serialize_slice_full() {
 fn test_serialize_joinedstr() {
 	source := 'f"{x}"\n'
 	bytes := serialize_source(source, 'joinedstr.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_expr_stmt)
 	r.expect_tag(nodes_joined_str)
@@ -779,7 +801,9 @@ fn test_serialize_joinedstr() {
 fn test_serialize_joinedstr_format_spec() {
 	source := 'f"{x:10.2f}"\n'
 	bytes := serialize_source(source, 'joinedstr_spec.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_expr_stmt)
 	r.expect_tag(nodes_joined_str)
@@ -800,7 +824,9 @@ fn test_serialize_joinedstr_format_spec() {
 fn test_serialize_dict_unpacking() {
 	source := '{**d, "a": 1}\n'
 	bytes := serialize_source(source, 'dict_unpack.py')
-	mut r := BinaryReader{data: bytes}
+	mut r := BinaryReader{
+		data: bytes
+	}
 	r.read_int() // stmts
 	r.expect_tag(nodes_expr_stmt)
 	r.expect_tag(nodes_dict_expr)
@@ -893,7 +919,9 @@ fn test_serialize_float_uses_ieee754_binary() {
 
 	mut float_tag_index := bytes.index(literal_float)
 	assert float_tag_index >= 0
-	if float_tag_index < 0 { return }
+	if float_tag_index < 0 {
+		return
+	}
 
 	expected_bits := math.f64_bits(3.5)
 	mut expected := []u8{len: 8}

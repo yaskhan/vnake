@@ -48,8 +48,8 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 	mut methods := []ast.FunctionDef{}
 	mut validators := []PydanticValidatorInfo{}
 	mut config := PydanticConfigInfo{
-		extra:          'ignore'
-		allow_mutation: true
+		extra:             'ignore'
+		allow_mutation:    true
 		min_anystr_length: -1
 		max_anystr_length: -1
 	}
@@ -84,7 +84,8 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 				if target is ast.Name && target.id == 'model_config' {
 					if p.detector.is_config_dict(item.value) {
 						if item.value is ast.Call {
-							config = p.config_processor.extract_from_config_dict(item.value, mut env)
+							config = p.config_processor.extract_from_config_dict(item.value, mut
+								env)
 							has_config = true
 							for kw in item.value.keywords {
 								if kw.arg.len > 0 {
@@ -130,7 +131,7 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 			config_bits << 'allow_mutation=false'
 		}
 		if config_bits.len > 0 {
-			struct_lines << '// Config: ${config_bits.join(", ")}'
+			struct_lines << '// Config: ${config_bits.join(', ')}'
 		}
 	} else if configs.len > 0 {
 		mut config_keys := []string{cap: configs.len}
@@ -142,7 +143,7 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 		for key in config_keys {
 			config_comment << '${key}=${configs[key]}'
 		}
-		struct_lines << '// ConfigDict: ${config_comment.join(", ")}'
+		struct_lines << '// ConfigDict: ${config_comment.join(', ')}'
 	}
 
 	struct_lines << '${export}struct ${struct_name} {'
@@ -186,12 +187,12 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 		}
 	} else {
 		env.state.defined_classes[struct_name]['has_init'] = true
-		
+
 		// Handle overloads for Pydantic
 		ov_key_init := '${struct_name}.__init__'
 		if ov_key_init in env.state.overloaded_signatures {
 			sigs := env.state.overloaded_signatures[ov_key_init]
-			
+
 			mut generics := ''
 			if env.state.current_class_generics.len > 0 {
 				mut v_generics := []string{}
@@ -200,36 +201,43 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 				}
 				generics = '[' + v_generics.join(', ') + ']'
 			}
-			
+
 			for sig in sigs {
 				mut type_suffix_parts := []string{}
 				mut factory_args := []string{}
 				mut call_args := []string{}
-				
+
 				for k, v in sig {
-					if k == 'return' || k in ['self', 'cls'] { continue }
+					if k == 'return' || k in ['self', 'cls'] {
+						continue
+					}
 					mut clean_type := if v in env.state.type_vars { 'generic' } else { v }
-					clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[', '_').replace(']', '').replace('.', '_')
+					clean_type = clean_type.replace('?', 'opt_').replace('[]', 'arr_').replace('[',
+						'_').replace(']', '').replace('.', '_')
 					type_suffix_parts << clean_type
-					
+
 					arg_name := sanitize_name(k, false)
 					v_type := env.map_type_fn(v, struct_name, false, true, false)
 					factory_args << '${arg_name} ${v_type}'
 					call_args << arg_name
 				}
-				
+
 				mut mangled_factory := 'new_${base.to_snake_case(struct_name).to_lower()}'
 				if type_suffix_parts.len > 0 {
-					mangled_factory = '${mangled_factory}_${type_suffix_parts.join("_")}'
+					mangled_factory = '${mangled_factory}_${type_suffix_parts.join('_')}'
 				} else {
 					mangled_factory = '${mangled_factory}_noargs'
 				}
-				
+
 				mut f_code := []string{}
-				f_code << '${export}fn ${mangled_factory}${generics}(${factory_args.join(", ")}) !${struct_name}${generics} {'
+				f_code << '${export}fn ${mangled_factory}${generics}(${factory_args.join(', ')}) !${struct_name}${generics} {'
 				f_code << '    mut self := ${struct_name}${generics}{}'
-				init_suffix := if type_suffix_parts.len > 0 { type_suffix_parts.join("_") } else { "noargs" }
-				f_code << '    self.init_${init_suffix}(${call_args.join(", ")})'
+				init_suffix := if type_suffix_parts.len > 0 {
+					type_suffix_parts.join('_')
+				} else {
+					'noargs'
+				}
+				f_code << '    self.init_${init_suffix}(${call_args.join(', ')})'
 				f_code << '    self.validate() or { return err }'
 				f_code << '    return self'
 				f_code << '}'
@@ -238,7 +246,8 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 		}
 	}
 
-	validate_code := p.generate_validate_method(struct_name, fields, validators, config, export, mut env)
+	validate_code := p.generate_validate_method(struct_name, fields, validators, config,
+		export, mut env)
 	if validate_code.len > 0 {
 		env.emit_function_fn(validate_code)
 	}
@@ -250,14 +259,12 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 	return ''
 }
 
-fn (p PydanticModelProcessor) generate_validate_method(
-	struct_name string,
+fn (p PydanticModelProcessor) generate_validate_method(struct_name string,
 	fields []PydanticFieldInfo,
 	validators []PydanticValidatorInfo,
 	config PydanticConfigInfo,
 	export string,
-	mut env PydanticVisitEnv,
-) string {
+	mut env PydanticVisitEnv) string {
 	mut code := []string{}
 	mut has_validation := false
 
@@ -319,11 +326,11 @@ fn (p PydanticModelProcessor) generate_validate_method(
 fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorInfo, struct_name string, fields []PydanticFieldInfo, mut env PydanticVisitEnv) []string {
 	node := v_info.node
 	mut res := []string{}
-	
+
 	// Temporarily capture output for validator body
 	old_output := env.state.output
 	env.state.output = []string{}
-	
+
 	if v_info.is_model_validator {
 		res << '    m = fn (mut self ${struct_name}) !${struct_name} {'
 		prev_in_v := env.state.in_pydantic_validator
@@ -336,7 +343,7 @@ fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorI
 		for line in env.state.output {
 			res << '        ' + line
 		}
-		
+
 		// Only add return self if the body doesn't already end with a return
 		mut has_return := false
 		if node.body.len > 0 {
@@ -350,13 +357,13 @@ fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorI
 				has_return = true
 			}
 		}
-		
+
 		if !has_return && env.state.output.len > 0 {
 			if env.state.output.last().trim_space().starts_with('return ') {
 				has_return = true
 			}
 		}
-		
+
 		if !has_return {
 			res << '        return self'
 		}
@@ -381,7 +388,7 @@ fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorI
 			for line in env.state.output {
 				res << '        ' + line
 			}
-			
+
 			// Only add return v if the body doesn't already end with a return
 			mut has_return_v := false
 			if node.body.len > 0 {
@@ -402,17 +409,15 @@ fn (p PydanticModelProcessor) generate_validator_logic(v_info PydanticValidatorI
 			res << '    }(m.${f_name}) !'
 		}
 	}
-	
+
 	env.state.output = old_output
 	return res
 }
 
-fn (p PydanticModelProcessor) generate_factory(
-	struct_name string,
+fn (p PydanticModelProcessor) generate_factory(struct_name string,
 	fields []PydanticFieldInfo,
 	export string,
-	mut env PydanticVisitEnv,
-) string {
+	mut env PydanticVisitEnv) string {
 	_ = p
 	_ = env
 	factory_name := base.get_factory_name(struct_name, map[string][]string{})
@@ -430,7 +435,7 @@ fn (p PydanticModelProcessor) generate_factory(
 
 	mut code := []string{}
 	code << '// ${factory_name} creates a new ${struct_name} and validates it.'
-	code << '${export}fn ${factory_name}(${args.join(", ")}) !${struct_name} {'
+	code << '${export}fn ${factory_name}(${args.join(', ')}) !${struct_name} {'
 	code << '    mut self := ${struct_name}{'
 	for field in fields {
 		if field.default_val.len == 0 && !field.is_optional {

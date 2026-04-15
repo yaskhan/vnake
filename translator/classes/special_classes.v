@@ -11,7 +11,8 @@ fn resolve_interface_method_return_type(struct_name string,
 	method ast.FunctionDef,
 	mut env ClassVisitEnv) string {
 	if ann := method.returns {
-		return map_python_type(env.map_annotation_fn(ann), struct_name, true, mut env, '${method.name}@return')
+		return map_python_type(env.map_annotation_fn(ann), struct_name, true, mut env,
+			'${method.name}@return')
 	}
 	sig_key := '${struct_name}.${method.name}'
 	if sig := env.analyzer.call_signatures[sig_key] {
@@ -172,12 +173,12 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 					}
 				}
 			}
-			
+
 			if mut_prefix != '' && (ann_str.contains('&') || ann_str.starts_with('?')) {
 				// References don't need mut parameter flags
 				mut_prefix = ''
 			}
-			
+
 			p_args << '${mut_prefix}${arg_name} ${ann_str}'
 		}
 		mut m_name := sanitize_name(method.name, false)
@@ -211,7 +212,7 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 		} else if ret_type.starts_with('&') && ret_type.ends_with('_Impl') {
 			ret_type = ret_type.all_before_last('_Impl').trim_left('&')
 		}
-		
+
 		mut ret := if ret_type.len > 0 { ' ' + ret_type } else { '' }
 		if ret.len > 1 && !ret.ends_with('?') {
 			if m_name == 'next' && !ret.contains(' ?') {
@@ -240,20 +241,20 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 				}
 			}
 		}
-		
+
 		// In V 0.5, since we blindly declare `self` as mutable in implementations (`generation.v`)
 		// to bypass un-tracked intra-class mutating calls, we MUST also declare it mutable
 		// in the interface, to satisfy V's structural interface compatibility requirements.
 		is_meth_mut = true
 
 		if is_meth_mut {
-			mut_methods << '    ${m_name}(${p_args.join(", ")})${ret}'
+			mut_methods << '    ${m_name}(${p_args.join(', ')})${ret}'
 		} else {
-			immut_methods << '    ${m_name}(${p_args.join(", ")})${ret}'
+			immut_methods << '    ${m_name}(${p_args.join(', ')})${ret}'
 		}
 		added_meth_names << m_name
 	}
-	
+
 	if immut_methods.len > 0 {
 		res << immut_methods.join('\n')
 	}
@@ -261,11 +262,12 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 		res << 'mut:'
 		res << mut_methods.join('\n')
 	}
-	
+
 	// Add field getters for non-private fields so they can be accessed via the interface
 	for field in fields {
 		trimmed := field.trim_space()
-		if trimmed.starts_with('pub mut:') || trimmed.starts_with('pub:') || trimmed.starts_with('mut:') || trimmed.starts_with('//') || trimmed.len == 0 {
+		if trimmed.starts_with('pub mut:') || trimmed.starts_with('pub:')
+			|| trimmed.starts_with('mut:') || trimmed.starts_with('//') || trimmed.len == 0 {
 			continue
 		}
 		parts := trimmed.split(' ')
@@ -283,10 +285,12 @@ pub fn (h SpecialClassesHandler) generate_interface_definition(struct_name strin
 	// Add methods from base interfaces recursively
 	for base_expr in node.bases {
 		base_name := env.visit_expr_fn(base_expr)
-		if base_name in ['object', 'Any'] { continue }
+		if base_name in ['object', 'Any'] {
+			continue
+		}
 		v_base := env.map_type_fn(base_name, '', true, true, false)
 		if v_base != 'Any' {
-			res << "    ${v_base}"
+			res << '    ${v_base}'
 		}
 	}
 

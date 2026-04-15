@@ -100,13 +100,19 @@ pub fn infer_generator_types(gen ast.Comprehension, mut type_map map[string]stri
 pub fn (s &TranslatorState) implements_interface(v_cls string, interface_name string) bool {
 	clean_cls := v_cls.trim_left('?&').all_before_last('_Impl')
 	clean_iface := interface_name.trim_left('?&').all_before_last('_Impl')
-	
-	if clean_cls == clean_iface { return true }
-	
+
+	if clean_cls == clean_iface {
+		return true
+	}
+
 	bases := s.class_hierarchy[clean_cls] or { return false }
 	for b in bases {
-		if b == clean_iface { return true }
-		if s.implements_interface(b, clean_iface) { return true }
+		if b == clean_iface {
+			return true
+		}
+		if s.implements_interface(b, clean_iface) {
+			return true
+		}
 	}
 	return false
 }

@@ -11,7 +11,8 @@ fn new_test_type_checker() &TypeChecker {
 		}
 	}
 	plugin := new_plugin(options)
-	return new_type_checker(errors, map[string]&MypyFile{}, options, tree, tree.path, plugin)
+	return new_type_checker(errors, map[string]&MypyFile{}, options, tree, tree.path,
+		plugin)
 }
 
 fn new_test_instance(fullname string) Instance {
@@ -71,7 +72,10 @@ fn test_find_isinstance_check_narrows_union_types() {
 		node:     MypyNode(int_info)
 	}
 	isinstance_expr := Expression(CallExpr{
-		callee:    Expression(NameExpr{name: 'isinstance', fullname: 'builtins.isinstance'})
+		callee:    Expression(NameExpr{
+			name:     'isinstance'
+			fullname: 'builtins.isinstance'
+		})
 		args:      [Expression(x_expr), Expression(int_expr)]
 		arg_kinds: [.arg_pos, .arg_pos]
 	})
@@ -120,7 +124,10 @@ fn test_visit_assert_stmt_applies_isinstance_narrowing() {
 	}
 	mut stmt := AssertStmt{
 		expr: Expression(CallExpr{
-			callee:    Expression(NameExpr{name: 'isinstance', fullname: 'builtins.isinstance'})
+			callee:    Expression(NameExpr{
+				name:     'isinstance'
+				fullname: 'builtins.isinstance'
+			})
 			args:      [Expression(x_expr), Expression(int_expr)]
 			arg_kinds: [.arg_pos, .arg_pos]
 		})
@@ -200,7 +207,9 @@ fn test_lookup_qualified_and_lookup_typeinfo_follow_module_symbols() {
 	assert box_node is TypeInfo
 
 	method_symbol := tc.lookup_qualified('pkg.Box.method')
-	method_node := method_symbol.node or { panic('expected pkg.Box.method to resolve to a method node') }
+	method_node := method_symbol.node or {
+		panic('expected pkg.Box.method to resolve to a method node')
+	}
 	assert method_node is FuncDef
 
 	resolved := tc.lookup_typeinfo('pkg.Box')

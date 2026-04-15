@@ -45,7 +45,7 @@ pub fn (mut t Translator) visit_import(node ast.Import) {
 		if module_name in ['typing', 'unittest', '__future__'] {
 			continue
 		}
-		
+
 		if t.state.mapper != unsafe { nil } {
 			mapper := unsafe { &stdlib_map.StdLibMapper(t.state.mapper) }
 			if v_imps := mapper.get_imports(module_name) {
@@ -73,7 +73,7 @@ pub fn (mut t Translator) visit_import_from(node ast.ImportFrom) {
 			}
 			as_name := alias.asname or { name }
 			t.register_imported_symbol(as_name, name)
-			
+
 			if node.level > 0 && name !in ['typing', 'unittest', '__future__'] {
 				t.state.output << 'import ${name}'
 			}

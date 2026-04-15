@@ -18,14 +18,14 @@ pub type FineGrainedDeferredNodeType = FuncDef | MypyFile | OverloadedFuncDef
 // DeferredNode — node deferred for processing in the next pass
 pub struct DeferredNode {
 pub:
-	node            DeferredNodeType
+	node        DeferredNodeType
 	active_type ?&TypeInfo
 }
 
 // FineGrainedDeferredNode — node for fine-grained mode
 pub struct FineGrainedDeferredNode {
 pub:
-	node            FineGrainedDeferredNodeType
+	node        FineGrainedDeferredNodeType
 	active_type ?&TypeInfo
 }
 
@@ -207,9 +207,7 @@ pub fn (mut tc TypeChecker) visit_func_def(mut defn FuncDef) !AnyNode {
 
 // visit_class_def checks class definition
 pub fn (mut tc TypeChecker) visit_class_def(mut defn ClassDef) !AnyNode {
-	typ := defn.info or {
-		return ''
-	}
+	typ := defn.info or { return '' }
 
 	old_active := tc.active_type
 	tc.active_type = typ
@@ -303,7 +301,6 @@ fn (mut tc TypeChecker) check_assignment(mut lvalue Lvalue, rvalue Expression, r
 	tc.check_simple_assignment(mut lvalue, rvalue, rvalue_type)
 }
 
-
 // check_unpacking_assignment handles multiple assignment unpacking
 fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Expression, rvalue Expression, rvalue_type MypyTypeNode) {
 	tc.store_type(lvalue.as_expression(), rvalue_type)
@@ -313,7 +310,8 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 	for i, item in items {
 		if item is StarExpr {
 			if star_index != -1 {
-				tc.msg.fail('Two starred expressions in assignment', rvalue.get_context(), false, false, none)
+				tc.msg.fail('Two starred expressions in assignment', rvalue.get_context(),
+					false, false, none)
 			}
 			star_index = i
 		}
@@ -323,7 +321,8 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 		TupleType {
 			if star_index == -1 {
 				if items.len != proper_rvalue.items.len {
-					tc.msg.fail('Incompatible number of values to unpack (expected ${items.len}, got ${proper_rvalue.items.len})', rvalue.get_context(), false, false, none)
+					tc.msg.fail('Incompatible number of values to unpack (expected ${items.len}, got ${proper_rvalue.items.len})',
+						rvalue.get_context(), false, false, none)
 				}
 				for i in 0 .. items.len {
 					mut item := items[i]
@@ -331,13 +330,16 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 					item_type := if i < proper_rvalue.items.len {
 						proper_rvalue.items[i]
 					} else {
-						MypyTypeNode(AnyType{ type_of_any: .from_untyped_call })
+						MypyTypeNode(AnyType{
+							type_of_any: .from_untyped_call
+						})
 					}
 					tc.check_assignment(mut item_lval, item, item_type)
 				}
 			} else {
 				if proper_rvalue.items.len < items.len - 1 {
-					tc.msg.fail('Not enough values to unpack (expected at least ${items.len - 1}, got ${proper_rvalue.items.len})', rvalue.get_context(), false, false, none)
+					tc.msg.fail('Not enough values to unpack (expected at least ${items.len - 1}, got ${proper_rvalue.items.len})',
+						rvalue.get_context(), false, false, none)
 				}
 				// Before star
 				for i in 0 .. star_index {
@@ -360,7 +362,7 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 					// Mypy typically uses a List for the starred part
 					tc.check_assignment(mut star_lval, Expression(star_expr), MypyTypeNode(Instance{
 						type_name: 'builtins.list'
-						args: [join_type_list(starred_items)]
+						args:      [join_type_list(starred_items)]
 					}))
 				}
 
@@ -375,7 +377,8 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 		Instance {
 			item_type := tc.expr_checker.get_iterable_item_type(proper_rvalue)
 			if item_type is AnyType && (item_type as AnyType).type_of_any == .from_another_any {
-				tc.msg.fail('"' + proper_rvalue.type_name + '" object is not iterable', rvalue.get_context(), false, false, none)
+				tc.msg.fail('"' + proper_rvalue.type_name + '" object is not iterable',
+					rvalue.get_context(), false, false, none)
 			} else {
 				for item_ in items {
 					mut item := item_
@@ -385,7 +388,7 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 						// For iterables, starred version is a list of the same element type
 						mut list_type := MypyTypeNode(Instance{
 							type_name: 'builtins.list'
-							args: [item_type]
+							args:      [item_type]
 						})
 						tc.check_assignment(mut star_lval, Expression(star_expr), list_type)
 					} else if mut item_lval := item.as_lvalue() {
@@ -407,7 +410,8 @@ fn (mut tc TypeChecker) check_unpacking_assignment(mut lvalue Lvalue, items []Ex
 			}
 		}
 		else {
-			tc.msg.fail('object is not iterable', rvalue.get_context(), false, false, none)
+			tc.msg.fail('object is not iterable', rvalue.get_context(), false, false,
+				none)
 		}
 	}
 }
@@ -435,11 +439,11 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 			if mut active := tc.active_type {
 				if lvalue.expr is NameExpr {
 					base_name := (lvalue.expr as NameExpr).name
-					if base_name.trim_space() == "self" {
+					if base_name.trim_space() == 'self' {
 						if lvalue.name !in active.names.symbols {
 							mut v := Var{
 								name:     lvalue.name
-								fullname: active.fullname + "." + lvalue.name
+								fullname: active.fullname + '.' + lvalue.name
 								type_:    rvalue_type
 							}
 							active.names.symbols[lvalue.name] = SymbolTableNode{
@@ -474,7 +478,7 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 				item_type := tc.expr_checker.get_iterable_item_type(rvalue_type)
 				list_type := MypyTypeNode(Instance{
 					type_name: 'builtins.list'
-					args: [item_type]
+					args:      [item_type]
 				})
 				tc.check_assignment(mut inner_lval, lvalue.expr, list_type)
 			}
@@ -510,21 +514,20 @@ fn (mut tc TypeChecker) check_simple_assignment(mut lvalue Lvalue, rvalue Expres
 				tc.expr_checker.check_method_call_by_name('__setitem__', base_type, [
 					lvalue.index,
 					Expression(TempNode{
-						base: NodeBase{
+						base:   NodeBase{
 							ctx: rvalue.get_context()
 						}
-						type_: rvalue_type
+						type_:  rvalue_type
 						no_rhs: false
 					}),
 				], [
 					.arg_pos,
 					.arg_pos,
 				], lvalue.base)
+			}
 		}
 	}
 }
-}
-
 
 // visit_return_stmt checks return
 pub fn (mut tc TypeChecker) visit_return_stmt(mut s ReturnStmt) !AnyNode {
@@ -669,9 +672,7 @@ pub fn (tc TypeChecker) find_isinstance_check(node Expression) (TypeMap, TypeMap
 				return TypeMap{}, TypeMap{}
 			}
 
-			declared := tc.lookup_narrowable_type(expr) or {
-				return TypeMap{}, TypeMap{}
-			}
+			declared := tc.lookup_narrowable_type(expr) or { return TypeMap{}, TypeMap{} }
 			narrowed := tc.resolve_isinstance_target_type(node.args[1]) or {
 				return TypeMap{}, TypeMap{}
 			}
@@ -740,9 +741,7 @@ fn (tc TypeChecker) resolve_isinstance_target_type(expr Expression) ?MypyTypeNod
 		TupleExpr {
 			mut items := []MypyTypeNode{}
 			for item in expr.items {
-				resolved := tc.resolve_isinstance_target_type(item) or {
-					return none
-				}
+				resolved := tc.resolve_isinstance_target_type(item) or { return none }
 				items << resolved
 			}
 			if items.len == 0 {
@@ -821,21 +820,21 @@ fn (tc TypeChecker) resolve_isinstance_target_symbol(sym ?MypyNode, expr Express
 // instance_from_type_info wraps a TypeInfo in an Instance for narrowing checks.
 fn instance_from_type_info(info TypeInfo) Instance {
 	info_ptr := &TypeInfo{
-		base:          info.base
-		name:          info.name
-		fullname:      info.fullname
-		module_name:   info.module_name
-		is_abstract:   info.is_abstract
-		is_protocol:   info.is_protocol
+		base:           info.base
+		name:           info.name
+		fullname:       info.fullname
+		module_name:    info.module_name
+		is_abstract:    info.is_abstract
+		is_protocol:    info.is_protocol
 		is_named_tuple: info.is_named_tuple
-		is_enum:       info.is_enum
-		is_newtype:    info.is_newtype
-		is_dataclass:  info.is_dataclass
-		names:         info.names
-		mro:           info.mro.clone()
-		type_vars:     info.type_vars.clone()
-		bases:         info.bases.clone()
-		promote_types: info.promote_types.clone()
+		is_enum:        info.is_enum
+		is_newtype:     info.is_newtype
+		is_dataclass:   info.is_dataclass
+		names:          info.names
+		mro:            info.mro.clone()
+		type_vars:      info.type_vars.clone()
+		bases:          info.bases.clone()
+		promote_types:  info.promote_types.clone()
 	}
 	return Instance{
 		typ:           info_ptr

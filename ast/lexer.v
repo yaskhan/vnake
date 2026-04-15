@@ -276,7 +276,7 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 		q_str := quote.ascii_str()
 		return Token{
 			typ:      typ
-			value:    "${prefix_value}${q_str}${q_str}${q_str}${value}${q_str}${q_str}${q_str}"
+			value:    '${prefix_value}${q_str}${q_str}${q_str}${value}${q_str}${q_str}${q_str}'
 			line:     l.line
 			column:   start_col
 			filename: l.filename
@@ -307,7 +307,7 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 	q_str := quote.ascii_str()
 	return Token{
 		typ:      typ
-		value:    "${prefix_value}${q_str}${value}${q_str}"
+		value:    '${prefix_value}${q_str}${value}${q_str}'
 		line:     l.line
 		column:   start_col
 		filename: l.filename

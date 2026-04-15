@@ -228,6 +228,3 @@ mut:
 	visit_class_pattern(mut o ClassPattern) !AnyNode
 	visit_lvalue(mut o Lvalue) !AnyNode
 }
-
-
-

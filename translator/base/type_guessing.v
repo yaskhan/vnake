@@ -24,7 +24,6 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		if loc_key in ctx.location_map {
 			res := ctx.location_map[loc_key]
 			if res != 'none' && res != 'Any' && res != 'unknown' {
-
 			}
 		}
 		if ctx.analyzer != unsafe { nil } {
@@ -136,7 +135,6 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		if loc_key in ctx.location_map {
 			res := ctx.location_map[loc_key]
 			if res != 'none' && res != 'Any' && res != 'unknown' {
-
 			}
 		}
 	}
@@ -277,24 +275,26 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		rec_type := guess_type(f.value, ctx, false)
 		if rec_type != 'Any' {
 			pure_rec := rec_type.trim_left('?&')
-			mut attr_name := pure_rec + '.' + base.to_snake_case(f.attr).to_lower()
-			
+			mut attr_name := pure_rec + '.' + to_snake_case(f.attr).to_lower()
+
 			if ctx.analyzer != unsafe { nil } {
 				a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
 				// Try direct lookup first
 				if sig := a.get_call_signature(pure_rec + '.' + f.attr) {
 					return sig.return_type
 				}
-				
+
 				// Try mapping V name to Python name (e.g., run_task -> runTask)
 				mut py_name := f.attr
-				if py_name.starts_with('py_') { py_name = py_name[3..] }
-				
+				if py_name.starts_with('py_') {
+					py_name = py_name[3..]
+				}
+
 				// Scan all signatures of the class for a match
 				// Note: a.mypy_store.collected_signatures is map[class]map[method]Signature
 				if class_sigs := a.mypy_store.collected_signatures[pure_rec] {
 					for actual_py_name, _ in class_sigs {
-						if base.to_snake_case(actual_py_name).to_lower() == py_name {
+						if to_snake_case(actual_py_name).to_lower() == py_name {
 							if sig := a.get_call_signature(pure_rec + '.' + actual_py_name) {
 								return sig.return_type
 							}
@@ -303,14 +303,16 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 				}
 
 				if res := a.get_type(attr_name) {
-					if res != 'Any' { return res }
+					if res != 'Any' {
+						return res
+					}
 				}
 			}
 
 			if attr_name in ctx.type_map {
 				res := ctx.type_map[attr_name]
 				if res.starts_with('fn (') {
-					return res.all_after_last(") ").trim_space()
+					return res.all_after_last(') ').trim_space()
 				}
 			}
 			ret_key := attr_name + '@return'
@@ -561,7 +563,7 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 			return ctx.type_map[attr_name]
 		}
 		// Try sanitized name
-		attr_name = '${base_type}.${base.to_snake_case(node.attr).to_lower()}'
+		attr_name = '${base_type}.${to_snake_case(node.attr).to_lower()}'
 		if attr_name in ctx.type_map {
 			return ctx.type_map[attr_name]
 		}

@@ -26,7 +26,7 @@ pub fn (mut v TypeIndirectionVisitor) visit(typ MypyTypeNode) {
 		type_key = 'Instance:${typ.type_name}'
 	}
 	if typ is TypeAliasType {
-		type_key = 'TypeAliasType:${typ.type_ref or { "" }}'
+		type_key = 'TypeAliasType:${typ.type_ref or { '' }}'
 	}
 
 	if v.seen_types[type_key] {

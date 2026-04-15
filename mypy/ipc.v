@@ -142,7 +142,8 @@ pub fn (mut b ReadBuffer) read_u32() !u32 {
 	if b.pos + 4 > b.data.len {
 		return error('EOF')
 	}
-	v := (u32(b.data[b.pos]) << 24) | (u32(b.data[b.pos + 1]) << 16) | (u32(b.data[b.pos + 2]) << 8) | u32(b.data[b.pos + 3])
+	v := (u32(b.data[b.pos]) << 24) | (u32(b.data[b.pos + 1]) << 16) | (u32(b.data[b.pos + 2]) << 8) | u32(b.data[
+		b.pos + 3])
 	b.pos += 4
 	return v
 }

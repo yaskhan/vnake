@@ -130,7 +130,9 @@ pub fn new_string_formatter_checker(chk ?&TypeChecker, msg ?&MessageBuilder) Str
 }
 
 fn (sfc StringFormatterChecker) require_type_checker() &TypeChecker {
-	return sfc.chk or { panic('StringFormatterChecker requires an initialized TypeChecker; this usually means string formatter checking started before sfc.chk was set') }
+	return sfc.chk or {
+		panic('StringFormatterChecker requires an initialized TypeChecker; this usually means string formatter checking started before sfc.chk was set')
+	}
 }
 
 pub fn (mut sfc StringFormatterChecker) check_str_format_call(call CallExpr, format_value string) {
@@ -154,8 +156,8 @@ pub fn (mut sfc StringFormatterChecker) auto_generate_keys(mut all_specs []Conve
 		}
 	}
 	if some_defined && !all_defined {
-		(sfc.msg or { panic('msg') }).fail('Cannot mix manual and automatic field numbering', ctx, false, false,
-			none)
+		(sfc.msg or { panic('msg') }).fail('Cannot mix manual and automatic field numbering',
+			ctx, false, false, none)
 		return false
 	}
 	if all_defined {
@@ -216,13 +218,13 @@ pub fn (mut sfc StringFormatterChecker) analyze_conversion_specifiers(specifiers
 		}
 	}
 	if has_key && has_star {
-		(sfc.msg or { panic('msg') }).fail('String interpolation with * and key is not supported', context,
-			false, false, none)
+		(sfc.msg or { panic('msg') }).fail('String interpolation with * and key is not supported',
+			context, false, false, none)
 		return none
 	}
 	if has_key && !all_have_keys {
-		(sfc.msg or { panic('msg') }).fail('Cannot mix key and non-key in string interpolation', context, false,
-			false, none)
+		(sfc.msg or { panic('msg') }).fail('Cannot mix key and non-key in string interpolation',
+			context, false, false, none)
 		return none
 	}
 	return has_key
@@ -231,8 +233,8 @@ pub fn (mut sfc StringFormatterChecker) analyze_conversion_specifiers(specifiers
 pub fn (mut sfc StringFormatterChecker) conversion_type(p string, context Context, expr StringOrBytesExpr) ?MypyTypeNode {
 	if p == 'b' {
 		if expr !is BytesExpr {
-			(sfc.msg or { panic('msg') }).fail('Format character "b" is only supported on bytes patterns', context,
-				false, false, none)
+			(sfc.msg or { panic('msg') }).fail('Format character "b" is only supported on bytes patterns',
+				context, false, false, none)
 			return none
 		}
 		return sfc.named_type('builtins.bytes')
@@ -252,7 +254,8 @@ pub fn (mut sfc StringFormatterChecker) conversion_type(p string, context Contex
 			items: [sfc.named_type('builtins.int'), sfc.named_type('builtins.str')]
 		}
 	}
-	(sfc.msg or { panic('msg') }).fail('Unsupported placeholder ${p}', context, false, false, none)
+	(sfc.msg or { panic('msg') }).fail('Unsupported placeholder ${p}', context, false,
+		false, none)
 	return none
 }
 
@@ -340,8 +343,8 @@ fn (mut sfc StringFormatterChecker) check_specs_in_format_call(call CallExpr, sp
 fn (mut sfc StringFormatterChecker) check_simple_str_interpolation(specifiers []ConversionSpecifier, replacements Expression, expr_ctx Context) {
 	if replacements is TupleExpr {
 		if specifiers.len != replacements.items.len {
-			(sfc.msg or { panic('msg') }).fail('Wrong number of arguments for format string', expr_ctx, false,
-				false, none)
+			(sfc.msg or { panic('msg') }).fail('Wrong number of arguments for format string',
+				expr_ctx, false, false, none)
 			return
 		}
 		for i, spec in specifiers {
@@ -355,13 +358,13 @@ fn (mut sfc StringFormatterChecker) check_simple_str_interpolation(specifiers []
 				_ = tc.check_subtype(repl_type, sfc.named_type('builtins.int'), repl.get_context(),
 					'Argument must be int for format specifier')
 			} else if spec.conv_type in ['e', 'E', 'f', 'F', 'g', 'G'] {
-				_ = tc.check_subtype(repl_type, sfc.named_type('builtins.float'),
-					repl.get_context(), 'Argument must be float for format specifier')
+				_ = tc.check_subtype(repl_type, sfc.named_type('builtins.float'), repl.get_context(),
+					'Argument must be float for format specifier')
 			}
 		}
 	} else if specifiers.filter(it.conv_type != '%').len > 1 {
-		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Wrong number of arguments for format string', expr_ctx, false, false,
-			none)
+		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Wrong number of arguments for format string',
+			expr_ctx, false, false, none)
 	}
 }
 
@@ -382,8 +385,8 @@ fn (mut sfc StringFormatterChecker) check_mapping_str_interpolation(specifiers [
 					}
 				}
 				if !found {
-					(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Key "${key}" not found in format arguments', expr_ctx,
-						false, false, none)
+					(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Key "${key}" not found in format arguments',
+						expr_ctx, false, false, none)
 				}
 			}
 		}
@@ -392,8 +395,8 @@ fn (mut sfc StringFormatterChecker) check_mapping_str_interpolation(specifiers [
 	mut tc := sfc.require_type_checker()
 	repl_type := tc.expr_checker.accept(replacements)
 	if !has_type_component(repl_type, 'builtins.dict') {
-		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Expected mapping for format string with keys', replacements.get_context(),
-			false, false, none)
+		(sfc.msg or { panic('checkstrformat: msg reporter is nil') }).fail('Expected mapping for format string with keys',
+			replacements.get_context(), false, false, none)
 	}
 }
 

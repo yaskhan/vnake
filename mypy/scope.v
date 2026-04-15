@@ -54,12 +54,22 @@ pub fn (s &Scope) current_function_full_name() string {
 	assert s.module != none
 	if f := s.function {
 		return match f {
-			FuncDef { f.fullname }
-			OverloadedFuncDef {
-				if f.items.len > 0 { f.items[0].fullname } else { '' }
+			FuncDef {
+				f.fullname
 			}
-			Decorator { f.func.fullname }
-			LambdaExpr { '<lambda>' }
+			OverloadedFuncDef {
+				if f.items.len > 0 {
+					f.items[0].fullname
+				} else {
+					''
+				}
+			}
+			Decorator {
+				f.func.fullname
+			}
+			LambdaExpr {
+				'<lambda>'
+			}
 		}
 	}
 	return s.module or { '' }
@@ -70,12 +80,22 @@ pub fn (s &Scope) current_full_name() string {
 	assert s.module != none
 	if f := s.function {
 		return match f {
-			FuncDef { f.fullname }
-			OverloadedFuncDef {
-				if f.items.len > 0 { f.items[0].fullname } else { '' }
+			FuncDef {
+				f.fullname
 			}
-			Decorator { f.func.fullname }
-			LambdaExpr { '<lambda>' }
+			OverloadedFuncDef {
+				if f.items.len > 0 {
+					f.items[0].fullname
+				} else {
+					''
+				}
+			}
+			Decorator {
+				f.func.fullname
+			}
+			LambdaExpr {
+				'<lambda>'
+			}
 		}
 	}
 	if s.classes.len > 0 {
@@ -98,13 +118,23 @@ pub fn (s &Scope) is_class_scope() bool {
 pub fn (s &Scope) current_function_name() ?string {
 	if f := s.function {
 		return match f {
-			FuncDef { f.name }
+			FuncDef {
+				f.name
+			}
 			OverloadedFuncDef {
 				// We usually want the name of the items (they all should have same name)
-				if f.items.len > 0 { f.items[0].name } else { '' }
+				if f.items.len > 0 {
+					f.items[0].name
+				} else {
+					''
+				}
 			}
-			Decorator { f.func.name }
-			LambdaExpr { '<lambda>' }
+			Decorator {
+				f.func.name
+			}
+			LambdaExpr {
+				'<lambda>'
+			}
 		}
 	}
 	return none

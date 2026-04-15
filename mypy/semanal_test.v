@@ -39,12 +39,14 @@ fn test_annotation_head_name_handles_simple_qualified_and_non_unbound_types() {
 fn test_unwrap_assignment_annotation_removes_nested_wrappers() {
 	nested := MypyTypeNode(UnboundType{
 		name: 'Final'
-		args: [MypyTypeNode(UnboundType{
-			name: 'typing.ClassVar'
-			args: [MypyTypeNode(UnboundType{
-				name: 'builtins.int'
-			})]
-		})]
+		args: [
+			MypyTypeNode(UnboundType{
+				name: 'typing.ClassVar'
+				args: [MypyTypeNode(UnboundType{
+					name: 'builtins.int'
+				})]
+			}),
+		]
 	})
 	unwrapped := unwrap_assignment_annotation(nested)
 	match unwrapped {
@@ -282,7 +284,7 @@ fn test_visit_assignment_stmt_processes_final_annotation_and_value() {
 		}
 		defs:                [
 			Statement(AssignmentStmt{
-				lvalues: [Expression(NameExpr{
+				lvalues:         [Expression(NameExpr{
 					name: 'answer'
 				})]
 				rvalue:          Expression(IntExpr{
@@ -339,7 +341,7 @@ fn test_visit_assignment_stmt_processes_bare_final_annotation_and_infers_value_t
 		}
 		defs:                [
 			Statement(AssignmentStmt{
-				lvalues: [Expression(NameExpr{
+				lvalues:         [Expression(NameExpr{
 					name: 'count'
 				})]
 				rvalue:          Expression(IntExpr{
@@ -368,7 +370,8 @@ fn test_visit_assignment_stmt_processes_bare_final_annotation_and_infers_value_t
 					if info := typ.typ {
 						assert info.fullname == 'builtins.int'
 					} else {
-						assert typ.type_name == 'builtins.int' || typ.type_fullname == 'builtins.int'
+						assert typ.type_name == 'builtins.int'
+							|| typ.type_fullname == 'builtins.int'
 					}
 				}
 				else {
@@ -389,11 +392,14 @@ fn test_visit_assignment_stmt_processes_bare_final_annotation_and_infers_value_t
 			panic('expected Var symbol for bare final assignment')
 		}
 	}
-	analyzed_type := analyzed_stmt.type_annotation or { panic('expected normalized bare Final annotation') }
+	analyzed_type := analyzed_stmt.type_annotation or {
+		panic('expected normalized bare Final annotation')
+	}
 	if analyzed_type is UnboundType {
 		assert analyzed_type.name != 'Final'
 	}
 }
+
 fn test_visit_assignment_stmt_marks_classvar_in_class_scope() {
 	mut sa := new_test_semantic_analyzer()
 	prepare_test_module(mut sa, 'pkg.mod')
@@ -401,9 +407,11 @@ fn test_visit_assignment_stmt_marks_classvar_in_class_scope() {
 	sa.globals = SymbolTable{
 		symbols: map[string]SymbolTableNode{}
 	}
-	sa.locals = [?SymbolTable(SymbolTable{
-		symbols: map[string]SymbolTableNode{}
-	})]
+	sa.locals = [
+		?SymbolTable(SymbolTable{
+			symbols: map[string]SymbolTableNode{}
+		}),
+	]
 	sa.scope_stack = [scope_class]
 	sa.cur_type = &TypeInfo{
 		name:        'Box'
@@ -415,7 +423,7 @@ fn test_visit_assignment_stmt_marks_classvar_in_class_scope() {
 	}
 
 	mut stmt := AssignmentStmt{
-		lvalues: [Expression(NameExpr{
+		lvalues:         [Expression(NameExpr{
 			name: 'value'
 		})]
 		rvalue:          Expression(IntExpr{
@@ -452,14 +460,20 @@ fn test_async_for_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ForStmt{
 				is_async: true
-				index: Expression(NameExpr{name: 'x'})
-				expr: Expression(NameExpr{name: 'it'})
-				body: Block{body: []}
-			})
+				index:    Expression(NameExpr{
+					name: 'x'
+				})
+				expr:     Expression(NameExpr{
+					name: 'it'
+				})
+				body:     Block{
+					body: []
+				}
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -471,14 +485,20 @@ fn test_async_with_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(WithStmt{
 				is_async: true
-				expr: [Expression(NameExpr{name: 'ctx'})]
-				target: [?Expression(Expression(NameExpr{name: 'x'}))]
-				body: Block{body: []}
-			})
+				expr:     [Expression(NameExpr{
+					name: 'ctx'
+				})]
+				target:   [?Expression(Expression(NameExpr{
+					name: 'x'
+				}))]
+				body:     Block{
+					body: []
+				}
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -490,13 +510,15 @@ fn test_await_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ExpressionStmt{
 				expr: Expression(AwaitExpr{
-					expr: Expression(NameExpr{name: 'coro'})
+					expr: Expression(NameExpr{
+						name: 'coro'
+					})
 				})
-			})
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -508,46 +530,54 @@ fn test_async_comprehension_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ExpressionStmt{
 				expr: Expression(ListComprehension{
 					generator: GeneratorExpr{
-						left_expr: Expression(NameExpr{name: 'x'})
-						indices: [Expression(NameExpr{name: 'x'})]
-						sequences: [Expression(NameExpr{name: 'it'})]
+						left_expr: Expression(NameExpr{
+							name: 'x'
+						})
+						indices:   [Expression(NameExpr{
+							name: 'x'
+						})]
+						sequences: [Expression(NameExpr{
+							name: 'it'
+						})]
 						condlists: [[]Expression{}]
-						is_async: [true]
+						is_async:  [true]
 					}
 				})
-			})
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
 	assert sa.errors.error_info_list.len > 0
-	assert sa.errors.error_info_list[0].message == "asynchronous comprehension outside of an asynchronous function"
+	assert sa.errors.error_info_list[0].message == 'asynchronous comprehension outside of an asynchronous function'
 }
 
 fn test_yield_from_inside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut func := &FuncDef{
-		name: 'f'
+		name:         'f'
 		is_coroutine: true
-		body: Block{
+		body:         Block{
 			body: [
 				Statement(ExpressionStmt{
 					expr: Expression(YieldFromExpr{
-						expr: Expression(NameExpr{name: 'it'})
+						expr: Expression(NameExpr{
+							name: 'it'
+						})
 					})
-				})
+				}),
 			]
 		}
 	}
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
-			Statement(func)
+		path:     'test.py'
+		defs:     [
+			Statement(func),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -559,14 +589,20 @@ fn test_async_for_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ForStmt{
 				is_async: true
-				index: Expression(NameExpr{name: 'x'})
-				expr: Expression(NameExpr{name: 'it'})
-				body: Block{body: []}
-			})
+				index:    Expression(NameExpr{
+					name: 'x'
+				})
+				expr:     Expression(NameExpr{
+					name: 'it'
+				})
+				body:     Block{
+					body: []
+				}
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -578,14 +614,20 @@ fn test_async_with_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(WithStmt{
 				is_async: true
-				expr: [Expression(NameExpr{name: 'ctx'})]
-				target: [?Expression(Expression(NameExpr{name: 'x'}))]
-				body: Block{body: []}
-			})
+				expr:     [Expression(NameExpr{
+					name: 'ctx'
+				})]
+				target:   [?Expression(Expression(NameExpr{
+					name: 'x'
+				}))]
+				body:     Block{
+					body: []
+				}
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -597,13 +639,15 @@ fn test_await_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ExpressionStmt{
 				expr: Expression(AwaitExpr{
-					expr: Expression(NameExpr{name: 'coro'})
+					expr: Expression(NameExpr{
+						name: 'coro'
+					})
 				})
-			})
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -615,46 +659,54 @@ fn test_async_comprehension_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ExpressionStmt{
 				expr: Expression(ListComprehension{
 					generator: GeneratorExpr{
-						left_expr: Expression(NameExpr{name: 'x'})
-						indices: [Expression(NameExpr{name: 'x'})]
-						sequences: [Expression(NameExpr{name: 'it'})]
+						left_expr: Expression(NameExpr{
+							name: 'x'
+						})
+						indices:   [Expression(NameExpr{
+							name: 'x'
+						})]
+						sequences: [Expression(NameExpr{
+							name: 'it'
+						})]
 						condlists: [[]Expression{}]
-						is_async: [true]
+						is_async:  [true]
 					}
 				})
-			})
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
 	assert sa.errors.error_info_list.len > 0
-	assert sa.errors.error_info_list[0].message == "asynchronous comprehension outside of an asynchronous function"
+	assert sa.errors.error_info_list[0].message == 'asynchronous comprehension outside of an asynchronous function'
 }
 
 fn test_yield_from_inside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut func := &FuncDef{
-		name: 'f'
+		name:         'f'
 		is_coroutine: true
-		body: Block{
+		body:         Block{
 			body: [
 				Statement(ExpressionStmt{
 					expr: Expression(YieldFromExpr{
-						expr: Expression(NameExpr{name: 'it'})
+						expr: Expression(NameExpr{
+							name: 'it'
+						})
 					})
-				})
+				}),
 			]
 		}
 	}
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
-			Statement(func)
+		path:     'test.py'
+		defs:     [
+			Statement(func),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -666,14 +718,20 @@ fn test_async_for_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ForStmt{
 				is_async: true
-				index: Expression(NameExpr{name: 'x'})
-				expr: Expression(NameExpr{name: 'it'})
-				body: Block{body: []}
-			})
+				index:    Expression(NameExpr{
+					name: 'x'
+				})
+				expr:     Expression(NameExpr{
+					name: 'it'
+				})
+				body:     Block{
+					body: []
+				}
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -685,14 +743,20 @@ fn test_async_with_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(WithStmt{
 				is_async: true
-				expr: [Expression(NameExpr{name: 'ctx'})]
-				target: [?Expression(Expression(NameExpr{name: 'x'}))]
-				body: Block{body: []}
-			})
+				expr:     [Expression(NameExpr{
+					name: 'ctx'
+				})]
+				target:   [?Expression(Expression(NameExpr{
+					name: 'x'
+				}))]
+				body:     Block{
+					body: []
+				}
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -704,13 +768,15 @@ fn test_await_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ExpressionStmt{
 				expr: Expression(AwaitExpr{
-					expr: Expression(NameExpr{name: 'coro'})
+					expr: Expression(NameExpr{
+						name: 'coro'
+					})
 				})
-			})
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
@@ -722,46 +788,54 @@ fn test_async_comprehension_outside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
+		path:     'test.py'
+		defs:     [
 			Statement(ExpressionStmt{
 				expr: Expression(ListComprehension{
 					generator: GeneratorExpr{
-						left_expr: Expression(NameExpr{name: 'x'})
-						indices: [Expression(NameExpr{name: 'x'})]
-						sequences: [Expression(NameExpr{name: 'it'})]
+						left_expr: Expression(NameExpr{
+							name: 'x'
+						})
+						indices:   [Expression(NameExpr{
+							name: 'x'
+						})]
+						sequences: [Expression(NameExpr{
+							name: 'it'
+						})]
 						condlists: [[]Expression{}]
-						is_async: [true]
+						is_async:  [true]
 					}
 				})
-			})
+			}),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}
 	assert sa.errors.error_info_list.len > 0
-	assert sa.errors.error_info_list[0].message == "asynchronous comprehension outside of an asynchronous function"
+	assert sa.errors.error_info_list[0].message == 'asynchronous comprehension outside of an asynchronous function'
 }
 
 fn test_yield_from_inside_async_context() {
 	mut sa := new_test_semantic_analyzer()
 	mut func := &FuncDef{
-		name: 'f'
+		name:         'f'
 		is_coroutine: true
-		body: Block{
+		body:         Block{
 			body: [
 				Statement(ExpressionStmt{
 					expr: Expression(YieldFromExpr{
-						expr: Expression(NameExpr{name: 'it'})
+						expr: Expression(NameExpr{
+							name: 'it'
+						})
 					})
-				})
+				}),
 			]
 		}
 	}
 	mut file := &MypyFile{
 		fullname: 'test'
-		path: 'test.py'
-		defs: [
-			Statement(func)
+		path:     'test.py'
+		defs:     [
+			Statement(func),
 		]
 	}
 	sa.visit_mypy_file(mut file) or {}

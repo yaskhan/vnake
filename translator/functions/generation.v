@@ -96,10 +96,10 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			dec_str = dec_name
 		}
 
-		if !dec_name.ends_with('classmethod') && !dec_name.ends_with('staticmethod') &&
-			!dec_name.ends_with('property') && !dec_name.ends_with('.setter') &&
-			!dec_name.ends_with('.deleter') && !dec_name.ends_with('deprecated') &&
-			!dec_name.ends_with('lru_cache') && dec_name !in ['timer', 'log'] {
+		if !dec_name.ends_with('classmethod') && !dec_name.ends_with('staticmethod')
+			&& !dec_name.ends_with('property') && !dec_name.ends_with('.setter')
+			&& !dec_name.ends_with('.deleter') && !dec_name.ends_with('deprecated')
+			&& !dec_name.ends_with('lru_cache') && dec_name !in ['timer', 'log'] {
 			output << '// @${dec_str}'
 		}
 	}
@@ -113,7 +113,6 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	args << node.args.args
 	args << node.args.kwonlyargs
 
-
 	// Receiver handling
 	if is_method && node.name != '__new__' && args.len > 0 {
 		if !dec_info.is_staticmethod && !dec_info.is_classmethod {
@@ -124,7 +123,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			}
 			func_keys << node.name
 			for key in func_keys {
-				if key in env.analyzer.func_param_mutability && 0 in env.analyzer.func_param_mutability[key] {
+				if key in env.analyzer.func_param_mutability
+					&& 0 in env.analyzer.func_param_mutability[key] {
 					is_mutated = true
 					break
 				}
@@ -136,13 +136,15 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			if !is_mutated && struct_name.len > 0 {
 				pure_struct := struct_name.all_before_last('_Impl')
 				mut py_func := node.name
-				if py_func.starts_with('py_') { py_func = py_func[3..] }
-				
+				if py_func.starts_with('py_') {
+					py_func = py_func[3..]
+				}
+
 				// Try CamelCase too
 				keys := [
 					'${pure_struct}.${py_func}.self',
 					'${pure_struct}.${base.to_camel_case(py_func)}.self',
-					'${struct_name}.${node.name}.self'
+					'${struct_name}.${node.name}.self',
 				]
 				for k in keys {
 					info := env.analyzer.get_mutability(k)
@@ -341,7 +343,6 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			arg_type = '?${arg_type}'
 		}
 
-
 		// If after all checks still have None default, ensure type is ?Any (not ?int)
 		if has_none_default && uses_default_type && arg_type == 'int' {
 			arg_type = '?Any'
@@ -379,9 +380,11 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		is_primitive_arg := clean_type_arg in ['int', 'string', 'bool', 'f32', 'f64', 'i64', 'i16',
 			'i8', 'u8', 'u16', 'u32', 'u64', 'byte', 'rune', 'void', 'any']
 
-		if (arg.arg in defaults_map && is_mut) || (is_primitive_arg && is_reassigned) || (!is_primitive_arg && is_mut) {
+		if (arg.arg in defaults_map && is_mut) || (is_primitive_arg && is_reassigned)
+			|| (!is_primitive_arg && is_mut) {
 			mut target_copy_name := arg_name
-			if !is_primitive_arg && is_mut && (arg_type.contains('&') || arg_type.starts_with('?') || arg_type in env.state.known_interfaces) {
+			if !is_primitive_arg && is_mut && (arg_type.contains('&') || arg_type.starts_with('?')
+				|| arg_type in env.state.known_interfaces) {
 				target_copy_name = '${arg_name}_mut'
 				env.state.name_remap[arg_name] = target_copy_name
 			}
@@ -480,8 +483,9 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		if !is_v_native_method && r_clean_ptr.len > 0 && r_clean_ptr[0].is_capital()
 			&& r_clean_ptr !in ['Any', 'LiteralString', 'bool', 'int', 'f64', 'string', 'void', 'NoneType']
 			&& !r_clean_ptr.starts_with('LiteralEnum_') && !r_clean_ptr.starts_with('SumType_')
-			&& !r_clean_ptr.starts_with('TupleStruct_')
-			&& r_clean_ptr !in v_gens_to_declare && r_clean_ptr !in env.state.known_interfaces && r_clean_ptr !in env.state.class_to_impl && !r_clean_ptr.ends_with('Protocol') && !ret_type.starts_with('&') {
+			&& !r_clean_ptr.starts_with('TupleStruct_') && r_clean_ptr !in v_gens_to_declare
+			&& r_clean_ptr !in env.state.known_interfaces && r_clean_ptr !in env.state.class_to_impl
+			&& !r_clean_ptr.ends_with('Protocol') && !ret_type.starts_with('&') {
 			if ret_type.starts_with('?') {
 				ret_type = '?&' + ret_type[1..]
 			} else {
@@ -616,7 +620,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		c_str := if captures.len > 0 { '[${captures.join(', ')}] ' } else { '' }
 		ret_s_nested := if any_ret != 'void' && any_ret != '' { ' ${any_ret}' } else { '' }
 		decl = 'mut ${func_name} := fn ${c_str}(${any_args.join(', ')})${ret_s_nested} {'
-		
+
 		// Register the function type for correct call handling (like wrapping *args)
 		// Use known_v_types which is accessible to guess_type
 		v_type := 'fn (${any_args.join(', ')}) ${if any_ret.len > 0 { any_ret } else { 'void' }}'
@@ -656,15 +660,19 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 		for stmt in node.body {
 			if stmt is ast.Assign {
 				for target in stmt.targets {
-					if target is ast.Attribute && target.value is ast.Name && (target.value as ast.Name).id == receiver_name {
-						attr := base.sanitize_name(target.attr, false, map[string]bool{}, "", map[string]bool{})
+					if target is ast.Attribute && target.value is ast.Name
+						&& (target.value as ast.Name).id == receiver_name {
+						attr := base.sanitize_name(target.attr, false, map[string]bool{},
+							'', map[string]bool{})
 						val := env.visit_expr_fn(stmt.value)
 						init_fields << '${attr}: ${val}'
 					}
 				}
 			} else if stmt is ast.AnnAssign {
-				if stmt.target is ast.Attribute && stmt.target.value is ast.Name && (stmt.target.value as ast.Name).id == receiver_name {
-					attr := base.sanitize_name(stmt.target.attr, false, map[string]bool{}, "", map[string]bool{})
+				if stmt.target is ast.Attribute && stmt.target.value is ast.Name
+					&& (stmt.target.value as ast.Name).id == receiver_name {
+					attr := base.sanitize_name(stmt.target.attr, false, map[string]bool{},
+						'', map[string]bool{})
 					if dv := stmt.value {
 						val := env.visit_expr_fn(dv)
 						init_fields << '${attr}: ${val}'
@@ -672,7 +680,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 				}
 			}
 		}
-		mut struct_init := if init_fields.len > 0 { '{${init_fields.join(", ")}}' } else { '{}' }
+		mut struct_init := if init_fields.len > 0 { '{${init_fields.join(', ')}}' } else { '{}' }
 		env.emit_fn(env.state.indent() + 'mut self := ${ret_type}${struct_init}')
 	}
 
@@ -721,7 +729,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	if ret_type != 'void' && ret_type != '' && !is_init && !ends_with_return(node.body) {
 		// V requires explicit return
 		default_val := base.get_v_default_value(ret_type, v_gens_to_declare)
-		env.emit_fn(env.state.indent() + 'return ${default_val} // TODO: default value for ${ret_type}')
+		env.emit_fn(env.state.indent() +
+			'return ${default_val} // TODO: default value for ${ret_type}')
 	}
 
 	if is_generator {

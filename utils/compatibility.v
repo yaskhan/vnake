@@ -15,10 +15,10 @@ pub fn (c CompatibilityLayer) is_v_reserved(name string) bool {
 // This is optimized to use a match Expression for faster lookup.
 fn is_v_reserved_keyword(name string) bool {
 	return match name {
-		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface',
-		'enum', 'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared',
-		'spawn', 'assert', 'sizeof', 'typeof', '__global', 'as', 'in', 'is', 'none', 'map',
-		'array', 'string', 'bool', 'any', 'Any', 'union' {
+		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface', 'enum',
+		'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared', 'spawn',
+		'assert', 'sizeof', 'typeof', '__global', 'as', 'in', 'is', 'none', 'map', 'array',
+		'string', 'bool', 'any', 'Any', 'union' {
 			true
 		}
 		else {
@@ -38,7 +38,6 @@ pub fn (c CompatibilityLayer) preprocess_source(source string) string {
 	return result
 }
 
-
 fn python_soft_keywords() []string {
 	return ['match', 'case', 'type', 'soft']
 }
@@ -49,7 +48,8 @@ fn (c CompatibilityLayer) preprocess_tstrings(source string) string {
 	for i < source.len {
 		ch := source[i]
 		if c.is_tstring_prefix_start(source, i) {
-			prefix_end, quote, quote_len, raw_prefix := c.scan_tstring_prefix(source, i)
+			prefix_end, quote, quote_len, raw_prefix := c.scan_tstring_prefix(source,
+				i)
 			if prefix_end > i {
 				if raw_prefix {
 					result << `r`
@@ -217,7 +217,8 @@ fn (c CompatibilityLayer) collect_multiline_header(lines []string, start_index i
 		j++
 		next_line := lines[j]
 		full_header_parts << '\n' + next_line
-		new_depth, next_colon_index := c.find_header_colon_with_depth('\n' + next_line, current_depth)
+		new_depth, next_colon_index := c.find_header_colon_with_depth('\n' + next_line,
+			current_depth)
 		current_depth = new_depth
 		if next_colon_index != -1 {
 			break
@@ -348,7 +349,8 @@ fn (c CompatibilityLayer) mangle_recursive(text string) string {
 						if end != -1 {
 							name := current[left..i]
 							args := current[i + 1..end]
-							mangled_args := c.mangle_recursive(args).replace(', ', '__py2v_gen_C__').replace(',', '__py2v_gen_C__').replace(' ', '')
+							mangled_args := c.mangle_recursive(args).replace(', ', '__py2v_gen_C__').replace(',',
+								'__py2v_gen_C__').replace(' ', '')
 							replacement := '${name}__py2v_gen_L__${mangled_args}__py2v_gen_R__'
 							current = current[..left] + replacement + current[end + 1..]
 							changed = true

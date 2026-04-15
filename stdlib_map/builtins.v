@@ -3,14 +3,14 @@ module stdlib_map
 // builtin_map - mapping of Python built-in functions to V
 pub const builtin_map = {
 	'print': 'println'
-	'str': 'string'
-	'int': 'int'
+	'str':   'string'
+	'int':   'int'
 	'float': 'f64'
-	'bool': 'bool'
-	'len': 'len'
+	'bool':  'bool'
+	'len':   'len'
 	'range': 'range'
-	'set': 'datatypes.Set'
-	'dict': 'map[string]Any'
+	'set':   'datatypes.Set'
+	'dict':  'map[string]Any'
 }
 
 // get_builtin_mapping returns V code for Python built-in function

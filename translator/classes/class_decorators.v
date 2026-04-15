@@ -4,10 +4,8 @@ import ast
 
 pub struct ClassDecoratorHandler {}
 
-pub fn (h ClassDecoratorHandler) process_decorators(
-	node ast.ClassDef,
-	mut env ClassVisitEnv,
-) ([]string, bool, bool, bool, string) {
+pub fn (h ClassDecoratorHandler) process_decorators(node ast.ClassDef,
+	mut env ClassVisitEnv) ([]string, bool, bool, bool, string) {
 	mut decorators := []string{}
 	mut is_dataclass := false
 	mut is_deprecated := false
@@ -25,10 +23,10 @@ pub fn (h ClassDecoratorHandler) process_decorators(
 			for kw in decorator.keywords {
 				dec_args << '${kw.arg}=${env.visit_expr_fn(kw.value)}'
 			}
-			dec_str = '${func}(${dec_args.join(", ")})'
+			dec_str = '${func}(${dec_args.join(', ')})'
 			if (func == 'deprecated' || func == 'warnings.deprecated') && dec_args.len > 0 {
 				is_deprecated = true
-				deprecated_message = dec_args[0].trim("'\"")
+				deprecated_message = dec_args[0].trim('\'"')
 			}
 		} else {
 			dec_str = env.visit_expr_fn(decorator)
@@ -39,7 +37,10 @@ pub fn (h ClassDecoratorHandler) process_decorators(
 			}
 		}
 
-		if dec_str != 'deprecated' && !dec_str.starts_with('deprecated(') && !dec_str.starts_with('warnings.deprecated(') && !dec_str.starts_with('dataclass') && !dec_str.starts_with('dataclasses.dataclass') && dec_str != 'disjoint_base' && dec_str != 'typing.disjoint_base' {
+		if dec_str != 'deprecated' && !dec_str.starts_with('deprecated(')
+			&& !dec_str.starts_with('warnings.deprecated(') && !dec_str.starts_with('dataclass')
+			&& !dec_str.starts_with('dataclasses.dataclass') && dec_str != 'disjoint_base'
+			&& dec_str != 'typing.disjoint_base' {
 			decorators << '// @${dec_str}'
 		}
 		if dec_str.starts_with('dataclass') || dec_str.starts_with('dataclasses.dataclass') {

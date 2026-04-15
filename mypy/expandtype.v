@@ -181,7 +181,7 @@ pub fn expand_type(typ MypyTypeNode, env map[TypeVarId]MypyTypeNode) MypyTypeNod
 				})
 			}
 		}
-        TypedDictType {
+		TypedDictType {
 			return v.visit_typeddict_type(&proper) or {
 				MypyTypeNode(AnyType{
 					type_of_any: .from_error
@@ -235,7 +235,7 @@ pub fn freshen_function_type_vars(callee &CallableType) CallableType {
 	proper_res := get_proper_type(res)
 	if proper_res is CallableType {
 		// redundant 'as' removal
-		return proper_res.copy_modified([], AnyType{type_of_any: .unannotated}, tvs)
+		return proper_res.copy_modified([], AnyType{ type_of_any: .unannotated }, tvs)
 	}
 	return *callee
 }
@@ -271,7 +271,7 @@ pub fn freshen_all_functions_type_vars(t MypyTypeNode) MypyTypeNode {
 		UnboundType { return v.visit_unbound_type(&proper) or { t } }
 		UninhabitedType { return v.visit_uninhabited_type(&proper) or { t } }
 		UnionType { return v.visit_union_type(&proper) or { t } }
-        TypedDictType { return v.visit_typeddict_type(&proper) or { t } }
+		TypedDictType { return v.visit_typeddict_type(&proper) or { t } }
 		else { return t }
 	}
 }
@@ -360,7 +360,7 @@ pub fn (mut v ExpandTypeVisitor) visit_type_var_tuple(t &TypeVarTupleType) !Mypy
 pub fn (mut v ExpandTypeVisitor) visit_callable_type(t &CallableType) !MypyTypeNode {
 	arg_types := v.expand_types(t.arg_types)
 	res_typ := expand_type(t.ret_type, v.variables)
-    return MypyTypeNode(t.copy_modified(arg_types, res_typ, t.variables))
+	return MypyTypeNode(t.copy_modified(arg_types, res_typ, t.variables))
 }
 
 pub fn (mut v ExpandTypeVisitor) visit_overloaded(t &Overloaded) !MypyTypeNode {

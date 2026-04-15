@@ -62,12 +62,24 @@ fn (v SubtypeVisitor) visit(right MypyTypeNode) bool {
 	}
 
 	return match right_proper {
-		Instance { v.visit_instance(right_proper as Instance) }
-		CallableType { v.visit_callable_type(right_proper as CallableType) }
-		TupleType { v.visit_tuple_type(right_proper as TupleType) }
-		TypedDictType { v.visit_typeddict_type(right_proper as TypedDictType) }
-		TypeVarType { v.visit_type_var(right_proper as TypeVarType) }
-		NoneType { v.visit_none_type(right_proper as NoneType) }
+		Instance {
+			v.visit_instance(right_proper as Instance)
+		}
+		CallableType {
+			v.visit_callable_type(right_proper as CallableType)
+		}
+		TupleType {
+			v.visit_tuple_type(right_proper as TupleType)
+		}
+		TypedDictType {
+			v.visit_typeddict_type(right_proper as TypedDictType)
+		}
+		TypeVarType {
+			v.visit_type_var(right_proper as TypeVarType)
+		}
+		NoneType {
+			v.visit_none_type(right_proper as NoneType)
+		}
 		else {
 			// Fallback for types on the left
 			if v.left is AnyType {
@@ -250,7 +262,8 @@ fn is_instance_subtype(left Instance, right Instance, ctx SubtypeContext) bool {
 							if ctx.always_covariant && variance == 0 {
 								variance = 1 // COVARIANT
 							}
-							if !check_type_parameter(left_arg, right_arg, int(variance), ctx) {
+							if !check_type_parameter(left_arg, right_arg, int(variance),
+								ctx) {
 								ts.record_negative_subtype_cache_entry(kind, &left, &right)
 								return false
 							}
@@ -338,7 +351,8 @@ fn is_typeddict_subtype(left TypedDictType, right TypedDictType, ctx SubtypeCont
 				return false
 			}
 		} else {
-			if !is_subtype_ctx(left_type, right_type, ctx) || !is_subtype_ctx(right_type, left_type, ctx) {
+			if !is_subtype_ctx(left_type, right_type, ctx)
+				|| !is_subtype_ctx(right_type, left_type, ctx) {
 				return false
 			}
 		}

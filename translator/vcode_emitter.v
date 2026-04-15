@@ -1,4 +1,5 @@
 module translator
+
 import base
 
 fn to_snake_case(name string) string {
@@ -8,16 +9,16 @@ fn to_snake_case(name string) string {
 @[heap]
 pub struct VCodeEmitter {
 pub mut:
-	module_name     string
-	imports         []string
-	structs         []string
-	functions       []string
-	main_body       []string
-	init_body       []string
-	globals         []string
-	constants       []string
-	helper_imports  []string
-	helper_structs  []string
+	module_name      string
+	imports          []string
+	structs          []string
+	functions        []string
+	main_body        []string
+	init_body        []string
+	globals          []string
+	constants        []string
+	helper_imports   []string
+	helper_structs   []string
 	helper_functions []string
 	used_builtins    map[string]bool
 	defined_classes  map[string]bool
@@ -26,16 +27,16 @@ pub mut:
 
 pub fn new_vcode_emitter(module_name string) VCodeEmitter {
 	return VCodeEmitter{
-		module_name:     module_name
-		imports:         []string{}
-		structs:         []string{}
-		functions:       []string{}
-		main_body:       []string{}
-		init_body:       []string{}
-		globals:         []string{}
-		constants:       []string{}
-		helper_imports:  []string{}
-		helper_structs:  []string{}
+		module_name:      module_name
+		imports:          []string{}
+		structs:          []string{}
+		functions:        []string{}
+		main_body:        []string{}
+		init_body:        []string{}
+		globals:          []string{}
+		constants:        []string{}
+		helper_imports:   []string{}
+		helper_structs:   []string{}
 		helper_functions: []string{}
 		used_builtins:    map[string]bool{}
 		defined_classes:  map[string]bool{}
@@ -131,7 +132,9 @@ pub fn (e &VCodeEmitter) emit() string {
 	if e.imports.len > 0 || e.helper_imports.len > 0 {
 		mut all_imports := e.imports.clone()
 		for imp in e.helper_imports {
-			if imp !in all_imports { all_imports << imp }
+			if imp !in all_imports {
+				all_imports << imp
+			}
 		}
 		all_imports.sort()
 		for imp in all_imports {
@@ -147,27 +150,41 @@ pub fn (e &VCodeEmitter) emit() string {
 
 	// Generate Any sum-type if not already present
 	mut has_any := false
-	for s in e.structs { if s.contains('type Any =') { has_any = true; break } }
-	for s in e.helper_structs { if s.contains('type Any =') { has_any = true; break } }
-	
+	for s in e.structs {
+		if s.contains('type Any =') {
+			has_any = true
+			break
+		}
+	}
+	for s in e.helper_structs {
+		if s.contains('type Any =') {
+			has_any = true
+			break
+		}
+	}
+
 	if !has_any && (e.used_builtins.len > 0 || e.defined_classes.len > 0) {
-		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any', 'map[string]Any', 'map[i64]Any']
+		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
+			'map[string]Any', 'map[i64]Any']
 		variants << ['[]i64', '[]f64', '[]int']
 		for cls, _ in e.defined_classes {
 			v_cls := cls.trim_left('&')
-			if v_cls.len > 0 && v_cls[0].is_capital() && v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
-				if '&' + v_cls !in variants { variants << '&' + v_cls }
+			if v_cls.len > 0 && v_cls[0].is_capital()
+				&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
+				if '&' + v_cls !in variants {
+					variants << '&' + v_cls
+				}
 			} else if v_cls !in variants {
 				variants << v_cls
 			}
 		}
-		lines << 'pub type Any = ${variants.join(" | ")}'
+		lines << 'pub type Any = ${variants.join(' | ')}'
 		lines << ''
 		lines << 'pub struct NoneType {}'
 		lines << 'pub fn (n NoneType) str() string { return "None" }'
 		lines << ''
 	}
-	
+
 	if e.helper_structs.len > 0 {
 		lines << e.helper_structs.join('\n\n')
 		lines << ''
@@ -204,7 +221,7 @@ pub fn (e &VCodeEmitter) emit() string {
 		lines << e.functions.join('\n\n')
 		lines << ''
 	}
-	
+
 	if e.helper_functions.len > 0 {
 		lines << e.helper_functions.join('\n\n')
 		lines << ''
@@ -235,11 +252,19 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 	if e.imports.len > 0 {
 		mut imps := e.imports.clone()
 		imps.sort()
-		for i in imps { lines << 'import ${i}' }
+		for i in imps {
+			lines << 'import ${i}'
+		}
 		lines << ''
 	}
-	if e.structs.len > 0 { lines << e.structs.join('\n\n'); lines << '' }
-	if e.helper_structs.len > 0 { lines << e.helper_structs.join('\n\n'); lines << '' }
+	if e.structs.len > 0 {
+		lines << e.structs.join('\n\n')
+		lines << ''
+	}
+	if e.helper_structs.len > 0 {
+		lines << e.helper_structs.join('\n\n')
+		lines << ''
+	}
 	if e.globals.len > 0 {
 		for g in e.globals {
 			mut sanitized := g.replace('pub ', '')
@@ -252,12 +277,24 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 		lines << ''
 	}
 	if e.constants.len > 0 {
-		for c in e.constants { lines << c }
+		for c in e.constants {
+			lines << c
+		}
 		lines << ''
 	}
-	if e.functions.len > 0 { lines << e.functions.join('\n\n'); lines << '' }
-	if e.helper_functions.len > 0 { lines << e.helper_functions.join('\n\n'); lines << '' }
-	if e.main_body.len > 0 { for m in e.main_body { lines << m } }
+	if e.functions.len > 0 {
+		lines << e.functions.join('\n\n')
+		lines << ''
+	}
+	if e.helper_functions.len > 0 {
+		lines << e.helper_functions.join('\n\n')
+		lines << ''
+	}
+	if e.main_body.len > 0 {
+		for m in e.main_body {
+			lines << m
+		}
+	}
 	res := lines.join('\n').trim_space()
 	if res.len == 0 && (e.structs.len > 0 || e.functions.len > 0 || e.constants.len > 0) {
 		eprintln('BUG: raw_emit returning empty while collections populated! structs=${e.structs.len} funcs=${e.functions.len} consts=${e.constants.len}')
@@ -266,7 +303,8 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 }
 
 pub fn (e &VCodeEmitter) emit_helpers() string {
-	return VCodeEmitter.emit_global_helpers(e.helper_imports, e.helper_structs, e.helper_functions, 'main', [], e.used_builtins)
+	return VCodeEmitter.emit_global_helpers(e.helper_imports, e.helper_structs, e.helper_functions,
+		'main', [], e.used_builtins)
 }
 
 pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, functions []string, module_name string, classes []string, used_builtins map[string]bool) string {
@@ -290,16 +328,22 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		lines << ''
 	}
 
-	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any', 'map[string]Any', 'map[i64]Any']
+	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
+		'map[string]Any', 'map[i64]Any']
 	variants << ['[]i64', '[]f64', '[]int', '[]Packet', '[]Task', '[]TaskRec']
 	if used_builtins['Template'] {
-		if 'Interpolation' !in variants { variants << 'Interpolation' }
-		if 'Template' !in variants { variants << 'Template' }
+		if 'Interpolation' !in variants {
+			variants << 'Interpolation'
+		}
+		if 'Template' !in variants {
+			variants << 'Template'
+		}
 	}
 	for cls in classes {
 		v_cls := cls.trim_left('&')
 		// Ensure classes in Any are always references to match V 0.5 heap-allocated memory model for Python objects
-		if v_cls.len > 0 && v_cls[0].is_capital() && v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
+		if v_cls.len > 0 && v_cls[0].is_capital()
+			&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
 			if '&' + v_cls !in variants {
 				variants << '&' + v_cls
 			}
@@ -307,7 +351,7 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 			variants << v_cls
 		}
 	}
-	lines << 'pub type Any = ${variants.join(" | ")}'
+	lines << 'pub type Any = ${variants.join(' | ')}'
 	lines << ''
 
 	lines << 'pub struct NoneType {}'
@@ -315,7 +359,7 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	lines << "    return 'None'"
 	lines << '}'
 	lines << ''
-	
+
 	lines << 'pub fn py_bool(val Any) bool {
     if val is bool { return val }
     if val is int { return val != 0 }

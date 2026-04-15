@@ -55,14 +55,38 @@ pub:
 	instance_joiner InstanceJoiner
 }
 
-pub fn (v TypeJoinVisitor) visit_unbound_type(t &UnboundType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_union_type(t &UnionType) !MypyTypeNode { return make_simplified_union([v.s, MypyTypeNode(*t)], false) }
-pub fn (v TypeJoinVisitor) visit_any(t &AnyType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_none_type(t &NoneType) !MypyTypeNode { return make_simplified_union([v.s, MypyTypeNode(*t)], false) }
-pub fn (v TypeJoinVisitor) visit_uninhabited_type(t &UninhabitedType) !MypyTypeNode { return v.s }
-pub fn (v TypeJoinVisitor) visit_deleted_type(t &DeletedType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_erased_type(t &ErasedType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_type_var(t &TypeVarType) !MypyTypeNode { return MypyTypeNode(*t) }
+pub fn (v TypeJoinVisitor) visit_unbound_type(t &UnboundType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_union_type(t &UnionType) !MypyTypeNode {
+	return make_simplified_union([v.s, MypyTypeNode(*t)], false)
+}
+
+pub fn (v TypeJoinVisitor) visit_any(t &AnyType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_none_type(t &NoneType) !MypyTypeNode {
+	return make_simplified_union([v.s, MypyTypeNode(*t)], false)
+}
+
+pub fn (v TypeJoinVisitor) visit_uninhabited_type(t &UninhabitedType) !MypyTypeNode {
+	return v.s
+}
+
+pub fn (v TypeJoinVisitor) visit_deleted_type(t &DeletedType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_erased_type(t &ErasedType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_type_var(t &TypeVarType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
 pub fn (v TypeJoinVisitor) visit_instance(t &Instance) !MypyTypeNode {
 	mut ij := v.instance_joiner
 	s_proper := get_proper_type(v.s)
@@ -71,27 +95,101 @@ pub fn (v TypeJoinVisitor) visit_instance(t &Instance) !MypyTypeNode {
 	}
 	return MypyTypeNode(*t)
 }
-pub fn (v TypeJoinVisitor) visit_callable_type(t &CallableType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_tuple_type(t &TupleType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_typeddict_type(t &TypedDictType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_literal_type(t &LiteralType) !MypyTypeNode { return join_types(v.s, t.fallback, v.instance_joiner) }
-pub fn (v TypeJoinVisitor) visit_type_type(t &TypeType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn is_better(t MypyTypeNode, s MypyTypeNode) bool { return t.type_str() == s.type_str() }
-pub fn is_similar_callables(t CallableType, s CallableType) bool { return t.arg_types.len == s.arg_types.len }
-pub fn combine_similar_callables(t CallableType, s CallableType) CallableType { _ = s return t }
-pub fn object_from_instance(instance Instance) Instance { return instance }
-pub fn object_or_any_from_type(typ MypyTypeNode) MypyTypeNode { return typ }
-pub fn unpack_callback_protocol(t Instance) ?MypyTypeNode { _ = t return none }
-pub fn (v TypeJoinVisitor) visit_param_spec(t &ParamSpecType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_parameters(t &ParametersType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_type_var_tuple(t &TypeVarTupleType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_overloaded(t &Overloaded) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_partial_type(t &PartialTypeT) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_type_group(t &TypeType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_type_alias_type(t &TypeAliasType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_unpack_type(t &UnpackType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_type_list(t &TypeList) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_callable_argument(t &CallableArgument) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_ellipsis_type(t &EllipsisType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_raw_expression_type(t &RawExpressionType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (v TypeJoinVisitor) visit_placeholder_type(t &PlaceholderType) !MypyTypeNode { return MypyTypeNode(*t) }
+
+pub fn (v TypeJoinVisitor) visit_callable_type(t &CallableType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_tuple_type(t &TupleType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_typeddict_type(t &TypedDictType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_literal_type(t &LiteralType) !MypyTypeNode {
+	return join_types(v.s, t.fallback, v.instance_joiner)
+}
+
+pub fn (v TypeJoinVisitor) visit_type_type(t &TypeType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn is_better(t MypyTypeNode, s MypyTypeNode) bool {
+	return t.type_str() == s.type_str()
+}
+
+pub fn is_similar_callables(t CallableType, s CallableType) bool {
+	return t.arg_types.len == s.arg_types.len
+}
+
+pub fn combine_similar_callables(t CallableType, s CallableType) CallableType {
+	_ = s
+	return t
+}
+
+pub fn object_from_instance(instance Instance) Instance {
+	return instance
+}
+
+pub fn object_or_any_from_type(typ MypyTypeNode) MypyTypeNode {
+	return typ
+}
+
+pub fn unpack_callback_protocol(t Instance) ?MypyTypeNode {
+	_ = t
+	return none
+}
+
+pub fn (v TypeJoinVisitor) visit_param_spec(t &ParamSpecType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_parameters(t &ParametersType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_type_var_tuple(t &TypeVarTupleType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_overloaded(t &Overloaded) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_partial_type(t &PartialTypeT) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_type_group(t &TypeType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_type_alias_type(t &TypeAliasType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_unpack_type(t &UnpackType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_type_list(t &TypeList) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_callable_argument(t &CallableArgument) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_ellipsis_type(t &EllipsisType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_raw_expression_type(t &RawExpressionType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (v TypeJoinVisitor) visit_placeholder_type(t &PlaceholderType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}

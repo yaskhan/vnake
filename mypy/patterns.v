@@ -215,6 +215,3 @@ pub fn (mut p PatternNode) accept(mut v NodeVisitor) !AnyNode {
 		ClassPattern { p.accept(mut v)! }
 	}
 }
-
-
-

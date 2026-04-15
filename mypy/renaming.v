@@ -139,7 +139,9 @@ pub fn (mut sg ScopeGuard) drop() {
 
 // current_block returns the current block_id
 fn (v VariableRenameVisitor) current_block() int {
-	if v.blocks.len == 0 { return 0 }
+	if v.blocks.len == 0 {
+		return 0
+	}
 	return v.blocks.last()
 }
 

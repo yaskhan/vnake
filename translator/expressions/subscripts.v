@@ -4,10 +4,14 @@ import ast
 
 pub fn (eg &ExprGen) get_negative_const(node ast.Expression) ?int {
 	if node is ast.UnaryOp && node.op.value == '-' {
-		if node.operand is ast.Constant { return node.operand.value.int() }
+		if node.operand is ast.Constant {
+			return node.operand.value.int()
+		}
 	}
 	if node is ast.Constant {
-		if node.value.starts_with('-') { return node.value[1..].int() }
+		if node.value.starts_with('-') {
+			return node.value[1..].int()
+		}
 	}
 	return none
 }
@@ -33,8 +37,9 @@ pub fn (mut eg ExprGen) visit_subscript(node ast.Subscript) string {
 
 	// TypedDict access d["a"] -> d.a
 	if pure_val_type in eg.state.dataclasses || pure_val_type in eg.state.defined_classes {
-		if node.slice is ast.Constant && (node.slice.token.typ == .string_tok || node.slice.token.typ == .fstring_tok) {
-			field := node.slice.value.trim('\'\"')
+		if node.slice is ast.Constant
+			&& (node.slice.token.typ == .string_tok || node.slice.token.typ == .fstring_tok) {
+			field := node.slice.value.trim('\'"')
 			return '${value}.${field}'
 		}
 	}
@@ -69,9 +74,15 @@ pub fn (mut eg ExprGen) visit_subscript(node ast.Subscript) string {
 		if is_native {
 			// Check if we can use V's native [..]
 			mut is_simple := true
-			if step != 'none' && step != '1' { is_simple = false }
-			if eg.get_negative_const(lower_node or { ast.Expression(ast.NoneExpr{}) }) != none { is_simple = false }
-			if eg.get_negative_const(upper_node or { ast.Expression(ast.NoneExpr{}) }) != none { is_simple = false }
+			if step != 'none' && step != '1' {
+				is_simple = false
+			}
+			if eg.get_negative_const(lower_node or { ast.Expression(ast.NoneExpr{}) }) != none {
+				is_simple = false
+			}
+			if eg.get_negative_const(upper_node or { ast.Expression(ast.NoneExpr{}) }) != none {
+				is_simple = false
+			}
 
 			if !is_simple {
 				helper := if val_type == 'string' { 'py_str_slice' } else { 'py_list_slice' }
@@ -94,8 +105,9 @@ pub fn (mut eg ExprGen) visit_subscript(node ast.Subscript) string {
 		return '${value}[${value}.len - ${neg}]'
 	}
 
-	eprintln("DEBUG: subscript val_type=${val_type} value=${value}")
-	if val_type == 'Any' || (val_type.starts_with('?') && !val_type.contains('[]') && !val_type.contains('map[')) {
+	eprintln('DEBUG: subscript val_type=${val_type} value=${value}')
+	if val_type == 'Any' || (val_type.starts_with('?') && !val_type.contains('[]')
+		&& !val_type.contains('map[')) {
 		eg.state.used_builtins['py_subscript'] = true
 		res := 'py_subscript(${value}, ${index})'
 		if eg.target_type != 'Any' && eg.target_type != '' && !eg.target_type.starts_with('?') {
@@ -103,7 +115,7 @@ pub fn (mut eg ExprGen) visit_subscript(node ast.Subscript) string {
 		}
 		return res
 	}
-	
+
 	// Fallback to native V subscript
 	return '${value}[${index}]'
 }

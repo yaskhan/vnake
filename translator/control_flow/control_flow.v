@@ -27,10 +27,10 @@ pub mut:
 
 pub struct ControlFlowModule {
 pub mut:
-	env                ControlFlowVisitEnv
-	loop_flag_stack    []string
-	loop_depth_stack    []int
-	in_finally          bool
+	env              ControlFlowVisitEnv
+	loop_flag_stack  []string
+	loop_depth_stack []int
+	in_finally       bool
 }
 
 fn noop_visit_stmt(_ ast.Statement) {}
@@ -41,8 +41,7 @@ fn noop_visit_expr(_ ast.Expression) string {
 
 fn noop_emit(_ string) {}
 
-pub fn new_control_flow_visit_env(
-	state &base.TranslatorState,
+pub fn new_control_flow_visit_env(state &base.TranslatorState,
 	analyzer_ref &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 	visit_expr_fn fn (ast.Expression) string,
@@ -51,8 +50,7 @@ pub fn new_control_flow_visit_env(
 	declare_local_fn fn (string),
 	is_declared_local_fn fn (string) bool,
 	guess_type_fn fn (ast.Expression) string,
-	map_annotation_fn fn (ast.Expression) string,
-) ControlFlowVisitEnv {
+	map_annotation_fn fn (ast.Expression) string) ControlFlowVisitEnv {
 	return ControlFlowVisitEnv{
 		state:                state
 		analyzer:             analyzer_ref
@@ -71,7 +69,7 @@ pub fn new_control_flow_module() ControlFlowModule {
 	mut s := base.new_translator_state()
 	mut a := analyzer.new_analyzer(map[string]string{})
 	return ControlFlowModule{
-		env: ControlFlowVisitEnv{
+		env:              ControlFlowVisitEnv{
 			state:                s
 			analyzer:             a
 			visit_stmt_fn:        noop_visit_stmt
@@ -83,9 +81,9 @@ pub fn new_control_flow_module() ControlFlowModule {
 			guess_type_fn:        none
 			map_annotation_fn:    none
 		}
-		loop_flag_stack: []string{}
+		loop_flag_stack:  []string{}
 		loop_depth_stack: []int{}
-		in_finally:      false
+		in_finally:       false
 	}
 }
 
@@ -154,7 +152,6 @@ pub fn (m &ControlFlowModule) sanitize_name(name string, is_type bool) string {
 	return base.sanitize_name(name, is_type, map[string]bool{}, '', map[string]bool{})
 }
 
-
 pub fn (m &ControlFlowModule) map_python_type(type_str string, is_return bool) string {
 	opts := base.TypeMapOptions{
 		struct_name:        m.env.state.current_class
@@ -164,15 +161,20 @@ pub fn (m &ControlFlowModule) map_python_type(type_str string, is_return bool) s
 		generic_map:        m.env.state.current_class_generic_map
 	}
 	mut ctx := base.TypeUtilsContext{
-		imported_symbols: m.env.state.imported_symbols
-		scc_files:        m.env.state.scc_files
-		used_builtins:    m.env.state.used_builtins
-		warnings:         m.env.state.warnings
+		imported_symbols:    m.env.state.imported_symbols
+		scc_files:           m.env.state.scc_files
+		used_builtins:       m.env.state.used_builtins
+		warnings:            m.env.state.warnings
 		include_all_symbols: m.env.state.include_all_symbols
 		strict_exports:      m.env.state.strict_exports
 	}
-	return base.map_type(type_str, opts, mut ctx, fn (_ string, _ string) string { return '' },
-		fn (_ []string) string { return '' }, fn (_ string) string { return '' })
+	return base.map_type(type_str, opts, mut ctx, fn (_ string, _ string) string {
+		return ''
+	}, fn (_ []string) string {
+		return ''
+	}, fn (_ string) string {
+		return ''
+	})
 }
 
 pub fn (m &ControlFlowModule) register_sum_type(types_str string) string {
@@ -184,10 +186,10 @@ pub fn (m &ControlFlowModule) register_sum_type(types_str string) string {
 		generic_map:        m.env.state.current_class_generic_map
 	}
 	mut ctx := base.TypeUtilsContext{
-		imported_symbols: m.env.state.imported_symbols
-		scc_files:        m.env.state.scc_files
-		used_builtins:    m.env.state.used_builtins
-		warnings:         m.env.state.warnings
+		imported_symbols:    m.env.state.imported_symbols
+		scc_files:           m.env.state.scc_files
+		used_builtins:       m.env.state.used_builtins
+		warnings:            m.env.state.warnings
 		include_all_symbols: m.env.state.include_all_symbols
 		strict_exports:      m.env.state.strict_exports
 	}
@@ -198,7 +200,11 @@ pub fn (m &ControlFlowModule) register_sum_type(types_str string) string {
 			return name
 		}
 		return ''
-	}, fn (_ []string) string { return '' }, fn (_ string) string { return '' })
+	}, fn (_ []string) string {
+		return ''
+	}, fn (_ string) string {
+		return ''
+	})
 }
 
 pub fn (m &ControlFlowModule) collect_assigned_vars(nodes []ast.Statement) []AssignedVar {

@@ -4,36 +4,36 @@ import ast
 
 pub struct PydanticFieldInfo {
 pub mut:
-	name           string
-	type_str       string
-	default_val    string
-	alias          string
-	gt             string
-	lt             string
-	ge             string
-	le             string
-	max_length     string
-	min_length     string
-	is_optional    bool
-	pattern        string
-	multiple_of    string
-	min_items      string
-	max_items      string
-	unique_items   bool
-	const_value    string
-	description    string
-	title          string
-	examples       string
-	repr           bool
-	exclude        bool
+	name         string
+	type_str     string
+	default_val  string
+	alias        string
+	gt           string
+	lt           string
+	ge           string
+	le           string
+	max_length   string
+	min_length   string
+	is_optional  bool
+	pattern      string
+	multiple_of  string
+	min_items    string
+	max_items    string
+	unique_items bool
+	const_value  string
+	description  string
+	title        string
+	examples     string
+	repr         bool
+	exclude      bool
 }
 
 pub struct PydanticValidatorInfo {
 pub:
-	name             string
-	fields           []string
-	node             ast.FunctionDef
-	mode             string
+	name               string
+	fields             []string
+	node               ast.FunctionDef
+	mode               string
 	is_model_validator bool
 }
 

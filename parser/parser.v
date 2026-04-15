@@ -1,7 +1,6 @@
 module parser
 
 import os
-
 import ast as pyast
 import utils
 

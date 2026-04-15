@@ -736,8 +736,8 @@ pub fn (mut sa SemanticAnalyzer) visit_star_expr(mut o StarExpr) !AnyNode {
 
 pub fn (mut sa SemanticAnalyzer) visit_yield_from_expr(mut o YieldFromExpr) !AnyNode {
 	if sa.is_async_context() {
-		sa.msg.fail("'yield from' inside async function", o.get_context(), false,
-			false, none)
+		sa.msg.fail("'yield from' inside async function", o.get_context(), false, false,
+			none)
 	}
 	o.expr.accept(mut sa)!
 	return ''
@@ -829,8 +829,8 @@ pub fn (mut sa SemanticAnalyzer) visit_dictionary_comprehension(mut o Dictionary
 	for i in 0 .. o.indices.len {
 		if o.is_async[i] {
 			if !sa.is_async_context() {
-				sa.msg.fail("asynchronous comprehension outside of an asynchronous function", o.get_context(), false,
-					false, none)
+				sa.msg.fail('asynchronous comprehension outside of an asynchronous function',
+					o.get_context(), false, false, none)
 			}
 		}
 		if mut lval := o.indices[i].as_lvalue() {
@@ -849,8 +849,8 @@ pub fn (mut sa SemanticAnalyzer) visit_generator_expr(mut o GeneratorExpr) !AnyN
 	for i in 0 .. o.indices.len {
 		if o.is_async[i] {
 			if !sa.is_async_context() {
-				sa.msg.fail("asynchronous comprehension outside of an asynchronous function", o.get_context(), false,
-					false, none)
+				sa.msg.fail('asynchronous comprehension outside of an asynchronous function',
+					o.get_context(), false, false, none)
 			}
 		}
 		if mut lval := o.indices[i].as_lvalue() {
@@ -952,8 +952,7 @@ pub fn (mut sa SemanticAnalyzer) visit_temp_node(mut o TempNode) !AnyNode {
 
 pub fn (mut sa SemanticAnalyzer) visit_await_expr(mut o AwaitExpr) !AnyNode {
 	if !sa.is_async_context() {
-		sa.msg.fail("'await' outside function", o.get_context(), false,
-			false, none)
+		sa.msg.fail("'await' outside function", o.get_context(), false, false, none)
 	}
 	o.expr.accept(mut sa)!
 	return ''
@@ -1461,6 +1460,7 @@ fn (mut sa SemanticAnalyzer) process_type_annotation(mut s AssignmentStmt) bool 
 		}
 		return false
 	}
+
 	if is_bare_assignment_wrapper(ann, 'Final') && assignment_has_explicit_value(s.rvalue) {
 		s.type_annotation = none
 		sa.infer_assignment_type_from_initializer(mut s)
@@ -1468,8 +1468,8 @@ fn (mut sa SemanticAnalyzer) process_type_annotation(mut s AssignmentStmt) bool 
 	}
 	allow_tuple_literal := s.lvalues.len > 0 && s.lvalues.last() is TupleExpr
 	normalized := unwrap_assignment_annotation(ann)
-	analyzed := sa.anal_type(normalized, none, allow_tuple_literal, false, false, true, true,
-		none, none) or {
+	analyzed := sa.anal_type(normalized, none, allow_tuple_literal, false, false, true,
+		true, none, none) or {
 		sa.defer(s.get_context(), false)
 		return true
 	}

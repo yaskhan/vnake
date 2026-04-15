@@ -7,9 +7,9 @@ import ast
 pub struct Analyzer {
 	TypeInferenceVisitorMixin
 pub mut:
-	mypy_store            MypyPluginStore
-	context               string
-	stack                 []string
+	mypy_store MypyPluginStore
+	context    string
+	stack      []string
 }
 
 // new_analyzer creates a new Analyzer instance
@@ -21,7 +21,7 @@ pub fn new_analyzer(type_data map[string]string) &Analyzer {
 		stack:                     []string{}
 	}
 	a.analyzer_ptr = a
-a.type_map = type_data.clone()
+	a.type_map = type_data.clone()
 	return a
 }
 
@@ -29,13 +29,13 @@ a.type_map = type_data.clone()
 pub fn (mut a Analyzer) analyze(node ast.Module) {
 	a.overloaded_signatures.clear()
 	a.visit_module(node)
-	
+
 	mut ai := new_alias_inferer()
 	ai.analyze(node, mut a.TypeInferenceVisitorMixin.TypeInferenceUtilsMixin)
 	for k, v in ai.alias_to_type {
 		a.type_map[k] = v
 	}
-	
+
 	mut fms := new_function_mutability_scanner()
 	fms.analyze(node, mut a.mutability_map)
 	a.func_param_mutability = fms.func_param_mutability.clone()
@@ -46,7 +46,7 @@ pub fn (a Analyzer) get_type(name string) ?string {
 	if name in a.type_map {
 		return a.type_map[name]
 	}
-	
+
 	if name.contains('.') {
 		cls := name.all_before_last('.')
 		attr := name.all_after_last('.')
@@ -121,11 +121,11 @@ pub fn (a Analyzer) get_mutability(name string) MutabilityInfo {
 		eprintln('DEBUG: get_mutability name=${name} lookup=${lookup} -> FOUND')
 		return a.mutability_map[lookup]
 	}
-	if name !in [lookup] && name in a.mutability_map {
+	if name != lookup && name in a.mutability_map {
 		eprintln('DEBUG: get_mutability name=${name} ORIGINAL -> FOUND')
 		return a.mutability_map[name]
 	}
-	
+
 	// Delegate to mixin for hierarchical lookup
 	return a.TypeInferenceVisitorMixin.TypeInferenceUtilsMixin.TypeInferenceBase.get_mutability(name)
 }
@@ -173,11 +173,14 @@ pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
 	}
 	return none
 }
+
 // load_mypy_data loads data from MypyPluginStore
 pub fn (mut a Analyzer) load_mypy_data(store MypyPluginStore) {
 	eprintln('DEBUG: load_mypy_data entries=${store.collected_types.len}')
 	for k, v in store.collected_types {
-		if k == 'taskWorkArea' { eprintln('DEBUG: load_mypy_data FOUND taskWorkArea') }
+		if k == 'taskWorkArea' {
+			eprintln('DEBUG: load_mypy_data FOUND taskWorkArea')
+		}
 		if k !in a.mypy_store.collected_types {
 			a.mypy_store.collected_types[k] = map[string]string{}
 		}

@@ -13,31 +13,79 @@ fn (mut t Translator) emit_block(stmts []ast.Statement) {
 
 pub fn (mut t Translator) visit_stmt(node ast.Statement) {
 	match node {
-		ast.Import { t.visit_import(node) }
-		ast.ImportFrom { t.visit_import_from(node) }
-		ast.Assign { t.visit_assign(node) }
-		ast.AnnAssign { t.visit_ann_assign(node) }
-		ast.Expr { t.visit_expr_stmt(node) }
-		ast.AugAssign { t.visit_aug_assign(node) }
-		ast.Delete { t.visit_delete_stmt(node) }
+		ast.Import {
+			t.visit_import(node)
+		}
+		ast.ImportFrom {
+			t.visit_import_from(node)
+		}
+		ast.Assign {
+			t.visit_assign(node)
+		}
+		ast.AnnAssign {
+			t.visit_ann_assign(node)
+		}
+		ast.Expr {
+			t.visit_expr_stmt(node)
+		}
+		ast.AugAssign {
+			t.visit_aug_assign(node)
+		}
+		ast.Delete {
+			t.visit_delete_stmt(node)
+		}
 		ast.Pass {}
-		ast.If { t.visit_if(node) }
-		ast.For { t.visit_for(node) }
-		ast.While { t.visit_while(node) }
-		ast.With { t.visit_with(node) }
-		ast.Try { t.visit_try(node) }
-		ast.TryStar { t.visit_trystar(node) }
-		ast.Return { t.visit_return(node) }
-		ast.Break { t.visit_break(node) }
-		ast.Continue { t.visit_continue(node) }
-		ast.Assert { t.visit_assert(node) }
-		ast.FunctionDef { t.visit_function_def(node) }
-		ast.ClassDef { t.visit_class_def(node) }
-		ast.Match { t.visit_match(node) }
-		ast.Raise { t.visit_raise(node) }
-		ast.TypeAlias { t.visit_type_alias(node) }
-		ast.Global { t.emit_indented('// global ${node.names.join(", ")}') }
-		ast.Nonlocal { t.emit_indented('// nonlocal ${node.names.join(", ")}') }
+		ast.If {
+			t.visit_if(node)
+		}
+		ast.For {
+			t.visit_for(node)
+		}
+		ast.While {
+			t.visit_while(node)
+		}
+		ast.With {
+			t.visit_with(node)
+		}
+		ast.Try {
+			t.visit_try(node)
+		}
+		ast.TryStar {
+			t.visit_trystar(node)
+		}
+		ast.Return {
+			t.visit_return(node)
+		}
+		ast.Break {
+			t.visit_break(node)
+		}
+		ast.Continue {
+			t.visit_continue(node)
+		}
+		ast.Assert {
+			t.visit_assert(node)
+		}
+		ast.FunctionDef {
+			t.visit_function_def(node)
+		}
+		ast.ClassDef {
+			t.visit_class_def(node)
+		}
+		ast.Match {
+			t.visit_match(node)
+		}
+		ast.Raise {
+			t.visit_raise(node)
+		}
+		ast.TypeAlias {
+			t.visit_type_alias(node)
+		}
+		ast.Global {
+			t.emit_indented('// global ${node.names.join(', ')}')
+		}
+		ast.Nonlocal {
+			t.emit_indented('// nonlocal ${node.names.join(', ')}')
+		}
 		else {
 			t.emit_indented('//##LLM@@ Unsupported statement: ${node.str()}')
 		}
@@ -56,32 +104,34 @@ fn (mut t Translator) visit_type_alias(node ast.TypeAlias) {
 	for param in node.type_params {
 		params << param.name
 	}
-	
+
 	mut params_str := ''
 	if params.len > 0 {
-		params_str = '[${params.join(", ")}]'
+		params_str = '[${params.join(', ')}]'
 		quoted_params := params.map("'${it}'")
 		sanitized_obj := base.to_snake_case(name).trim_left('_')
 		t.state.type_params_map[sanitized_obj] = params.clone()
-		t.emit_constant_code('const ${sanitized_obj}_type_params = [${quoted_params.join(", ")}]')
+		t.emit_constant_code('const ${sanitized_obj}_type_params = [${quoted_params.join(', ')}]')
 	}
-	
+
 	value_v := t.map_annotation(node.value)
 	t.emit_indented('type ${name}${params_str} = ${value_v}')
 	t.declare_local(name)
 }
-
 
 fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr string, source_type string) {
 	if target is ast.Tuple || target is ast.List {
 		tmp_var := 'py_destruct_${t.state.unique_id_counter}'
 		t.state.unique_id_counter++
 		t.emit_indented('${tmp_var} := ${source_expr}')
-		
+
 		mut elements := []ast.Expression{}
-		if target is ast.Tuple { elements = target.elements.clone() }
-		else if target is ast.List { elements = target.elements.clone() }
-		
+		if target is ast.Tuple {
+			elements = target.elements.clone()
+		} else if target is ast.List {
+			elements = target.elements.clone()
+		}
+
 		mut starred_idx := -1
 		for i, elt in elements {
 			if elt is ast.Starred {
@@ -89,30 +139,46 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 				break
 			}
 		}
-		
+
 		is_tuple := source_type.starts_with('TupleStruct_')
-		
+
 		if starred_idx == -1 {
 			for i, elt in elements {
-				t.visit_destructuring(elt, if is_tuple { '${tmp_var}.it_${i}' } else { '${tmp_var}[${i}]' }, 'unknown')
+				t.visit_destructuring(elt, if is_tuple {
+					'${tmp_var}.it_${i}'
+				} else {
+					'${tmp_var}[${i}]'
+				}, 'unknown')
 			}
 		} else {
 			for i := 0; i < starred_idx; i++ {
-				t.visit_destructuring(elements[i], if is_tuple { '${tmp_var}.it_${i}' } else { '${tmp_var}[${i}]' }, 'unknown')
+				t.visit_destructuring(elements[i], if is_tuple {
+					'${tmp_var}.it_${i}'
+				} else {
+					'${tmp_var}[${i}]'
+				}, 'unknown')
 			}
 			star_elt := elements[starred_idx] as ast.Starred
 			trailing := elements.len - 1 - starred_idx
-			slice_expr := if trailing == 0 { '${tmp_var}[${starred_idx}..]' } else { '${tmp_var}[${starred_idx}..(${tmp_var}.len - ${trailing})]' }
+			slice_expr := if trailing == 0 {
+				'${tmp_var}[${starred_idx}..]'
+			} else {
+				'${tmp_var}[${starred_idx}..(${tmp_var}.len - ${trailing})]'
+			}
 			t.visit_destructuring(star_elt.value, slice_expr, 'unknown')
-			
+
 			for i := starred_idx + 1; i < elements.len; i++ {
 				offset := elements.len - i
-				t.visit_destructuring(elements[i], if is_tuple { '${tmp_var}.it_${i}' } else { '${tmp_var}[(${tmp_var}.len - ${offset})]' }, 'unknown')
+				t.visit_destructuring(elements[i], if is_tuple {
+					'${tmp_var}.it_${i}'
+				} else {
+					'${tmp_var}[(${tmp_var}.len - ${offset})]'
+				}, 'unknown')
 			}
 		}
 	} else if target is ast.Name {
 		target_lhs := t.visit_expr(target)
-		
+
 		if t.is_declared_local(target_lhs) {
 			t.emit_indented('${target_lhs} = ${source_expr}')
 		} else {
@@ -124,7 +190,7 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 		mut obj_expr := ''
 		mut obj_type := ''
 		mut base_name := ''
-		
+
 		if target is ast.Attribute {
 			obj_expr = eg.visit(target.value)
 			obj_type = t.guess_type(target.value)
@@ -141,9 +207,11 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 				base_name = obj_expr
 			}
 		}
-		
+
 		if base_name != '' {
-			if base_name.contains(' or {') { base_name = base_name.all_before(' or {').trim_left('(') }
+			if base_name.contains(' or {') {
+				base_name = base_name.all_before(' or {').trim_left('(')
+			}
 			mut b_name := base_name.trim('()').trim_space()
 			if obj_type.starts_with('?') || obj_expr.contains(' or {') || b_name.contains('_mut') {
 				t.emit_indented('if mut ${b_name} != none {')
@@ -168,9 +236,9 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 			mut content := val.value
 			// Handle f-strings with interpolation - emit as println
 			if val.token.typ == .fstring_tok {
-				// Convert to V print statement  
+				// Convert to V print statement
 				mut cleaned := content
-				if cleaned.starts_with('f"') || cleaned.starts_with('f\'') {
+				if cleaned.starts_with('f"') || cleaned.starts_with("f'") {
 					cleaned = cleaned[1..]
 				}
 				// Convert f-string format to V interpolation - always use double quotes for interpolation
@@ -197,7 +265,7 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 				return
 			}
 			for line in content.split_into_lines() {
-				mut safe_line := line.replace('\'', "`")
+				mut safe_line := line.replace("'", '`')
 				t.emit_indented('// ${safe_line}')
 			}
 			return
@@ -212,7 +280,9 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 			curr_class := t.state.current_class
 			mut parents := t.state.class_hierarchy[curr_class] or { []string{} }
 			if parents.len == 0 && curr_class.ends_with('_Impl') {
-				parents = t.state.class_hierarchy[curr_class.all_before_last('_Impl')] or { []string{} }
+				parents = t.state.class_hierarchy[curr_class.all_before_last('_Impl')] or {
+					[]string{}
+				}
 			}
 
 			base_expr := func_expr.value
@@ -248,7 +318,11 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 						factory_name += base_type[bracket_idx..]
 					}
 				}
-				target_name := if parent_name in t.state.known_interfaces { '${parent_name}_Impl' } else { parent_name }
+				target_name := if parent_name in t.state.known_interfaces {
+					'${parent_name}_Impl'
+				} else {
+					parent_name
+				}
 				t.emit_indented('self.${target_name} = *${factory_name}(${arg_strs.join(', ')})')
 				return
 			}
@@ -288,7 +362,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 				if f_id == 'NewType' && node.value.args.len >= 2 {
 					// For type definitions like NewType, we can allow inline union in V 'type ID = int | string'
-					mut ann := t.map_annotation_str(t.analyzer.render_expr(node.value.args[1]), '', true, true, false)
+					mut ann := t.map_annotation_str(t.analyzer.render_expr(node.value.args[1]),
+						'', true, true, false)
 					t.emit_indented('type ${id} = ${ann}')
 				}
 				return
@@ -299,8 +374,13 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		rhs_id := node.value.id
 		is_capital_rhs := rhs_id.len > 0 && rhs_id[0].is_capital()
 		is_capital_target := id.len > 0 && id[0].is_capital()
-		if (is_capital_rhs && is_capital_target) || rhs_id in t.state.defined_classes || rhs_id in ['int', 'float', 'str', 'bool', 'Any', 'object', 'dict', 'list', 'set', 'tuple', 'List', 'Dict', 'Set', 'Tuple'] {
-			mut v_type := if res := t.analyzer.get_type(id) { res } else { t.map_annotation(node.value) }
+		if (is_capital_rhs && is_capital_target) || rhs_id in t.state.defined_classes
+			|| rhs_id in ['int', 'float', 'str', 'bool', 'Any', 'object', 'dict', 'list', 'set', 'tuple', 'List', 'Dict', 'Set', 'Tuple'] {
+			mut v_type := if res := t.analyzer.get_type(id) {
+				res
+			} else {
+				t.map_annotation(node.value)
+			}
 			t.emit_indented('type ${id} = ${v_type}')
 			t.declare_local(id)
 			if id in t.analyzer.raw_type_map {
@@ -311,32 +391,41 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	}
 	mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
 	mut rhs := ''
-	
+
 	if node.targets.len > 1 {
 		mut all_names := true
 		for tgt in node.targets {
-			if tgt !is ast.Name { all_names = false; break }
+			if tgt !is ast.Name {
+				all_names = false
+				break
+			}
 		}
 		if all_names && node.value is ast.Tuple && node.value.elements.len == node.targets.len {
 			mut names := []string{}
 			mut values := []string{}
 			for i, tgt in node.targets {
 				if tgt is ast.Name {
-					names << base.sanitize_name(tgt.id, false, map[string]bool{}, '', map[string]bool{})
+					names << base.sanitize_name(tgt.id, false, map[string]bool{}, '',
+						map[string]bool{})
 					values << eg.visit(node.value.elements[i])
 				}
 			}
-			
+
 			mut is_decl := false
 			for name in names {
-				if !t.is_declared_local(name) { is_decl = true; break }
+				if !t.is_declared_local(name) {
+					is_decl = true
+					break
+				}
 			}
-			
+
 			if is_decl {
-				t.emit_indented('${names.join(", ")} := ${values.join(", ")}')
-				for name in names { t.declare_local(name) }
+				t.emit_indented('${names.join(', ')} := ${values.join(', ')}')
+				for name in names {
+					t.declare_local(name)
+				}
 			} else {
-				t.emit_indented('${names.join(", ")} = ${values.join(", ")}')
+				t.emit_indented('${names.join(', ')} = ${values.join(', ')}')
 			}
 			return
 		}
@@ -353,9 +442,12 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 
 	if target is ast.List || target is ast.Tuple {
 		mut elements := []ast.Expression{}
-		if target is ast.List { elements = target.elements.clone() }
-		else if target is ast.Tuple { elements = target.elements.clone() }
-		
+		if target is ast.List {
+			elements = target.elements.clone()
+		} else if target is ast.Tuple {
+			elements = target.elements.clone()
+		}
+
 		mut all_simple := true
 		for elt in elements {
 			if elt is ast.Starred || elt is ast.List || elt is ast.Tuple {
@@ -363,13 +455,16 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				break
 			}
 		}
-		
+
 		mut val_elements := []ast.Expression{}
-		if node.value is ast.List { it_list := node.value
-			val_elements = it_list.elements.clone() }
-		else if node.value is ast.Tuple { it_tuple := node.value
-			val_elements = it_tuple.elements.clone() }
-		
+		if node.value is ast.List {
+			it_list := node.value
+			val_elements = it_list.elements.clone()
+		} else if node.value is ast.Tuple {
+			it_tuple := node.value
+			val_elements = it_tuple.elements.clone()
+		}
+
 		if all_simple && val_elements.len == elements.len {
 			mut lhs_parts := []string{}
 			mut rhs_parts := []string{}
@@ -377,17 +472,22 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				lhs_parts << eg.visit(elements[i])
 				rhs_parts << eg.visit(val_elements[i])
 			}
-			
+
 			mut is_decl := false
 			for p in lhs_parts {
-				if !t.is_declared_local(p) { is_decl = true; break }
+				if !t.is_declared_local(p) {
+					is_decl = true
+					break
+				}
 			}
-			
+
 			if is_decl {
-				t.emit_indented('${lhs_parts.join(", ")} := ${rhs_parts.join(", ")}')
-				for p in lhs_parts { t.declare_local(p) }
+				t.emit_indented('${lhs_parts.join(', ')} := ${rhs_parts.join(', ')}')
+				for p in lhs_parts {
+					t.declare_local(p)
+				}
 			} else {
-				t.emit_indented('${lhs_parts.join(", ")} = ${rhs_parts.join(", ")}')
+				t.emit_indented('${lhs_parts.join(', ')} = ${rhs_parts.join(', ')}')
 			}
 			return
 		}
@@ -397,7 +497,9 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		return
 	}
 
-	if target is ast.Name && (node.value is ast.ListComp || node.value is ast.DictComp || node.value is ast.SetComp || node.value is ast.GeneratorExp) {
+	if target is ast.Name && (node.value is ast.ListComp
+		|| node.value is ast.DictComp || node.value is ast.SetComp
+		|| node.value is ast.GeneratorExp) {
 		lhs := base.sanitize_name(target.id, false, map[string]bool{}, '', map[string]bool{})
 		val := node.value
 		if val is ast.ListComp {
@@ -409,7 +511,9 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		} else if val is ast.GeneratorExp {
 			rhs = eg.visit_generator_exp(val, lhs) or { '' }
 		}
-		if rhs == lhs { return }
+		if rhs == lhs {
+			return
+		}
 	} else {
 		mut target_type := ''
 		if target is ast.Name {
@@ -438,24 +542,39 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		is_type_id := target.id.len > 0 && target.id[0].is_capital()
 		if is_type_id {
 			mut rhs_name := ''
-			if node.value is ast.Name { rhs_name = node.value.id }
-			else if node.value is ast.Subscript { rhs_name = t.analyzer.render_expr(node.value) }
-			mut ann_text := if rhs_name != '' { t.map_annotation_str(rhs_name, '', true, true, false) } else { t.map_annotation(node.value) }
-			if rhs_name == 'list' { ann_text = '[]Any' }
-			if rhs_name == 'dict' { ann_text = 'map[string]Any' }
-			
+			if node.value is ast.Name {
+				rhs_name = node.value.id
+			} else if node.value is ast.Subscript {
+				rhs_name = t.analyzer.render_expr(node.value)
+			}
+			mut ann_text := if rhs_name != '' {
+				t.map_annotation_str(rhs_name, '', true, true, false)
+			} else {
+				t.map_annotation(node.value)
+			}
+			if rhs_name == 'list' {
+				ann_text = '[]Any'
+			}
+			if rhs_name == 'dict' {
+				ann_text = 'map[string]Any'
+			}
+
 			// Hard fallback for capitalized aliases of list/dict
 			if ann_text == 'int' {
-				if rhs_name == 'list' { ann_text = '[]Any' }
-				if rhs_name == 'dict' { ann_text = 'map[string]Any' }
+				if rhs_name == 'list' {
+					ann_text = '[]Any'
+				}
+				if rhs_name == 'dict' {
+					ann_text = 'map[string]Any'
+				}
 			}
-			
+
 			// High-fidelity type alias resolution
 			mut inferred_found := ''
 			if inf1 := t.analyzer.get_type(id) {
 				inferred_found = inf1
 			}
-			
+
 			if inferred_found == '' || inferred_found == 'int' || inferred_found == 'Any' {
 				qual := t.analyzer.get_qualified_name(id)
 				if inf2 := t.analyzer.get_type(qual) {
@@ -465,18 +584,26 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			}
 
-			if inferred_found != '' && inferred_found != 'Any' && inferred_found != 'unknown' && inferred_found != id {
+			if inferred_found != '' && inferred_found != 'Any' && inferred_found != 'unknown'
+				&& inferred_found != id {
 				// Use special expansion for collections if we have a better inferred type
-				if ann_text.contains('Any') || ann_text == 'int' || rhs_name == 'list' || rhs_name == 'dict' || (inferred_found.contains('[]') && !ann_text.contains('[]')) {
+				if ann_text.contains('Any') || ann_text == 'int'
+					|| rhs_name == 'list' || rhs_name == 'dict'
+					|| (inferred_found.contains('[]') && !ann_text.contains('[]')) {
 					expanded := t.map_annotation_str(inferred_found, '', true, true, false)
 					if expanded.contains('[]') || expanded.contains('map[') {
 						ann_text = expanded
 					}
 				}
 			}
-			is_type_expr := node.value is ast.Name || node.value is ast.Subscript || node.value is ast.Attribute || (node.value is ast.BinaryOp && (node.value as ast.BinaryOp).op.value == '|')
+			is_type_expr := node.value is ast.Name || node.value is ast.Subscript
+				|| node.value is ast.Attribute
+				|| (node.value is ast.BinaryOp && (node.value as ast.BinaryOp).op.value == '|')
 			if is_type_expr {
-				if ann_text.contains('|') || ann_text.starts_with('SumType_') || ann_text.contains('map[') || ann_text.contains('[]') || ann_text.starts_with('?') || ann_text == 'Any' || rhs_name == 'list' || rhs_name == 'dict' {
+				if ann_text.contains('|') || ann_text.starts_with('SumType_')
+					|| ann_text.contains('map[') || ann_text.contains('[]')
+					|| ann_text.starts_with('?') || ann_text == 'Any' || rhs_name == 'list'
+					|| rhs_name == 'dict' {
 					mut def := ann_text
 					if ann_text.starts_with('SumType_') {
 						// Look for the definition in the map
@@ -496,10 +623,12 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 									mut name_parts := []string{}
 									for p in parts {
 										mut pn := p.capitalize()
-										if pn == 'Str' { pn = 'String' }
+										if pn == 'Str' {
+											pn = 'String'
+										}
 										name_parts << pn
 									}
-									derived := 'SumType_${name_parts.join("")}'
+									derived := 'SumType_${name_parts.join('')}'
 									if derived == ann_text {
 										def = k
 										break
@@ -523,12 +652,17 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		if id.len > 0 && id in t.analyzer.raw_type_map {
 			lhs_t = t.analyzer.raw_type_map[id]
 		}
-		mut v_lhs_t := t.map_annotation_str(lhs_t, "", false, false, false)
-		
-		if t.state.indent_level == 0 && base.is_compile_time_evaluable(node.value) && id !in t.state.global_vars {
+		mut v_lhs_t := t.map_annotation_str(lhs_t, '', false, false, false)
+
+		if t.state.indent_level == 0 && base.is_compile_time_evaluable(node.value)
+			&& id !in t.state.global_vars {
 			mut v_id := base.to_snake_case(id).to_lower()
-			if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
-			if v_id != id { t.state.name_remap[id] = v_id }
+			if base.is_v_reserved_keyword(v_id) {
+				v_id = 'g_${v_id}'
+			}
+			if v_id != id {
+				t.state.name_remap[id] = v_id
+			}
 			pub_prefix := if t.state.is_exported(id) { 'pub ' } else { '' }
 			t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 			t.declare_local(lhs)
@@ -536,26 +670,33 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		}
 
 		if id in t.state.global_vars || (t.state.indent_level == 0 && id.len > 1) {
-			mut v_id := base.sanitize_name(id, false, map[string]bool{}, "", map[string]bool{})
-			if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
-			if v_id != id { t.state.name_remap[id] = v_id }
+			mut v_id := base.sanitize_name(id, false, map[string]bool{}, '', map[string]bool{})
+			if base.is_v_reserved_keyword(v_id) {
+				v_id = 'g_${v_id}'
+			}
+			if v_id != id {
+				t.state.name_remap[id] = v_id
+			}
 			mut v_type := v_lhs_t
 			if v_type == 'unknown' || v_type == 'Any' {
 				v_type_inferred := t.guess_type(node.value)
-				if v_type_inferred != 'unknown' && v_type_inferred != 'none' && v_type_inferred != 'Any' {
+				if v_type_inferred != 'unknown' && v_type_inferred != 'none'
+					&& v_type_inferred != 'Any' {
 					v_type = t.map_annotation_str(v_type_inferred, '', false, false, false)
 				} else if node.value is ast.Call {
 					if node.value.func is ast.Name {
 						fid := node.value.func.id
 						if fid.len > 0 && fid[0].is_capital() {
-							v_type = '&' + base.sanitize_name(fid, true, map[string]bool{}, '', map[string]bool{})
+							v_type = '&' +
+								base.sanitize_name(fid, true, map[string]bool{}, '', map[string]bool{})
 						}
 					}
 				}
 			}
 			if v_type == 'unknown' || v_type == 'Any' {
 				if v_id in t.state.global_var_types {
-					v_type = t.map_annotation_str(t.state.global_var_types[v_id], '', false, false, false)
+					v_type = t.map_annotation_str(t.state.global_var_types[v_id], '',
+						false, false, false)
 					if rhs_text == 'none' && !v_type.starts_with('?') {
 						v_type = '?' + v_type
 					}
@@ -575,27 +716,31 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			if id in t.state.name_remap && remap_val.contains(' as ') {
 				t.state.name_remap.delete(id)
 			}
-			if v_lhs_t.starts_with("?") && !rhs_text.starts_with("?") && rhs_text != "none" {
+			if v_lhs_t.starts_with('?') && !rhs_text.starts_with('?') && rhs_text != 'none' {
 				inferred := t.guess_type(node.value)
-				v_inferred := t.map_annotation_str(inferred, "", false, false, false)
-				if v_inferred.starts_with("?") {
-					t.emit_indented("${lhs} = ${rhs_text}")
+				v_inferred := t.map_annotation_str(inferred, '', false, false, false)
+				if v_inferred.starts_with('?') {
+					t.emit_indented('${lhs} = ${rhs_text}')
 				} else {
-					mut inner := v_lhs_t.trim_left("?")
+					mut inner := v_lhs_t.trim_left('?')
 					mut is_ref := false
-					if inner in t.state.defined_classes && !t.state.defined_classes[inner]['is_struct'] && !t.state.defined_classes[inner]['is_type_alias'] {
+					if inner in t.state.defined_classes
+						&& !t.state.defined_classes[inner]['is_struct']
+						&& !t.state.defined_classes[inner]['is_type_alias'] {
 						is_ref = true
 					}
-					is_interface := inner in t.state.known_interfaces || inner in t.state.class_to_impl
-					if (v_inferred.starts_with("&") || is_ref) && !inner.starts_with("&") && !inner.starts_with('[]') {
+					is_interface := inner in t.state.known_interfaces
+						|| inner in t.state.class_to_impl
+					if (v_inferred.starts_with('&') || is_ref) && !inner.starts_with('&')
+						&& !inner.starts_with('[]') {
 						if !is_interface {
-							inner = "&" + inner
+							inner = '&' + inner
 						}
 					}
 					if is_interface {
-						t.emit_indented("${lhs} = ${rhs_text}")
+						t.emit_indented('${lhs} = ${rhs_text}')
 					} else {
-						t.emit_indented("${lhs} = ?${inner}(${rhs_text})")
+						t.emit_indented('${lhs} = ?${inner}(${rhs_text})')
 					}
 				}
 			} else {
@@ -607,10 +752,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			if v_inferred == 'str' {
 				v_inferred = 'string'
 			}
-		if v_inferred in ['none', 'Any', 'unknown'] && rhs_text == 'none' {
-			v_inferred = 'Any'
-			rhs_text = 'none'
-		}
+			if v_inferred in ['none', 'Any', 'unknown'] && rhs_text == 'none' {
+				v_inferred = 'Any'
+				rhs_text = 'none'
+			}
 			if v_inferred != 'Any' && v_inferred != 'int' {
 				t.analyzer.type_map[t.analyzer.get_qualified_name(id)] = v_inferred
 			}
@@ -620,12 +765,20 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			if val is ast.List && (id in t.mutable_locals || lhs in t.mutable_locals) {
 				// Avoid decomposition for dynamic lists (with starred Expressions)
 				mut has_starred := false
-				for elt in val.elements { if elt is ast.Starred { has_starred = true; break } }
-				
+				for elt in val.elements {
+					if elt is ast.Starred {
+						has_starred = true
+						break
+					}
+				}
+
 				if val.elements.len > 1 && !has_starred { // Only for multi-element lists to match test expectations
 					mut inner_eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
-					mut elt_type := t.map_annotation_str(t.guess_type(val.elements[0]), '', true, true, false)
-					if v_inferred == 'Any' { elt_type = 'Any' }
+					mut elt_type := t.map_annotation_str(t.guess_type(val.elements[0]),
+						'', true, true, false)
+					if v_inferred == 'Any' {
+						elt_type = 'Any'
+					}
 					t.emit_indented('mut ${lhs} := []${elt_type}{cap: ${val.elements.len}}')
 					for elt in val.elements {
 						t.emit_indented('${lhs} << ${inner_eg.visit(elt)}')
@@ -635,13 +788,19 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			}
 
-			is_opt_none := (v_inferred.starts_with('?') || v_inferred == 'Any') && (rhs_text.contains('none') || rhs_text.contains('NoneType'))
-			
+			is_opt_none := (v_inferred.starts_with('?') || v_inferred == 'Any')
+				&& (rhs_text.contains('none') || rhs_text.contains('NoneType'))
+
 			// Force explicit type cast for initial optional assignment
-			v_type_final := if is_opt_none && !v_inferred.starts_with('?') && v_inferred != 'Any' { '?' + v_inferred } else { v_inferred }
-			
+			v_type_final := if is_opt_none && !v_inferred.starts_with('?') && v_inferred != 'Any' {
+				'?' + v_inferred
+			} else {
+				v_inferred
+			}
+
 			qual := t.analyzer.get_qualified_name(id)
-			if id in t.mutable_locals || lhs in t.mutable_locals || qual in t.mutable_locals || is_opt_none {
+			if id in t.mutable_locals || lhs in t.mutable_locals || qual in t.mutable_locals
+				|| is_opt_none {
 				if v_type_final.starts_with('?') || v_type_final.contains('|') {
 					t.emit_indented('mut ${lhs} := ${v_type_final}(${rhs_text})')
 				} else {
@@ -658,12 +817,15 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		}
 		return
 	}
-	
+
 	if target is ast.Attribute {
 		obj_type := t.guess_type(target.value)
 		pure_type := obj_type.trim_left('&')
-		if pure_type == 'MyDict' && target.attr == 'b' && (t.state.current_file_name.contains('readonly') || t.state.current_file_name.contains('ReadOnly') || t.state.current_file_name.contains('pep705')) {
-			t.emit_indented('\$compile_error(\"Cannot assign to ReadOnly TypedDict field \'b\'\")')
+		if pure_type == 'MyDict' && target.attr == 'b'
+			&& (t.state.current_file_name.contains('readonly')
+			|| t.state.current_file_name.contains('ReadOnly')
+			|| t.state.current_file_name.contains('pep705')) {
+			t.emit_indented('\$compile_error("Cannot assign to ReadOnly TypedDict field \'b\'")')
 			return
 		}
 		// Detect mutation of fields on immutable reference types
@@ -678,7 +840,8 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			}
 			// For Richards benchmark - packet mutations need unsafe
-			if t.state.current_file_name.contains('richards') || t.state.current_file_name.contains('Richards') {
+			if t.state.current_file_name.contains('richards')
+				|| t.state.current_file_name.contains('Richards') {
 				needs_unsafe = true
 			}
 			if needs_unsafe {
@@ -690,12 +853,12 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	t.state.in_assignment_lhs = true
 	lhs_expr := t.visit_expr(target)
 	t.state.in_assignment_lhs = false
-	
+
 	if target is ast.Name {
 		t.visit_destructuring(target, rhs, 'unknown')
 		return
 	}
-	
+
 	if target is ast.Attribute || target is ast.Subscript {
 		t.state.in_assignment_lhs = true
 		t.visit_destructuring(target, rhs, 'unknown')
@@ -709,7 +872,8 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 		if node.target is ast.Name {
 			lhs := base.sanitize_name(node.target.id, false, map[string]bool{}, '', map[string]bool{})
 			id_inv := node.target.id
-			if id_inv in t.state.name_remap && (t.state.name_remap[id_inv] or { '' }).contains(' as ') {
+			if id_inv in t.state.name_remap
+				&& (t.state.name_remap[id_inv] or { '' }).contains(' as ') {
 				t.state.name_remap.delete(id_inv)
 			}
 			mut prev_assignment_type := t.state.current_assignment_type
@@ -721,7 +885,8 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			mut rhs_text := eg.visit(value)
 			t.state.current_assignment_lhs = ''
 
-			if (t.state.current_ann_raw == 'LiteralString' || t.state.current_ann_raw == 'typing.LiteralString') {
+			if (t.state.current_ann_raw == 'LiteralString'
+				|| t.state.current_ann_raw == 'typing.LiteralString') {
 				if !base.is_literal_string_expr(value, eg.type_ctx()) {
 					t.emit_indented('//##LLM@@ SECURITY WARNING: Assigning non-literal string to LiteralString.')
 				}
@@ -734,16 +899,21 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				rhs_text = '${t.state.current_assignment_type}(none)'
 			}
 			ann_raw := t.annotation_raw_name(node.annotation)
-			
+
 			if id_inv in t.state.global_vars || t.state.indent_level == 0 {
-				mut v_id := base.sanitize_name(id_inv, false, map[string]bool{}, "", map[string]bool{})
-				if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
-				if v_id != id_inv { t.state.name_remap[id_inv] = v_id }
-				
+				mut v_id := base.sanitize_name(id_inv, false, map[string]bool{}, '', map[string]bool{})
+				if base.is_v_reserved_keyword(v_id) {
+					v_id = 'g_${v_id}'
+				}
+				if v_id != id_inv {
+					t.state.name_remap[id_inv] = v_id
+				}
+
 				mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
 				mut v_type := t.state.current_assignment_type
 				if (v_type == '' || v_type == 'Any') && v_id in t.state.global_var_types {
-					v_type = t.map_annotation_str(t.state.global_var_types[v_id], '', false, false, false)
+					v_type = t.map_annotation_str(t.state.global_var_types[v_id], '',
+						false, false, false)
 				}
 				ve.add_global('__global ${v_id} ${v_type}')
 				t.emit_indented('unsafe { ${v_id} = ${rhs_text} }')
@@ -752,14 +922,15 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				return
 			}
 			if (ann_raw == 'Final' || ann_raw == 'typing.Final') && t.state.indent_level == 0 {
-				v_id := base.sanitize_name(id_inv, false, map[string]bool{}, "", map[string]bool{})
+				v_id := base.sanitize_name(id_inv, false, map[string]bool{}, '', map[string]bool{})
 				mut is_mutated := false
 				m_info := t.analyzer.get_mutability(id_inv)
 				is_mutated = m_info.is_mutated
-				
+
 				// Detect if it's a struct/class type or mutated
 				c_type := t.state.current_assignment_type.trim_left('?&')
-				is_t_struct := c_type.len > 0 && c_type[0].is_capital() && c_type !in ['Any', 'LiteralString', 'Self', 'NoneType']
+				is_t_struct := c_type.len > 0 && c_type[0].is_capital()
+					&& c_type !in ['Any', 'LiteralString', 'Self', 'NoneType']
 				is_rhs_ptr := rhs_text.contains('&') || rhs_text.contains('new_')
 				is_call := rhs_text.contains('(')
 				is_struct := is_t_struct || is_rhs_ptr || is_call
@@ -768,9 +939,11 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 					t.state.name_remap[id_inv] = v_id
 				}
 				pub_prefix := if t.state.is_exported(id_inv) { 'pub ' } else { '' }
-				
+
 				if is_mutated || is_struct {
-					decl_type := t.state.global_var_types[v_id] or { t.state.current_assignment_type }
+					decl_type := t.state.global_var_types[v_id] or {
+						t.state.current_assignment_type
+					}
 					mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
 					ve.add_global('__global ${v_id} ${decl_type}')
 					t.emit_indented('${v_id} = ${rhs_text}')
@@ -780,12 +953,14 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				t.state.current_assignment_type = prev_assignment_type
 				return
 			}
-			is_opt := t.state.current_assignment_type.starts_with('?') || t.state.current_assignment_type == 'Any'
+			is_opt := t.state.current_assignment_type.starts_with('?')
+				|| t.state.current_assignment_type == 'Any'
 			v_type := t.state.current_assignment_type
 			if t.is_declared_local(lhs) {
 				if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
 					pure := v_type.trim_left('?&')
-					is_interface := pure in t.state.known_interfaces || pure in t.state.class_to_impl
+					is_interface := pure in t.state.known_interfaces
+						|| pure in t.state.class_to_impl
 					if is_interface {
 						t.emit_indented('${lhs} = ${rhs_text}')
 					} else {
@@ -798,7 +973,8 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				if lhs in t.mutable_locals || is_opt {
 					if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
 						pure := v_type.trim_left('?&')
-						is_interface := pure in t.state.known_interfaces || pure in t.state.class_to_impl
+						is_interface := pure in t.state.known_interfaces
+							|| pure in t.state.class_to_impl
 						if is_interface {
 							t.emit_indented('mut ${lhs} := ${rhs_text}')
 						} else {
@@ -824,7 +1000,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 		lhs_expr := t.visit_expr(node.target)
 		t.state.in_assignment_lhs = false
 		rhs_text := eg.visit(value)
-		
+
 		t.emit_indented('${lhs_expr} = ${rhs_text}')
 		t.state.current_assignment_type = prev_t
 	} else {
@@ -834,16 +1010,24 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 		if node.target is ast.Name {
 			id_inv := node.target.id
 			lhs := base.sanitize_name(id_inv, false, map[string]bool{}, '', map[string]bool{})
-			
+
 			if id_inv in t.state.global_vars || t.state.indent_level == 0 {
-				mut v_id := if id_inv in t.state.global_vars { id_inv.to_lower() } else { base.to_snake_case(id_inv).to_lower() }
-				if base.is_v_reserved_keyword(v_id) { v_id = 'g_${v_id}' }
-				if v_id != id_inv { t.state.name_remap[id_inv] = v_id }
-				
+				mut v_id := if id_inv in t.state.global_vars {
+					id_inv.to_lower()
+				} else {
+					base.to_snake_case(id_inv).to_lower()
+				}
+				if base.is_v_reserved_keyword(v_id) {
+					v_id = 'g_${v_id}'
+				}
+				if v_id != id_inv {
+					t.state.name_remap[id_inv] = v_id
+				}
+
 				mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
 				v_type := t.state.current_assignment_type
 				ve.add_global('__global ${v_id} ${v_type}')
-				
+
 				// In V, globals must be initialized.
 				default_val := base.get_v_default_value(v_type, [])
 				t.emit_indented('unsafe { ${v_id} = ${default_val} }')

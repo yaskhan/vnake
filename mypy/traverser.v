@@ -629,54 +629,146 @@ pub fn stmt_accept(mut s Statement, mut v NodeVisitor) !AnyNode {
 
 pub fn expr_accept(mut e Expression, mut v NodeVisitor) !AnyNode {
 	return match mut e {
-		AssignmentExpr { v.visit_assignment_expr(mut e)! }
-		AwaitExpr { v.visit_await_expr(mut e)! }
-		BytesExpr { v.visit_bytes_expr(mut e)! }
-		CallExpr { v.visit_call_expr(mut e)! }
-		CastExpr { v.visit_cast_expr(mut e)! }
-		ComparisonExpr { v.visit_comparison_expr(mut e)! }
-		ComplexExpr { v.visit_complex_expr(mut e)! }
-		ConditionalExpr { v.visit_conditional_expr(mut e)! }
-		DictExpr { v.visit_dict_expr(mut e)! }
-		DictionaryComprehension { v.visit_dictionary_comprehension(mut e)! }
-		EllipsisExpr { v.visit_ellipsis(mut e)! }
-		EnumCallExpr { v.visit_enum_call_expr(mut e)! }
-		FloatExpr { v.visit_float_expr(mut e)! }
-		GeneratorExpr { v.visit_generator_expr(mut e)! }
-		IndexExpr { v.visit_index_expr(mut e)! }
-		IntExpr { v.visit_int_expr(mut e)! }
-		LambdaExpr { v.visit_lambda_expr(mut e)! }
-		ListComprehension { v.visit_list_comprehension(mut e)! }
-		ListExpr { v.visit_list_expr(mut e)! }
-		MemberExpr { v.visit_member_expr(mut e)! }
-		NameExpr { v.visit_name_expr(mut e)! }
-		NamedTupleExpr { v.visit_namedtuple_expr(mut e)! }
-		NewTypeExpr { v.visit_newtype_expr(mut e)! }
-		OpExpr { v.visit_op_expr(mut e)! }
-		ParamSpecExpr { v.visit_paramspec_expr(mut e)! }
-		PromoteExpr { v.visit_promote_expr(mut e)! }
-		RevealExpr { v.visit_reveal_expr(mut e)! }
-		SetComprehension { v.visit_set_comprehension(mut e)! }
-		SetExpr { v.visit_set_expr(mut e)! }
-		SliceExpr { v.visit_slice_expr(mut e)! }
-		StarExpr { v.visit_star_expr(mut e)! }
-		StrExpr { v.visit_str_expr(mut e)! }
-		SuperExpr { v.visit_super_expr(mut e)! }
-		TempNode { v.visit_temp_node(mut e)! }
-		TemplateStrExpr { v.visit_template_str_expr(mut e)! }
-		TupleExpr { v.visit_tuple_expr(mut e)! }
-		TypeAliasExpr { v.visit_type_alias_expr(mut e)! }
-		TypeApplication { v.visit_type_application(mut e)! }
-		TypeVarExpr { v.visit_type_var_expr(mut e)! }
-		TypeVarTupleExpr { v.visit_type_var_tuple_expr(mut e)! }
-		TypedDictExpr { v.visit_typeddict_expr(mut e)! }
-		UnaryExpr { v.visit_unary_expr(mut e)! }
-		AssertTypeExpr { v.visit_assert_type_expr(mut e)! }
-		FormatStringExpr {
-			v.visit_template_str_expr(mut TemplateStrExpr{base: e.base, parts: [e.value]})!
+		AssignmentExpr {
+			v.visit_assignment_expr(mut e)!
 		}
-		YieldExpr { v.visit_yield_expr(mut e)! }
-		YieldFromExpr { v.visit_yield_from_expr(mut e)! }
+		AwaitExpr {
+			v.visit_await_expr(mut e)!
+		}
+		BytesExpr {
+			v.visit_bytes_expr(mut e)!
+		}
+		CallExpr {
+			v.visit_call_expr(mut e)!
+		}
+		CastExpr {
+			v.visit_cast_expr(mut e)!
+		}
+		ComparisonExpr {
+			v.visit_comparison_expr(mut e)!
+		}
+		ComplexExpr {
+			v.visit_complex_expr(mut e)!
+		}
+		ConditionalExpr {
+			v.visit_conditional_expr(mut e)!
+		}
+		DictExpr {
+			v.visit_dict_expr(mut e)!
+		}
+		DictionaryComprehension {
+			v.visit_dictionary_comprehension(mut e)!
+		}
+		EllipsisExpr {
+			v.visit_ellipsis(mut e)!
+		}
+		EnumCallExpr {
+			v.visit_enum_call_expr(mut e)!
+		}
+		FloatExpr {
+			v.visit_float_expr(mut e)!
+		}
+		GeneratorExpr {
+			v.visit_generator_expr(mut e)!
+		}
+		IndexExpr {
+			v.visit_index_expr(mut e)!
+		}
+		IntExpr {
+			v.visit_int_expr(mut e)!
+		}
+		LambdaExpr {
+			v.visit_lambda_expr(mut e)!
+		}
+		ListComprehension {
+			v.visit_list_comprehension(mut e)!
+		}
+		ListExpr {
+			v.visit_list_expr(mut e)!
+		}
+		MemberExpr {
+			v.visit_member_expr(mut e)!
+		}
+		NameExpr {
+			v.visit_name_expr(mut e)!
+		}
+		NamedTupleExpr {
+			v.visit_namedtuple_expr(mut e)!
+		}
+		NewTypeExpr {
+			v.visit_newtype_expr(mut e)!
+		}
+		OpExpr {
+			v.visit_op_expr(mut e)!
+		}
+		ParamSpecExpr {
+			v.visit_paramspec_expr(mut e)!
+		}
+		PromoteExpr {
+			v.visit_promote_expr(mut e)!
+		}
+		RevealExpr {
+			v.visit_reveal_expr(mut e)!
+		}
+		SetComprehension {
+			v.visit_set_comprehension(mut e)!
+		}
+		SetExpr {
+			v.visit_set_expr(mut e)!
+		}
+		SliceExpr {
+			v.visit_slice_expr(mut e)!
+		}
+		StarExpr {
+			v.visit_star_expr(mut e)!
+		}
+		StrExpr {
+			v.visit_str_expr(mut e)!
+		}
+		SuperExpr {
+			v.visit_super_expr(mut e)!
+		}
+		TempNode {
+			v.visit_temp_node(mut e)!
+		}
+		TemplateStrExpr {
+			v.visit_template_str_expr(mut e)!
+		}
+		TupleExpr {
+			v.visit_tuple_expr(mut e)!
+		}
+		TypeAliasExpr {
+			v.visit_type_alias_expr(mut e)!
+		}
+		TypeApplication {
+			v.visit_type_application(mut e)!
+		}
+		TypeVarExpr {
+			v.visit_type_var_expr(mut e)!
+		}
+		TypeVarTupleExpr {
+			v.visit_type_var_tuple_expr(mut e)!
+		}
+		TypedDictExpr {
+			v.visit_typeddict_expr(mut e)!
+		}
+		UnaryExpr {
+			v.visit_unary_expr(mut e)!
+		}
+		AssertTypeExpr {
+			v.visit_assert_type_expr(mut e)!
+		}
+		FormatStringExpr {
+			v.visit_template_str_expr(mut TemplateStrExpr{ base: e.base, parts: [
+				e.value,
+			] })!
+		}
+		YieldExpr {
+			v.visit_yield_expr(mut e)!
+		}
+		YieldFromExpr {
+			v.visit_yield_from_expr(mut e)!
+		}
 	}
 }
 
@@ -692,8 +784,3 @@ pub fn pattern_accept(mut p PatternNode, mut v NodeVisitor) !AnyNode {
 		ClassPattern { v.visit_class_pattern(mut p)! }
 	}
 }
-
-
-
-
-

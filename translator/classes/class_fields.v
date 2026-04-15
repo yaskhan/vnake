@@ -351,7 +351,8 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			}
 			if val := value_expr {
 				if val is ast.Constant && val.value == 'None' {
-					if f_type.len > 0 && !f_type.starts_with('?') && f_type != 'Any' && f_type != 'none' && f_type != 'NoneType' {
+					if f_type.len > 0 && !f_type.starts_with('?') && f_type != 'Any'
+						&& f_type != 'none' && f_type != 'NoneType' {
 						f_type = '?${f_type}'
 					}
 				}

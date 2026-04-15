@@ -87,7 +87,6 @@ const bool_ops = ['and', 'or']
 const cmp_ops = ['==', '!=', '<', '<=', '>', '>=', 'is', 'is not', 'in', 'not in']
 const unary_ops = ['~', 'not', '+', '-']
 
-
 // Type tags
 const types_unbound_type = u8(200)
 const types_any_type = u8(201)
@@ -130,9 +129,9 @@ pub mut:
 }
 
 struct SerializedParameter {
-	param     Parameter
-	kind      int
-	pos_only  bool
+	param    Parameter
+	kind     int
+	pos_only bool
 }
 
 struct SerializedCallArg {
@@ -549,6 +548,7 @@ pub fn (mut s Serializer) write_statement(node Statement) {
 		}
 	}
 }
+
 pub fn (mut s Serializer) write_comprehension(gen Comprehension) {
 	s.write_tag(nodes_comprehension)
 	s.write_expression(gen.target)

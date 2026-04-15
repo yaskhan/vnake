@@ -319,7 +319,7 @@ pub fn compute_search_paths(sources []MypyBuildSource, options Options, data_dir
 	mypypath << options.mypy_path
 
 	// Python environment paths
-	python_exe := options.python_executable or { "python3" }
+	python_exe := options.python_executable or { 'python3' }
 	sys_path, site_pkgs := getsearch_dirs(python_exe)
 
 	// Add sys.path to python_path if alt_lib_path is none

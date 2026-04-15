@@ -30,7 +30,7 @@ pub fn analyze_type_alias(typ MypyTypeNode, api SemanticAnalyzerCoreInterface, t
 // TypeAnalyser — semantic analyzer for types
 // Converts unbound types to bound types
 pub struct TypeAnalyser {
-	cur_mod_node                       &MypyFile
+	cur_mod_node &MypyFile
 pub mut:
 	api                                SemanticAnalyzerCoreInterface
 	fail_func                          fn (string, Context, &ErrorCode) = unsafe { nil }
@@ -76,7 +76,7 @@ pub fn (mut ta TypeAnalyser) visit_unbound_type(t &UnboundType) !MypyTypeNode {
 
 // visit_unbound_type_nonoptional processes an unbound type (non-optional)
 pub fn (mut ta TypeAnalyser) visit_unbound_type_nonoptional(t &UnboundType, defining_literal bool) !MypyTypeNode {
-	sym := ta.lookup_qualified(t.name, Context{line: t.line, column: t.column})
+	sym := ta.lookup_qualified(t.name, Context{ line: t.line, column: t.column })
 
 	if sym != none {
 		node_ref := sym.node or { return MypyTypeNode(*t) }
@@ -89,7 +89,7 @@ pub fn (mut ta TypeAnalyser) visit_unbound_type_nonoptional(t &UnboundType, defi
 						type_of_any: .from_error
 					})
 				} else if ta.allow_placeholder {
-					ta.api.defer(Context{line: t.line, column: t.column}, false)
+					ta.api.defer(Context{ line: t.line, column: t.column }, false)
 				} else {
 					ta.api.record_incomplete_ref()
 				}
@@ -167,7 +167,10 @@ pub fn (mut ta TypeAnalyser) visit_unbound_type_nonoptional(t &UnboundType, defi
 		}
 
 		if node_ref is TypeInfo {
-			return ta.analyze_type_with_type_info(&node_ref, t.args, Context{line: t.line, column: t.column})
+			return ta.analyze_type_with_type_info(&node_ref, t.args, Context{
+				line:   t.line
+				column: t.column
+			})
 		}
 
 		return ta.analyze_unbound_type_without_type_info(t, sym, defining_literal)
@@ -191,7 +194,10 @@ pub fn (mut ta TypeAnalyser) try_analyze_special_unbound_type(t &UnboundType, fu
 		return make_union(items)
 	} else if fullname == 'typing.Optional' {
 		if t.args.len != 1 {
-			ta.fail('Optional[...] must have exactly one type argument', Context{line: t.line, column: t.column})
+			ta.fail('Optional[...] must have exactly one type argument', Context{
+				line:   t.line
+				column: t.column
+			})
 			return MypyTypeNode(AnyType{
 				type_of_any: .from_error
 			})
@@ -236,7 +242,7 @@ pub fn (mut ta TypeAnalyser) analyze_type_with_type_info(info &TypeInfo, args []
 
 // analyze_unbound_type_without_type_info processes an unbound type without TypeInfo
 pub fn (mut ta TypeAnalyser) analyze_unbound_type_without_type_info(t &UnboundType, sym &SymbolTableNode, defining_literal bool) !MypyTypeNode {
-	ta.fail('Cannot interpret reference as a type', Context{line: t.line, column: t.column})
+	ta.fail('Cannot interpret reference as a type', Context{ line: t.line, column: t.column })
 	return MypyTypeNode(*t)
 }
 
@@ -367,7 +373,10 @@ fn (mut ta TypeAnalyser) lookup_qualified(name string, ctx Context) ?&SymbolTabl
 
 // cannot_resolve_type reports inability to resolve a type
 fn (mut ta TypeAnalyser) cannot_resolve_type(t &UnboundType) {
-	ta.fail('Cannot resolve name "${t.name}" (possible cyclic definition)', Context{line: t.line, column: t.column})
+	ta.fail('Cannot resolve name "${t.name}" (possible cyclic definition)', Context{
+		line:   t.line
+		column: t.column
+	})
 }
 
 // fail reports an error
@@ -461,4 +470,3 @@ pub fn (mut ta TypeAnalyser) visit_raw_expression_type(t &RawExpressionType) !My
 pub fn (mut ta TypeAnalyser) visit_type_list(t &TypeList) !MypyTypeNode {
 	return MypyTypeNode(*t)
 }
-

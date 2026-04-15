@@ -429,7 +429,6 @@ pub fn (mut v StatisticsVisitor) type_node(t ?MypyTypeNode) {
 		return
 	}
 
-
 	match node_t {
 		AnyType {
 			if is_special_form_any(node_t) {
@@ -584,4 +583,3 @@ pub fn is_complex(t MypyTypeNode) bool {
 pub fn is_special_form_any(t AnyType) bool {
 	return t.type_of_any == TypeOfAny.special_form
 }
-

@@ -5,8 +5,7 @@ import analyzer
 import base
 
 // visit_lambda generates a V closure for Python lambda expressions.
-pub fn visit_lambda(
-	node &ast.Lambda,
+pub fn visit_lambda(node &ast.Lambda,
 	mut state base.TranslatorState,
 	analyzer_ref &analyzer.Analyzer,
 	visit_expr_fn fn (ast.Expression) string,
@@ -14,8 +13,7 @@ pub fn visit_lambda(
 	sanitize_fn fn (string, bool) string,
 	map_type_c fn (string, string, bool, bool, bool) string,
 	guess_type_fn fn (ast.Expression) string,
-	find_captured_vars_fn fn (ast.ASTNode, []map[string]bool, fn (string, bool) string) []string,
-) string {
+	find_captured_vars_fn fn (ast.ASTNode, []map[string]bool, fn (string, bool) string) []string) string {
 	mut defaults_map := map[string]ast.Expression{}
 	for param in node.args.posonlyargs {
 		if default_expr := param.default_ {
@@ -131,12 +129,10 @@ pub fn visit_lambda(
 	return 'fn ${capture_str}(${args_str}) ${body_type} { return ${body} }'
 }
 
-pub fn visit_yield(
-	node &ast.Yield,
+pub fn visit_yield(node &ast.Yield,
 	mut state base.TranslatorState,
 	visit_expr_fn fn (ast.Expression) string,
-	indent_fn fn () string,
-) string {
+	indent_fn fn () string) string {
 	state.has_yield = true
 	_ = indent_fn
 	active_channel := ''
@@ -152,13 +148,11 @@ pub fn visit_yield(
 	return '/* yield ${val} */'
 }
 
-pub fn visit_yield_from(
-	node &ast.YieldFrom,
+pub fn visit_yield_from(node &ast.YieldFrom,
 	mut state base.TranslatorState,
 	visit_expr_fn fn (ast.Expression) string,
 	indent_fn fn () string,
-	emit_fn fn (string),
-) ?string {
+	emit_fn fn (string)) ?string {
 	state.has_yield = true
 	active_channel := ''
 	active_in_channel := ''
@@ -173,50 +167,42 @@ pub fn visit_yield_from(
 	return '/* yield from ${val} */'
 }
 
-pub fn visit_await(
-	node &ast.Await,
-	visit_expr_fn fn (ast.Expression) string,
-) string {
+pub fn visit_await(node &ast.Await,
+	visit_expr_fn fn (ast.Expression) string) string {
 	return '/* await */ ${visit_expr_fn(node.value)}'
 }
 
-pub fn visit_global(
-	node &ast.Global,
+pub fn visit_global(node &ast.Global,
 	mut state base.TranslatorState,
 	indent_fn fn () string,
-	emit_fn fn (string),
-) {
+	emit_fn fn (string)) {
 	_ = state
 	emit_fn('${indent_fn()}//##LLM@@ Python global or nonlocal scope modification detected. V heavily discourages global state.')
 	emit_fn('${indent_fn()}// global ${node.names.join(', ')}')
 }
 
-pub fn visit_nonlocal(
-	node &ast.Nonlocal,
+pub fn visit_nonlocal(node &ast.Nonlocal,
 	mut state base.TranslatorState,
 	indent_fn fn () string,
-	emit_fn fn (string),
-) {
+	emit_fn fn (string)) {
 	_ = state
 	emit_fn('${indent_fn()}//##LLM@@ Python global or nonlocal scope modification detected. V heavily discourages global state.')
 	emit_fn('${indent_fn()}// nonlocal ${node.names.join(', ')}')
 }
 
-pub fn visit_return(
-	node &ast.Return,
+pub fn visit_return(node &ast.Return,
 	mut state base.TranslatorState,
 	analyzer_ref &analyzer.Analyzer,
 	visit_expr_fn fn (ast.Expression) string,
 	indent_fn fn () string,
-	emit_fn fn (string),
-) {
+	emit_fn fn (string)) {
 	_ = analyzer_ref
 	_ = state
 	active_channel := ''
 	if active_channel.len > 0 {
 		emit_fn('${indent_fn()}${active_channel}.close()')
 	}
-	for _ in 0..state.vexc_depth {
+	for _ in 0 .. state.vexc_depth {
 		emit_fn('${indent_fn()}vexc.end_try()')
 	}
 	if state.in_init && node.value == none {

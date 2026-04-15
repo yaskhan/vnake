@@ -321,7 +321,9 @@ pub fn is_compile_time_evaluable(node ast.Expression) bool {
 		return is_compile_time_evaluable(node.operand)
 	}
 	if node is ast.List {
-		if node.elements.len == 0 { return true }
+		if node.elements.len == 0 {
+			return true
+		}
 	}
 	return false
 }
@@ -377,7 +379,8 @@ pub fn (s &TranslatorState) is_v_class_type(v_type string) bool {
 	if clean in ['Any', 'LiteralString', 'Self', 'NoneType', 'TaskState'] {
 		return false
 	}
-	if clean.starts_with('SumType_') || clean.starts_with('LiteralEnum_') || clean.starts_with('TupleStruct_') {
+	if clean.starts_with('SumType_') || clean.starts_with('LiteralEnum_')
+		|| clean.starts_with('TupleStruct_') {
 		return false
 	}
 	if clean.ends_with('Protocol') {
@@ -393,7 +396,3 @@ pub fn (s &TranslatorState) is_v_class_type(v_type string) bool {
 	}
 	return true
 }
-
-
-
-

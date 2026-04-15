@@ -228,16 +228,12 @@ pub fn (mut f TypeVarLikeDefaultFixer) visit_type_var(t &TypeVarType) !MypyTypeN
 	if existing == none {
 		// f.report_unbound_tvar(t)
 		return AnyType{
-			
 			type_of_any: TypeOfAny.from_error
 		}
 	}
-	ex := existing or {
-		return AnyType{
-			
-			type_of_any: TypeOfAny.from_error
-		}
-	}
+	ex := existing or { return AnyType{
+		type_of_any: TypeOfAny.from_error
+	} }
 
 	return ex.as_node()
 }
@@ -248,16 +244,12 @@ pub fn (mut f TypeVarLikeDefaultFixer) visit_param_spec(t &ParamSpecType) !MypyT
 	if existing == none {
 		// f.report_unbound_tvar(t)
 		return AnyType{
-			
 			type_of_any: TypeOfAny.from_error
 		}
 	}
-	ex := existing or {
-		return AnyType{
-			
-			type_of_any: TypeOfAny.from_error
-		}
-	}
+	ex := existing or { return AnyType{
+		type_of_any: TypeOfAny.from_error
+	} }
 
 	return ex.as_node()
 }
@@ -268,16 +260,12 @@ pub fn (mut f TypeVarLikeDefaultFixer) visit_type_var_tuple(t &TypeVarTupleType)
 	if existing == none {
 		// f.report_unbound_tvar(t)
 		return AnyType{
-			
 			type_of_any: TypeOfAny.from_error
 		}
 	}
-	ex := existing or {
-		return AnyType{
-			
-			type_of_any: TypeOfAny.from_error
-		}
-	}
+	ex := existing or { return AnyType{
+		type_of_any: TypeOfAny.from_error
+	} }
 
 	return ex.as_node()
 }
@@ -295,25 +283,90 @@ fn (mut f TypeVarLikeDefaultFixer) report_unbound_tvar(tvar TypeVarLikeType) {
 	}
 }
 
-pub fn (mut f TypeVarLikeDefaultFixer) visit_unbound_type(t &UnboundType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_any(t &AnyType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_none_type(t &NoneType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_uninhabited_type(t &UninhabitedType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_erased_type(t &ErasedType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_deleted_type(t &DeletedType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_parameters(t &ParametersType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_instance(t &Instance) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_callable_type(t &CallableType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_overloaded(t &Overloaded) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_tuple_type(t &TupleType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_typeddict_type(t &TypedDictType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_literal_type(t &LiteralType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_union_type(t &UnionType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_partial_type(t &PartialTypeT) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_type_type(t &TypeType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_unpack_type(t &UnpackType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_type_list(t &TypeList) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_callable_argument(t &CallableArgument) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_ellipsis_type(t &EllipsisType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_raw_expression_type(t &RawExpressionType) !MypyTypeNode { return MypyTypeNode(*t) }
-pub fn (mut f TypeVarLikeDefaultFixer) visit_placeholder_type(t &PlaceholderType) !MypyTypeNode { return MypyTypeNode(*t) }
+pub fn (mut f TypeVarLikeDefaultFixer) visit_unbound_type(t &UnboundType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_any(t &AnyType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_none_type(t &NoneType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_uninhabited_type(t &UninhabitedType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_erased_type(t &ErasedType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_deleted_type(t &DeletedType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_parameters(t &ParametersType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_instance(t &Instance) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_callable_type(t &CallableType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_overloaded(t &Overloaded) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_tuple_type(t &TupleType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_typeddict_type(t &TypedDictType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_literal_type(t &LiteralType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_union_type(t &UnionType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_partial_type(t &PartialTypeT) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_type_type(t &TypeType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_unpack_type(t &UnpackType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_type_list(t &TypeList) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_callable_argument(t &CallableArgument) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_ellipsis_type(t &EllipsisType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_raw_expression_type(t &RawExpressionType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}
+
+pub fn (mut f TypeVarLikeDefaultFixer) visit_placeholder_type(t &PlaceholderType) !MypyTypeNode {
+	return MypyTypeNode(*t)
+}

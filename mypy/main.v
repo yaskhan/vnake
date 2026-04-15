@@ -21,8 +21,7 @@ pub fn main(args []string, mut stdout os.File, mut stderr os.File) {
 	options := res_opt.options
 
 	output_present := if out := options.output { out.len > 0 } else { false }
-	mut formatter := new_fancy_formatter(stdout, stderr, options.hide_error_codes,
-		output_present)
+	mut formatter := new_fancy_formatter(stdout, stderr, options.hide_error_codes, output_present)
 
 	if options.allow_redefinition_new && !options.local_partial_types {
 		fail('error: --local-partial-types must be enabled if using --allow-redefinition-new', mut
@@ -39,7 +38,8 @@ pub fn main(args []string, mut stdout os.File, mut stderr os.File) {
 		return
 	}
 
-	_, messages, blockers := run_build(sources, options, fscache, t1, mut stdout, mut stderr)
+	_, messages, blockers := run_build(sources, options, fscache, t1, mut stdout, mut
+		stderr)
 
 	mut code := 0
 	n_errors, n_notes, n_files := count_stats(messages)

@@ -28,8 +28,8 @@ pub fn (mut a TypedDictAnalyzer) analyze_typeddict_classdef(defn &ClassDef) (boo
 				possible = true
 				if node := (e as NameExpr).node {
 					if node is TypeInfo && (node as TypeInfo).is_final {
-						a.fail('Cannot inherit from final class "${(node as TypeInfo).name}"', defn.get_context(),
-							none)
+						a.fail('Cannot inherit from final class "${(node as TypeInfo).name}"',
+							defn.get_context(), none)
 					}
 				}
 			}

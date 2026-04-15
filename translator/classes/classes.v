@@ -11,7 +11,7 @@ pub mut:
 	class_fields_handler     ClassFieldsHandler
 	class_bases_handler      ClassBasesHandler
 	class_methods_handler    ClassMethodsHandler
-	special_classes_handler   SpecialClassesHandler
+	special_classes_handler  SpecialClassesHandler
 	pydantic_handler         ClassPydanticHandler
 }
 
@@ -22,27 +22,26 @@ pub fn new_classes_module() ClassesModule {
 		class_fields_handler:     ClassFieldsHandler{}
 		class_bases_handler:      ClassBasesHandler{}
 		class_methods_handler:    ClassMethodsHandler{}
-		special_classes_handler:   SpecialClassesHandler{}
+		special_classes_handler:  SpecialClassesHandler{}
 		pydantic_handler:         ClassPydanticHandler{}
 	}
 }
 
 pub struct ClassVisitEnv {
 pub mut:
-	state            &base.TranslatorState
-	analyzer         &analyzer.Analyzer
-	visit_stmt_fn    fn (ast.Statement) = unsafe { nil }
-	visit_expr_fn    fn (ast.Expression) string = unsafe { nil }
-	emit_struct_fn   fn (string) = unsafe { nil }
-	emit_function_fn fn (string) = unsafe { nil }
-	emit_constant_fn fn (string) = unsafe { nil }
+	state             &base.TranslatorState
+	analyzer          &analyzer.Analyzer
+	visit_stmt_fn     fn (ast.Statement)                           = unsafe { nil }
+	visit_expr_fn     fn (ast.Expression) string                   = unsafe { nil }
+	emit_struct_fn    fn (string)                                  = unsafe { nil }
+	emit_function_fn  fn (string)                                  = unsafe { nil }
+	emit_constant_fn  fn (string)                                  = unsafe { nil }
 	map_type_fn       fn (string, string, bool, bool, bool) string = unsafe { nil }
-	map_annotation_fn fn (ast.Expression) string = unsafe { nil }
+	map_annotation_fn fn (ast.Expression) string                   = unsafe { nil }
 	source_mapping    bool
 }
 
-pub fn new_class_visit_env(
-	state &base.TranslatorState,
+pub fn new_class_visit_env(state &base.TranslatorState,
 	analyzer_ref &analyzer.Analyzer,
 	visit_stmt_fn fn (ast.Statement),
 	visit_expr_fn fn (ast.Expression) string,
@@ -51,19 +50,18 @@ pub fn new_class_visit_env(
 	emit_constant_fn fn (string),
 	map_type_fn fn (string, string, bool, bool, bool) string,
 	map_annotation_fn fn (ast.Expression) string,
-	source_mapping bool,
-) ClassVisitEnv {
+	source_mapping bool) ClassVisitEnv {
 	return ClassVisitEnv{
-		state:            state
-		analyzer:         analyzer_ref
-		visit_stmt_fn:    visit_stmt_fn
-		visit_expr_fn:    visit_expr_fn
-		emit_struct_fn:   emit_struct_fn
-		emit_function_fn: emit_function_fn
-		emit_constant_fn: emit_constant_fn
-		map_type_fn:      map_type_fn
+		state:             state
+		analyzer:          analyzer_ref
+		visit_stmt_fn:     visit_stmt_fn
+		visit_expr_fn:     visit_expr_fn
+		emit_struct_fn:    emit_struct_fn
+		emit_function_fn:  emit_function_fn
+		emit_constant_fn:  emit_constant_fn
+		map_type_fn:       map_type_fn
 		map_annotation_fn: map_annotation_fn
-		source_mapping:   source_mapping
+		source_mapping:    source_mapping
 	}
 }
 

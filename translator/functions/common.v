@@ -126,14 +126,12 @@ fn scan_type_expr(expr ast.Expression, type_vars map[string]bool, mut found map[
 }
 
 // extract_implicit_generics extracts type vars used in annotations.
-pub fn extract_implicit_generics(
-	node &ast.FunctionDef,
+pub fn extract_implicit_generics(node &ast.FunctionDef,
 	type_vars map[string]bool,
 	paramspec_vars map[string]bool,
 	constrained_typevars map[string]bool,
 	current_class_generics []string,
-	sanitize_fn fn (string, bool) string,
-) []string {
+	sanitize_fn fn (string, bool) string) []string {
 	mut implicit_generics := map[string]bool{}
 
 	mut all_type_vars := type_vars.clone()
@@ -191,11 +189,9 @@ pub fn extract_implicit_generics(
 
 // find_captured_vars returns closure captures. This implementation keeps the
 // interface stable and can be expanded later without changing call sites.
-pub fn find_captured_vars(
-	node ast.ASTNode,
+pub fn find_captured_vars(node ast.ASTNode,
 	scope_stack []map[string]bool,
-	sanitize_fn fn (string, bool) string,
-) []string {
+	sanitize_fn fn (string, bool) string) []string {
 	mut captured := []string{}
 	mut local_scope := map[string]bool{}
 
@@ -233,7 +229,7 @@ pub fn find_captured_vars(
 		if kw := node.args.kwarg {
 			local_scope[kw.arg] = true
 		}
-		
+
 		scan_captured_body(node.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
 	}
 
@@ -250,51 +246,73 @@ fn scan_captured_stmt(stmt ast.Statement, mut local_scope map[string]bool, scope
 	match stmt {
 		ast.Assign {
 			scan_captured(stmt.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
-			for t in stmt.targets { add_to_scope(t, mut local_scope) }
+			for t in stmt.targets {
+				add_to_scope(t, mut local_scope)
+			}
 		}
 		ast.AnnAssign {
-			if val := stmt.value { scan_captured(val, mut local_scope, scope_stack, sanitize_fn, mut captured) }
+			if val := stmt.value {
+				scan_captured(val, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
 			add_to_scope(stmt.target, mut local_scope)
 		}
 		ast.Expr {
 			scan_captured(stmt.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
 		}
 		ast.Return {
-			if val := stmt.value { scan_captured(val, mut local_scope, scope_stack, sanitize_fn, mut captured) }
+			if val := stmt.value {
+				scan_captured(val, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			}
 		}
 		ast.If {
 			scan_captured(stmt.test, mut local_scope, scope_stack, sanitize_fn, mut captured)
-			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
-			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
+			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
 		}
 		ast.For {
 			scan_captured(stmt.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
 			mut nested_local := local_scope.clone()
 			add_to_scope(stmt.target, mut nested_local)
-			scan_captured_body(stmt.body, mut nested_local, scope_stack, sanitize_fn, mut captured)
-			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.body, mut nested_local, scope_stack, sanitize_fn, mut
+				captured)
+			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
 		}
 		ast.While {
 			scan_captured(stmt.test, mut local_scope, scope_stack, sanitize_fn, mut captured)
-			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
-			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
+			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
 		}
 		ast.With {
 			for item in stmt.items {
-				scan_captured(item.context_expr, mut local_scope, scope_stack, sanitize_fn, mut captured)
-				if vars := item.optional_vars { add_to_scope(vars, mut local_scope) }
+				scan_captured(item.context_expr, mut local_scope, scope_stack, sanitize_fn, mut
+					captured)
+				if vars := item.optional_vars {
+					add_to_scope(vars, mut local_scope)
+				}
 			}
-			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
 		}
 		ast.Try {
-			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.body, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
 			for h in stmt.handlers {
 				mut h_local := local_scope.clone()
-				if name := h.name { h_local[name] = true }
-				scan_captured_body(h.body, mut h_local, scope_stack, sanitize_fn, mut captured)
+				if name := h.name {
+					h_local[name] = true
+				}
+				scan_captured_body(h.body, mut h_local, scope_stack, sanitize_fn, mut
+					captured)
 			}
-			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
-			scan_captured_body(stmt.finalbody, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured_body(stmt.orelse, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
+			scan_captured_body(stmt.finalbody, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
 		}
 		ast.FunctionDef {
 			local_scope[stmt.name] = true
@@ -351,7 +369,8 @@ fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_sta
 			scan_captured(node.right, mut local_scope, scope_stack, sanitize_fn, mut captured)
 		}
 		ast.UnaryOp {
-			scan_captured(node.operand, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured(node.operand, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
 		}
 		ast.Call {
 			scan_captured(node.func, mut local_scope, scope_stack, sanitize_fn, mut captured)
@@ -359,7 +378,8 @@ fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_sta
 				scan_captured(arg, mut local_scope, scope_stack, sanitize_fn, mut captured)
 			}
 			for kw in node.keywords {
-				scan_captured(kw.value, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				scan_captured(kw.value, mut local_scope, scope_stack, sanitize_fn, mut
+					captured)
 			}
 		}
 		ast.Lambda {
@@ -391,7 +411,8 @@ fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_sta
 		ast.IfExp {
 			scan_captured(node.test, mut local_scope, scope_stack, sanitize_fn, mut captured)
 			scan_captured(node.body, mut local_scope, scope_stack, sanitize_fn, mut captured)
-			scan_captured(node.orelse, mut local_scope, scope_stack, sanitize_fn, mut captured)
+			scan_captured(node.orelse, mut local_scope, scope_stack, sanitize_fn, mut
+				captured)
 		}
 		ast.List {
 			for el in node.elements {
@@ -432,10 +453,12 @@ fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_sta
 		ast.ListComp {
 			mut comp_local := local_scope.clone()
 			for gen in node.generators {
-				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut
+					captured)
 				add_to_scope(gen.target, mut comp_local)
 				for cond in gen.ifs {
-					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut captured)
+					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut
+						captured)
 				}
 			}
 			scan_captured(node.elt, mut comp_local, scope_stack, sanitize_fn, mut captured)
@@ -443,10 +466,12 @@ fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_sta
 		ast.SetComp {
 			mut comp_local := local_scope.clone()
 			for gen in node.generators {
-				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut
+					captured)
 				add_to_scope(gen.target, mut comp_local)
 				for cond in gen.ifs {
-					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut captured)
+					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut
+						captured)
 				}
 			}
 			scan_captured(node.elt, mut comp_local, scope_stack, sanitize_fn, mut captured)
@@ -454,10 +479,12 @@ fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_sta
 		ast.DictComp {
 			mut comp_local := local_scope.clone()
 			for gen in node.generators {
-				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut
+					captured)
 				add_to_scope(gen.target, mut comp_local)
 				for cond in gen.ifs {
-					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut captured)
+					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut
+						captured)
 				}
 			}
 			scan_captured(node.key, mut comp_local, scope_stack, sanitize_fn, mut captured)
@@ -466,10 +493,12 @@ fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_sta
 		ast.GeneratorExp {
 			mut comp_local := local_scope.clone()
 			for gen in node.generators {
-				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				scan_captured(gen.iter, mut local_scope, scope_stack, sanitize_fn, mut
+					captured)
 				add_to_scope(gen.target, mut comp_local)
 				for cond in gen.ifs {
-					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut captured)
+					scan_captured(cond, mut comp_local, scope_stack, sanitize_fn, mut
+						captured)
 				}
 			}
 			scan_captured(node.elt, mut comp_local, scope_stack, sanitize_fn, mut captured)
@@ -477,7 +506,8 @@ fn scan_captured(node ast.Expression, mut local_scope map[string]bool, scope_sta
 		ast.Compare {
 			scan_captured(node.left, mut local_scope, scope_stack, sanitize_fn, mut captured)
 			for comparator in node.comparators {
-				scan_captured(comparator, mut local_scope, scope_stack, sanitize_fn, mut captured)
+				scan_captured(comparator, mut local_scope, scope_stack, sanitize_fn, mut
+					captured)
 			}
 		}
 		ast.Starred {
@@ -571,7 +601,9 @@ fn stmt_ends_with_return(stmt ast.Statement) bool {
 			return true
 		}
 		ast.Match {
-			if stmt.cases.len == 0 { return false }
+			if stmt.cases.len == 0 {
+				return false
+			}
 			// Find if there's a wildcard case (match anything)
 			mut has_wildcard := false
 			for case in stmt.cases {

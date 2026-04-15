@@ -11,7 +11,9 @@ pub fn expr_to_unanalyzed_type(expr Expression,
 	parent ?Expression,
 	allow_unpack bool,
 	lookup_qualified ?fn (string, Context) ?&SymbolTableNode) !MypyTypeNode {
-	mut res := MypyTypeNode(AnyType{type_of_any: .from_error})
+	mut res := MypyTypeNode(AnyType{
+		type_of_any: .from_error
+	})
 	match expr {
 		NameExpr {
 			name := expr.name
@@ -73,7 +75,8 @@ pub fn expr_to_unanalyzed_type(expr Expression,
 			}
 		}
 		OpExpr {
-			if expr.op == '|' && ((options.python_version[0] >= 3 && options.python_version[1] >= 10)
+			if expr.op == '|'
+				&& ((options.python_version[0] >= 3 && options.python_version[1] >= 10)
 				|| allow_new_syntax) {
 				left := expr_to_unanalyzed_type(expr.left, options, allow_new_syntax,
 					none, false, lookup_qualified)!
@@ -105,8 +108,8 @@ pub fn expr_to_unanalyzed_type(expr Expression,
 		ListExpr {
 			mut items := []MypyTypeNode{}
 			for t in expr.items {
-				item := expr_to_unanalyzed_type(t, options, allow_new_syntax, Expression(expr), true,
-					lookup_qualified)!
+				item := expr_to_unanalyzed_type(t, options, allow_new_syntax, Expression(expr),
+					true, lookup_qualified)!
 				items << item
 			}
 			res = MypyTypeNode(TypeList{

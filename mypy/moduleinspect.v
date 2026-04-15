@@ -99,9 +99,7 @@ pub fn (mut m ModuleInspect) close() {
 // get_package_properties returns module/package properties
 pub fn (mut m ModuleInspect) get_package_properties(package_id string) !ModuleProperties {
 	// Simplified version — without process and queue
-	prop := get_package_properties(package_id) or {
-		return error('Cannot import ${package_id}')
-	}
+	prop := get_package_properties(package_id) or { return error('Cannot import ${package_id}') }
 	m.counter++
 	return prop
 }

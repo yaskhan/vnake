@@ -29,7 +29,7 @@ fn test_parse_tstring() {
 
 	assert expr is Constant
 	c := expr as Constant
-	assert c.value == "thello"
+	assert c.value == 'thello'
 }
 
 fn test_parse_fstring() {
@@ -69,24 +69,24 @@ fn test_parse_match_or_as_pattern() {
 }
 
 fn test_parser_integration_multiline_bracketless_except_star() {
-    source := 'try:\n    pass\nexcept* ValueError,\n        TypeError as group:\n    pass\n'
-    mut l := new_lexer(source, 'test.py')
-    mut p := new_parser(l)
-    tree := p.parse_module()
+	source := 'try:\n    pass\nexcept* ValueError,\n        TypeError as group:\n    pass\n'
+	mut l := new_lexer(source, 'test.py')
+	mut p := new_parser(l)
+	tree := p.parse_module()
 
-    assert p.errors.len == 0
-    assert tree.body.len == 1
-    try_node := tree.body[0]
+	assert p.errors.len == 0
+	assert tree.body.len == 1
+	try_node := tree.body[0]
 
-    assert try_node is TryStar
-    ts := try_node as TryStar
-    assert ts.handlers.len == 1
-    handler := ts.handlers[0]
+	assert try_node is TryStar
+	ts := try_node as TryStar
+	assert ts.handlers.len == 1
+	handler := ts.handlers[0]
 
-    assert handler.typ or { panic('expected type') } is Tuple
-    tup := handler.typ or { panic('expected type') } as Tuple
-    assert tup.elements.len == 2
-    assert (tup.elements[0] as Name).id == 'ValueError'
-    assert (tup.elements[1] as Name).id == 'TypeError'
-    assert handler.name or { '' } == 'group'
+	assert handler.typ or { panic('expected type') } is Tuple
+	tup := handler.typ or { panic('expected type') } as Tuple
+	assert tup.elements.len == 2
+	assert (tup.elements[0] as Name).id == 'ValueError'
+	assert (tup.elements[1] as Name).id == 'TypeError'
+	assert handler.name or { '' } == 'group'
 }

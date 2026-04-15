@@ -16,7 +16,7 @@ fn (m &ControlFlowModule) unmangle_generic_name(name string) string {
 fn (mut m ControlFlowModule) compile_pattern(pattern ast.Pattern, subject_expr string) (string, map[string]string) {
 	mut bindings := map[string]string{}
 	// m.env.state.warnings << 'COMPILE_PATTERN START Type:' + typeof(pattern).name
-	
+
 	if pattern is ast.MatchValue {
 		return '${subject_expr} == ${m.visit_expr(pattern.value)}', bindings
 	}
@@ -263,7 +263,9 @@ pub fn (mut m ControlFlowModule) visit_match(node ast.Match) {
 	m.emit('// Match statement lowered to if blocks')
 	for case in node.cases {
 		p := case.pattern
-		if p is ast.MatchClass || p is ast.MatchAs || p is ast.MatchValue || p is ast.MatchSingleton || p is ast.MatchSequence || p is ast.MatchMapping || p is ast.MatchStar || p is ast.MatchOr {
+		if p is ast.MatchClass || p is ast.MatchAs || p is ast.MatchValue || p is ast.MatchSingleton
+			|| p is ast.MatchSequence || p is ast.MatchMapping || p is ast.MatchStar
+			|| p is ast.MatchOr {
 			continue
 		}
 		m.env.state.warnings << 'UNSUPPORTED CASE PATTERN TYPE: ' + typeof(p).name

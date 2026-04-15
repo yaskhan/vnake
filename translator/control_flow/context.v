@@ -14,7 +14,9 @@ fn (mut m ControlFlowModule) is_nullcontext_call(node ast.Expression) bool {
 			}
 		} else if node.func is ast.Attribute {
 			if node.func.value is ast.Name {
-				module_name := m.env.state.imported_modules[node.func.value.id] or { node.func.value.id }
+				module_name := m.env.state.imported_modules[node.func.value.id] or {
+					node.func.value.id
+				}
 				return module_name == 'contextlib'
 					&& node.func.attr in ['nullcontext', 'suppress', 'closing']
 			}
@@ -59,7 +61,9 @@ fn (mut m ControlFlowModule) visit_with_item(item ast.WithItem) {
 			}
 		} else if call.func is ast.Attribute {
 			if call.func.value is ast.Name {
-				module_name := m.env.state.imported_modules[call.func.value.id] or { call.func.value.id }
+				module_name := m.env.state.imported_modules[call.func.value.id] or {
+					call.func.value.id
+				}
 				if module_name == 'contextlib' {
 					if call.func.attr == 'nullcontext' {
 						is_nullcontext = true
@@ -80,7 +84,7 @@ fn (mut m ControlFlowModule) visit_with_item(item ast.WithItem) {
 
 	if is_suppress || is_ignored {
 		mut final_expr := context_expr.replace('py_contextlib_', 'contextlib.')
-		suffix := if is_ignored { " ignored" } else { "" }
+		suffix := if is_ignored { ' ignored' } else { '' }
 		m.emit('/* ${final_expr}${suffix} */')
 		return
 	}
@@ -91,7 +95,7 @@ fn (mut m ControlFlowModule) visit_with_item(item ast.WithItem) {
 			// Handle cases like 'with nullcontext(1) as x:'
 			mut val_expr := context_expr
 			if val_expr.starts_with('py_contextlib_nullcontext(') && val_expr.ends_with(')') {
-				val_expr = val_expr['py_contextlib_nullcontext('.len .. val_expr.len - 1]
+				val_expr = val_expr['py_contextlib_nullcontext('.len..val_expr.len - 1]
 			}
 			m.emit('${var_name} := ${val_expr}')
 		} else {

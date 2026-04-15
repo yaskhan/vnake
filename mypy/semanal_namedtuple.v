@@ -33,7 +33,8 @@ pub fn (mut a NamedTupleAnalyzer) analyze_namedtuple_classdef(mut defn ClassDef,
 		if base_expr is NameExpr {
 			a.api.accept(mut Node(base_expr))
 			if (base_expr as NameExpr).fullname in typed_namedtuple_names {
-				items, types, default_items, statements := a.check_namedtuple_classdef(mut defn, is_stub_file) or { return true, ?&TypeInfo(none) }
+				items, types, default_items, statements := a.check_namedtuple_classdef(mut defn,
+					is_stub_file) or { return true, ?&TypeInfo(none) }
 
 				mut name := defn.name
 				if is_func_scope && !name.contains('@') {

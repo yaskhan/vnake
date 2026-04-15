@@ -47,7 +47,8 @@ pub fn (mut m VariablesModule) visit_name(node ast.Name) string {
 				return res
 			}
 			if v_base_type.starts_with('SumType_') || v_base_type == 'Any' {
-				if v_narrowed_type != 'none' && v_narrowed_type != 'void' && v_narrowed_type != 'unknown' {
+				if v_narrowed_type != 'none' && v_narrowed_type != 'void'
+					&& v_narrowed_type != 'unknown' {
 					return '(${res} as ${v_narrowed_type})'
 				}
 			}
