@@ -36,7 +36,7 @@ pub fn (mut a Analyzer) analyze(node ast.Module) {
 		a.type_map[k] = v
 	}
 
-	mut fms := new_function_mutability_scanner()
+	mut fms := new_function_mutability_scanner(a)
 	fms.analyze(node, mut a.mutability_map)
 	a.func_param_mutability = fms.func_param_mutability.clone()
 }

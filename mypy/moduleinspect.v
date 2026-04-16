@@ -41,7 +41,7 @@ pub fn is_c_module(module_file ?string) bool {
 		// May be namespace package
 		return true
 	}
-	ext := os.file_ext(module_file or { '' })
+	ext := os.file_ext(module_file)
 	return ext in ['.so', '.pyd', '.dll']
 }
 
@@ -50,7 +50,7 @@ pub fn is_pyc_only(file ?string) bool {
 	if file == none {
 		return false
 	}
-	f := file or { '' }
+	f := file
 	return f.ends_with('.pyc') && !os.exists(f[..f.len - 1])
 }
 

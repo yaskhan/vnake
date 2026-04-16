@@ -274,7 +274,7 @@ pub fn argument_elide_name(name ?string) bool {
 	if name == none {
 		return false
 	}
-	n := name or { return false }
+	n := name
 	return n.starts_with('__') && !n.ends_with('__')
 }
 
