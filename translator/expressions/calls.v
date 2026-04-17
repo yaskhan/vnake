@@ -1384,14 +1384,11 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 		}
 	} else if original_type_raw.starts_with('SumType_') || original_type_raw.contains('|') {
 		// Automatic narrowing for common methods if not explicitly narrowed
-		mut inferred := ''
-		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
-			'map[string]Any', '[]i64', '[]f64', '[]int']
-		if attr in ['lower', 'upper', 'capitalize', 'title', 'strip', 'split', 'join', 'isdigit',
-			'isalpha', 'isalnum', 'replace', 'startswith', 'endswith'] {
-			inferred = 'string'
-		} else if attr in ['append', 'extend', 'pop', 'remove', 'sort', 'reverse'] {
-			inferred = '[]Any'
+		mut inferred := match attr {
+			'lower', 'upper', 'capitalize', 'title', 'strip', 'split', 'join', 'isdigit',
+			'isalpha', 'isalnum', 'replace', 'startswith', 'endswith' { 'string' }
+			'append', 'extend', 'pop', 'remove', 'sort', 'reverse' { '[]Any' }
+			else { '' }
 		}
 
 		if inferred.len > 0 {

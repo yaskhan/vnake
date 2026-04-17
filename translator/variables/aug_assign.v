@@ -40,19 +40,21 @@ pub fn (mut m VariablesModule) visit_aug_assign(node ast.AugAssign) {
 		return
 	}
 
-	op_map := {
-		'+':  '+='
-		'-':  '-='
-		'*':  '*='
-		'/':  '/='
-		'%':  '%='
-		'|':  '|='
-		'&':  '&='
-		'^':  '^='
-		'<<': '<<='
-		'>>': '>>='
+	op := match node.op.value {
+		'+' { '+=' }
+		'-' { '-=' }
+		'*' { '*=' }
+		'/' { '/=' }
+		'%' { '%=' }
+		'|' { '|=' }
+		'&' { '&=' }
+		'^' { '^=' }
+		'<<' { '<<=' }
+		'>>' { '>>=' }
+		else { '' }
 	}
-	if op := op_map[node.op.value] {
+
+	if op != '' {
 		if node.op.value == '|' {
 			target_type := m.guess_type(node.target, true)
 			value_type := m.guess_type(node.value, true)
