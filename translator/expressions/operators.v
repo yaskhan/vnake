@@ -245,12 +245,20 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 	mut right := eg.visit(node.right)
 
 	// Bitwise and shift operators should always use numeric types
-	if op in ['&', '|', '^', '<<', '>>'] && op_type == 'void' {
+	is_bitwise := match op {
+		'&', '|', '^', '<<', '>>' { true }
+		else { false }
+	}
+	if is_bitwise && op_type == 'void' {
 		op_type = 'int'
 	}
 
 	// Type-Directed Operator Overloading
-	if op_type in ['int', 'f64', 'i64', 'u8', 'byte', 'u16', 'u32', 'u64'] {
+	is_numeric := match op_type {
+		'int', 'f64', 'i64', 'u8', 'byte', 'u16', 'u32', 'u64' { true }
+		else { false }
+	}
+	if is_numeric {
 		l_base := eg.guess_type_no_loc(node.left)
 		r_base := eg.guess_type_no_loc(node.right)
 		if l_base == 'Any' || l_base.starts_with('SumType_') {
@@ -639,25 +647,25 @@ fn (mut eg ExprGen) translate_single_comparison(left string, op string, right st
 	left_type := eg.guess_type(left_expr)
 	right_type := eg.guess_type(right_expr)
 
-	if op in ['is', '=='] && is_none_expr(right_expr) {
+	if (op == 'is' || op == '==') && is_none_expr(right_expr) {
 		if eg.should_use_is_none_type(left_type, left_expr) {
 			return '(${left} is NoneType)'
 		}
 		return '${left} == none'
 	}
-	if op in ['is not', '!='] && is_none_expr(right_expr) {
+	if (op == 'is not' || op == '!=') && is_none_expr(right_expr) {
 		if eg.should_use_is_none_type(left_type, left_expr) {
 			return '(${left} !is NoneType)'
 		}
 		return '${left} != none'
 	}
-	if op in ['is', '=='] && is_none_expr(left_expr) {
+	if (op == 'is' || op == '==') && is_none_expr(left_expr) {
 		if eg.should_use_is_none_type(right_type, right_expr) {
 			return '(${right} is NoneType)'
 		}
 		return 'none == ${right}'
 	}
-	if op in ['is not', '!='] && is_none_expr(left_expr) {
+	if (op == 'is not' || op == '!=') && is_none_expr(left_expr) {
 		if eg.should_use_is_none_type(right_type, right_expr) {
 			return '(${right} !is NoneType)'
 		}
