@@ -97,12 +97,29 @@ pub fn register_sum_type(v_union_type string, active_v_generics []string, includ
 	mut type_name := 'SumType_' + parts.map(clean_sum_part(it)).join('')
 	base_name := type_name
 	mut counter := 1
-	for {
-		if !generated_sum_types.values().contains(type_name) {
+
+	// Optimize collision detection: Avoid redundant .values() heap allocations by using a single-pass
+	// lookup map if a collision is detected.
+	mut found_collision := false
+	for _, name in generated_sum_types {
+		if name == type_name {
+			found_collision = true
 			break
 		}
-		type_name = '${base_name}_${counter}'
-		counter++
+	}
+
+	if found_collision {
+		mut existing_names := map[string]bool{}
+		for _, name in generated_sum_types {
+			existing_names[name] = true
+		}
+		for {
+			type_name = '${base_name}_${counter}'
+			if type_name !in existing_names {
+				break
+			}
+			counter++
+		}
 	}
 
 	mut used_generics := []string{}
