@@ -61,13 +61,18 @@ pub fn new_type_inference_utils_mixin() TypeInferenceUtilsMixin {
 }
 
 pub fn (t &TypeInferenceUtilsMixin) get_ancestors(typ string) []string {
-	mut ancestors := [typ]
+	mut ancestors := []string{}
+	t.get_ancestors_into(typ, mut ancestors)
+	return ancestors
+}
+
+fn (t &TypeInferenceUtilsMixin) get_ancestors_into(typ string, mut ancestors []string) {
+	ancestors << typ
 	if typ in t.class_hierarchy {
 		for base in t.class_hierarchy[typ] {
-			ancestors << t.get_ancestors(base)
+			t.get_ancestors_into(base, mut ancestors)
 		}
 	}
-	return ancestors
 }
 
 pub fn (t &TypeInferenceUtilsMixin) get_depth(typ string, current_depth int) int {
@@ -88,35 +93,41 @@ pub fn (mut t TypeInferenceUtilsMixin) find_lcs(types []string) string {
 	if types.len == 0 {
 		return 'Any'
 	}
+
+	// Optimization: deduplicate types and handle single type case
 	mut unique_types := []string{}
-	mut seen := map[string]bool{}
+	mut seen_types := map[string]bool{}
 	for typ in types {
-		if typ !in seen {
-			seen[typ] = true
+		if typ !in seen_types {
+			seen_types[typ] = true
 			unique_types << typ
 		}
 	}
+
 	if unique_types.len == 1 {
 		return unique_types[0]
 	}
 
-	mut ancestor_lists := [][]string{}
-	for typ in unique_types {
-		ancestor_lists << t.get_ancestors(typ)
-	}
-
+	// Intersect ancestor lists incrementally to save memory and time
 	mut common := map[string]bool{}
-	for anc in ancestor_lists[0] {
+	first_ancestors := t.get_ancestors(unique_types[0])
+	for anc in first_ancestors {
 		common[anc] = true
 	}
 
-	for i := 1; i < ancestor_lists.len; i++ {
-		mut current_anc := map[string]bool{}
-		for anc in ancestor_lists[i] {
-			current_anc[anc] = true
+	for i := 1; i < unique_types.len; i++ {
+		if common.len == 0 {
+			break
 		}
+		current_ancestors := t.get_ancestors(unique_types[i])
+		mut current_anc_map := map[string]bool{}
+		for anc in current_ancestors {
+			current_anc_map[anc] = true
+		}
+
+		// Keep only keys that exist in current_anc_map
 		for k, _ in common {
-			if k !in current_anc {
+			if k !in current_anc_map {
 				common.delete(k)
 			}
 		}
@@ -126,6 +137,7 @@ pub fn (mut t TypeInferenceUtilsMixin) find_lcs(types []string) string {
 		return 'Any'
 	}
 
+	// Select the common ancestor with the greatest depth
 	mut lcs := 'Any'
 	mut max_depth := -1
 	for candidate, _ in common {
