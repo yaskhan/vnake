@@ -37,7 +37,6 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	if py_type.len == 0 {
 		return 'void'
 	}
-	eprintln('DEBUG: map_python_type_to_v ${py_type}')
 	if py_type.starts_with('[]') || py_type.starts_with('map[') || py_type.starts_with('datatypes.') {
 		return py_type
 	}
@@ -118,8 +117,10 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 
 		// Deduplicate
 		mut unique_v_parts := []string{}
+		mut seen := map[string]bool{}
 		for p in v_parts {
-			if p !in unique_v_parts {
+			if p !in seen {
+				seen[p] = true
 				unique_v_parts << p
 			}
 		}
@@ -165,13 +166,11 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	res := map_basic_type(clean_type)
-	eprintln('DEBUG: map_python_type_to_v RESULT ${py_type} -> ${res}')
 	return res
 }
 
 // map_complex_type handles complex types like List[int], Dict[str, Any]
 fn map_complex_type(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
-	// eprintln('DEBUG MAP_COMPLEX: ${py_type}')
 	bracket_idx := py_type.index('[') or { return map_basic_type(py_type) }
 	base_type := py_type[..bracket_idx].trim_space()
 	mut args_str := py_type[bracket_idx + 1..py_type.len - 1].trim_space()
@@ -186,7 +185,6 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 				'Any'
 			}
 			res := '[]${inner_type}'
-			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
 			return res
 		}
 		'Dict', 'dict', 'typing.Dict', 'typing.Mapping', 'Mapping' {
@@ -211,7 +209,6 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 				key_type = 'string'
 			}
 			res := 'map[${key_type}]${val_type}'
-			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
 			return res
 		}
 		'Set', 'set', 'typing.Set' {
@@ -222,7 +219,6 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 				'Any'
 			}
 			res := 'datatypes.Set[${inner_type}]'
-			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
 			return res
 		}
 		'Tuple', 'tuple', 'typing.Tuple' {
@@ -242,7 +238,6 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 				}
 			}
 			res := '[]Any'
-			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
 			return res
 		}
 		'Optional', 'typing.Optional' {
@@ -253,11 +248,9 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 				'Any'
 			}
 			if inner_type.starts_with('?') {
-				eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${inner_type}')
 				return inner_type
 			}
 			res := '?${inner_type}'
-			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
 			return res
 		}
 		'Union', 'typing.Union' {
@@ -272,8 +265,10 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			}
 
 			mut unique := []string{}
+			mut seen := map[string]bool{}
 			for p in v_parts {
-				if p !in unique {
+				if p !in seen {
+					seen[p] = true
 					unique << p
 				}
 			}
@@ -292,7 +287,6 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 				return '?${non_none[0]}'
 			}
 			res := unique.join(' | ')
-			eprintln('DEBUG: map_complex_type RESULT ${py_type} -> ${res}')
 			return res
 		}
 		'Literal', 'typing.Literal' {
