@@ -11,7 +11,7 @@ pub fn (mut m VariablesModule) visit_aug_assign(node ast.AugAssign) {
 	value_expr := m.visit_expr(node.value)
 
 	if m.state.in_main && node.target is ast.Name && node.target.id in m.state.global_vars {
-		m.emitter.add_init_statement('${target_expr} += ${value_expr}')
+		m.emitter.add_init_statement('unsafe { ${target_expr} += ${value_expr} }')
 		return
 	}
 
