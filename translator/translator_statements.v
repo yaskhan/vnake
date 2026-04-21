@@ -946,7 +946,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 					}
 					mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
 					ve.add_global('__global ${v_id} ${decl_type}')
-					t.emit_indented('${v_id} = ${rhs_text}')
+					t.emit_indented('unsafe { ${v_id} = ${rhs_text} }')
 				} else {
 					t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 				}

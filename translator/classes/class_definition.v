@@ -406,6 +406,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 		if class_vars.len > 0 && !is_dataclass {
 			meta_struct_name := '${struct_name}Meta'
 			mut meta_parts := []string{}
+			meta_parts << '@[heap]'
 			meta_parts << 'pub struct ${meta_struct_name} {'
 			meta_parts << 'pub mut:'
 			for cvar in class_vars {

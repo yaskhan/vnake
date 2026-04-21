@@ -183,7 +183,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 				''
 			}
 			mut m_pfx := if is_mutated { 'mut ' } else { '' }
-			mut s_pfx := if is_mutated { '' } else { '&' }
+			mut s_pfx := '&'
 			receiver_str = '(${m_pfx}${args[0].arg} ${s_pfx}${struct_name}${gen_s}) '
 			receiver_name = args[0].arg
 		}
