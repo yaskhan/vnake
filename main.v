@@ -22,44 +22,56 @@ pub mut:
 
 pub struct GlobalHelpers {
 pub mut:
-	imports       []string
-	structs       []string
-	functions     []string
-	classes       []string
-	used_builtins map[string]bool
+	imports           []string
+	structs           []string
+	functions         []string
+	classes           []string
+	used_builtins     map[string]bool
+	defined_imports   map[string]bool
+	defined_structs   map[string]bool
+	defined_functions map[string]bool
+	defined_classes   map[string]bool
 }
 
 pub fn new_global_helpers() GlobalHelpers {
 	return GlobalHelpers{
-		imports:       []string{}
-		structs:       []string{}
-		functions:     []string{}
-		classes:       []string{}
-		used_builtins: map[string]bool{}
+		imports:           []string{}
+		structs:           []string{}
+		functions:         []string{}
+		classes:           []string{}
+		used_builtins:     map[string]bool{}
+		defined_imports:   map[string]bool{}
+		defined_structs:   map[string]bool{}
+		defined_functions: map[string]bool{}
+		defined_classes:   map[string]bool{}
 	}
 }
 
 pub fn (mut g GlobalHelpers) merge(trans &translator.Translator) {
 	for imp in trans.get_helper_imports() {
-		if imp !in g.imports {
+		if imp !in g.defined_imports {
 			g.imports << imp
+			g.defined_imports[imp] = true
 		}
 	}
 	for s in trans.get_helper_structs() {
-		if s !in g.structs {
+		if s !in g.defined_structs {
 			g.structs << s
+			g.defined_structs[s] = true
 		}
 	}
 	for f in trans.get_helper_functions() {
-		if f !in g.functions {
+		if f !in g.defined_functions {
 			g.functions << f
+			g.defined_functions[f] = true
 		}
 	}
 
 	for k, _ in trans.state.defined_classes {
 		v_cls := trans.state.class_to_impl[k] or { k }
-		if v_cls !in g.classes {
+		if v_cls !in g.defined_classes {
 			g.classes << v_cls
+			g.defined_classes[v_cls] = true
 		}
 	}
 	for k, v in trans.state.used_builtins {

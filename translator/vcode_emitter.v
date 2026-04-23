@@ -167,15 +167,22 @@ pub fn (e &VCodeEmitter) emit() string {
 		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
 			'map[string]Any', 'map[i64]Any']
 		variants << ['[]i64', '[]f64', '[]int']
+		mut variants_seen := map[string]bool{}
+		for v in variants {
+			variants_seen[v] = true
+		}
 		for cls, _ in e.defined_classes {
 			v_cls := cls.trim_left('&')
 			if v_cls.len > 0 && v_cls[0].is_capital()
 				&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
-				if '&' + v_cls !in variants {
-					variants << '&' + v_cls
+				v_ptr := '&' + v_cls
+				if v_ptr !in variants_seen {
+					variants << v_ptr
+					variants_seen[v_ptr] = true
 				}
-			} else if v_cls !in variants {
+			} else if v_cls !in variants_seen {
 				variants << v_cls
+				variants_seen[v_cls] = true
 			}
 		}
 		lines << 'pub type Any = ${variants.join(' | ')}'
@@ -331,12 +338,19 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
 		'map[string]Any', 'map[i64]Any']
 	variants << ['[]i64', '[]f64', '[]int', '[]Packet', '[]Task', '[]TaskRec']
+	mut variants_seen := map[string]bool{}
+	for v in variants {
+		variants_seen[v] = true
+	}
+
 	if used_builtins['Template'] {
-		if 'Interpolation' !in variants {
+		if 'Interpolation' !in variants_seen {
 			variants << 'Interpolation'
+			variants_seen['Interpolation'] = true
 		}
-		if 'Template' !in variants {
+		if 'Template' !in variants_seen {
 			variants << 'Template'
+			variants_seen['Template'] = true
 		}
 	}
 	for cls in classes {
@@ -344,11 +358,14 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		// Ensure classes in Any are always references to match V 0.5 heap-allocated memory model for Python objects
 		if v_cls.len > 0 && v_cls[0].is_capital()
 			&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
-			if '&' + v_cls !in variants {
-				variants << '&' + v_cls
+			v_ptr := '&' + v_cls
+			if v_ptr !in variants_seen {
+				variants << v_ptr
+				variants_seen[v_ptr] = true
 			}
-		} else if v_cls !in variants {
+		} else if v_cls !in variants_seen {
 			variants << v_cls
+			variants_seen[v_cls] = true
 		}
 	}
 	lines << 'pub type Any = ${variants.join(' | ')}'
