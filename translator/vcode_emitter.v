@@ -9,49 +9,57 @@ fn to_snake_case(name string) string {
 @[heap]
 pub struct VCodeEmitter {
 pub mut:
-	module_name      string
-	imports          []string
-	structs          []string
-	functions        []string
-	main_body        []string
-	init_body        []string
-	globals          []string
-	constants        []string
-	helper_imports   []string
-	helper_structs   []string
-	helper_functions []string
-	used_builtins    map[string]bool
-	defined_classes  map[string]bool
-	omit_builtins    bool
+	module_name            string
+	imports                []string
+	structs                []string
+	functions              []string
+	main_body              []string
+	init_body              []string
+	globals                []string
+	constants              []string
+	helper_imports         []string
+	helper_structs         []string
+	helper_functions       []string
+	used_builtins          map[string]bool
+	defined_classes        map[string]bool
+	omit_builtins          bool
+	defined_imports        map[string]bool
+	defined_helper_imports map[string]bool
+	defined_globals        map[string]bool
 }
 
 pub fn new_vcode_emitter(module_name string) VCodeEmitter {
 	return VCodeEmitter{
-		module_name:      module_name
-		imports:          []string{}
-		structs:          []string{}
-		functions:        []string{}
-		main_body:        []string{}
-		init_body:        []string{}
-		globals:          []string{}
-		constants:        []string{}
-		helper_imports:   []string{}
-		helper_structs:   []string{}
-		helper_functions: []string{}
-		used_builtins:    map[string]bool{}
-		defined_classes:  map[string]bool{}
-		omit_builtins:    false
+		module_name:            module_name
+		imports:                []string{}
+		structs:                []string{}
+		functions:              []string{}
+		main_body:              []string{}
+		init_body:              []string{}
+		globals:                []string{}
+		constants:              []string{}
+		helper_imports:         []string{}
+		helper_structs:         []string{}
+		helper_functions:       []string{}
+		used_builtins:          map[string]bool{}
+		defined_classes:        map[string]bool{}
+		omit_builtins:          false
+		defined_imports:        map[string]bool{}
+		defined_helper_imports: map[string]bool{}
+		defined_globals:        map[string]bool{}
 	}
 }
 
 pub fn (mut e VCodeEmitter) add_import(module_name string) {
-	if module_name !in e.imports {
+	if module_name !in e.defined_imports {
+		e.defined_imports[module_name] = true
 		e.imports << module_name
 	}
 }
 
 pub fn (mut e VCodeEmitter) add_helper_import(module_name string) {
-	if module_name !in e.helper_imports {
+	if module_name !in e.defined_helper_imports {
+		e.defined_helper_imports[module_name] = true
 		e.helper_imports << module_name
 	}
 }
@@ -65,18 +73,10 @@ pub fn (mut e VCodeEmitter) add_global(global_def string) {
 		name = name.all_before(' ')
 	}
 
-	for existing in e.globals {
-		mut ex_name := existing.trim_space()
-		if ex_name.starts_with('__global ') {
-			ex_name = ex_name['__global '.len..].trim_space()
-		}
-		if ex_name.contains(' ') {
-			ex_name = ex_name.all_before(' ')
-		}
-		if name == ex_name {
-			return
-		}
+	if name in e.defined_globals {
+		return
 	}
+	e.defined_globals[name] = true
 	e.globals << global_def
 }
 
