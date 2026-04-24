@@ -167,14 +167,22 @@ pub fn (e &VCodeEmitter) emit() string {
 		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
 			'map[string]Any', 'map[i64]Any']
 		variants << ['[]i64', '[]f64', '[]int']
+		// ⚡ Bolt: Using a map for O(1) variant deduplication reduces complexity from O(C * V) to O(C).
+		mut variants_seen := map[string]bool{}
+		for v in variants {
+			variants_seen[v] = true
+		}
 		for cls, _ in e.defined_classes {
 			v_cls := cls.trim_left('&')
 			if v_cls.len > 0 && v_cls[0].is_capital()
 				&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
-				if '&' + v_cls !in variants {
-					variants << '&' + v_cls
+				target := '&' + v_cls
+				if target !in variants_seen {
+					variants_seen[target] = true
+					variants << target
 				}
-			} else if v_cls !in variants {
+			} else if v_cls !in variants_seen {
+				variants_seen[v_cls] = true
 				variants << v_cls
 			}
 		}
@@ -331,11 +339,18 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
 		'map[string]Any', 'map[i64]Any']
 	variants << ['[]i64', '[]f64', '[]int', '[]Packet', '[]Task', '[]TaskRec']
+	// ⚡ Bolt: Using a map for O(1) variant deduplication reduces complexity from O(C * V) to O(C).
+	mut variants_seen := map[string]bool{}
+	for v in variants {
+		variants_seen[v] = true
+	}
 	if used_builtins['Template'] {
-		if 'Interpolation' !in variants {
+		if 'Interpolation' !in variants_seen {
+			variants_seen['Interpolation'] = true
 			variants << 'Interpolation'
 		}
-		if 'Template' !in variants {
+		if 'Template' !in variants_seen {
+			variants_seen['Template'] = true
 			variants << 'Template'
 		}
 	}
@@ -344,10 +359,13 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		// Ensure classes in Any are always references to match V 0.5 heap-allocated memory model for Python objects
 		if v_cls.len > 0 && v_cls[0].is_capital()
 			&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
-			if '&' + v_cls !in variants {
-				variants << '&' + v_cls
+			target := '&' + v_cls
+			if target !in variants_seen {
+				variants_seen[target] = true
+				variants << target
 			}
-		} else if v_cls !in variants {
+		} else if v_cls !in variants_seen {
+			variants_seen[v_cls] = true
 			variants << v_cls
 		}
 	}
