@@ -111,6 +111,7 @@ pub mut:
 	readonly_fields              map[string]map[string]bool
 	cond_optional_var_type       map[string]string
 	narrowed_vars                map[string]bool
+	narrowed_from                map[string]string
 	typed_dicts                  map[string]bool
 	class_hierarchy_initialized  bool
 	cached_indents               []string
@@ -231,6 +232,7 @@ pub fn new_translator_state() &TranslatorState {
 		readonly_fields:              map[string]map[string]bool{}
 		cond_optional_var_type:       map[string]string{}
 		narrowed_vars:                map[string]bool{}
+		narrowed_from:                map[string]string{}
 		typed_dicts:                  map[string]bool{}
 		class_hierarchy_initialized:  false
 		cached_indents:               cached_indents.clone()

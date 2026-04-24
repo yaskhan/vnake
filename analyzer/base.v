@@ -28,6 +28,7 @@ pub mut:
 	type_map               map[string]string
 	raw_type_map           map[string]string
 	mutability_map         map[string]MutabilityInfo
+	narrowed_from           map[string]string
 	location_map           map[string]string
 	call_signatures        map[string]CallSignature
 	mixin_to_main          map[string][]string

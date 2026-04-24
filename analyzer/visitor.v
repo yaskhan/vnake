@@ -3,7 +3,7 @@ module analyzer
 import ast
 import models
 
-const mutating_methods = ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update',
+const mutating_methods = ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'workInAdd', 'deviceInAdd',
 	'setdefault', 'delete', 'add', 'discard']
 
 pub struct TypeInferenceVisitorMixin {
@@ -1284,6 +1284,13 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_class_def(node ast.ClassDef) {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
+	if node.targets.len > 0 && node.targets[0] is ast.Name && node.value is ast.Call {
+		target := node.targets[0] as ast.Name
+		call := node.value as ast.Call
+		if call.func is ast.Name && (call.func as ast.Name).id == "cast" && call.args.len >= 2 {
+			t.narrowed_from[target.id] = t.render_expr(call.args[1])
+		}
+	}
 	t.visit_expr(node.value)
 
 	mut value_type := t.guess_expr_type(node.value)

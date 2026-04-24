@@ -52,6 +52,7 @@ pub fn (mut m ControlFlowModule) visit_continue(_ ast.Continue) {
 }
 
 pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
+	m.env.emit_save_back_all()
 	if m.env.state.scope_names.len > 0 {
 		last_scope := m.env.state.scope_names[m.env.state.scope_names.len - 1]
 		if last_scope == '__next__' || last_scope == 'next' {
