@@ -163,6 +163,7 @@ pub fn (m &ControlFlowModule) map_python_type(type_str string, is_return bool) s
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols:    m.env.state.imported_symbols
 		scc_files:           m.env.state.scc_files
+		scc_prefixes:        m.env.state.scc_prefixes
 		used_builtins:       m.env.state.used_builtins
 		warnings:            m.env.state.warnings
 		include_all_symbols: m.env.state.include_all_symbols
@@ -188,6 +189,7 @@ pub fn (m &ControlFlowModule) register_sum_type(types_str string) string {
 	mut ctx := base.TypeUtilsContext{
 		imported_symbols:    m.env.state.imported_symbols
 		scc_files:           m.env.state.scc_files
+		scc_prefixes:        m.env.state.scc_prefixes
 		used_builtins:       m.env.state.used_builtins
 		warnings:            m.env.state.warnings
 		include_all_symbols: m.env.state.include_all_symbols

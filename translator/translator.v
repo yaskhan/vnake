@@ -460,6 +460,7 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		imported_symbols:    t.state.imported_symbols
 		defined_classes:     t.state.defined_classes
 		scc_files:           t.state.scc_files
+		scc_prefixes:        t.state.scc_prefixes
 		used_builtins:       t.state.used_builtins
 		warnings:            t.state.warnings
 		include_all_symbols: t.state.include_all_symbols
@@ -559,6 +560,7 @@ pub fn (mut t Translator) translate(source string, filename string) string {
 	t.state.include_all_symbols = old_include_all
 	t.state.strict_exports = old_strict_exports
 	t.state.scc_files = old_sccs.clone()
+	t.state.scc_prefixes = base.compute_scc_prefixes(t.state.scc_files)
 	t.state.current_module_name = old_current_module
 	t.state.omit_builtins = old_omit_builtins
 

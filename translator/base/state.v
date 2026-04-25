@@ -92,6 +92,7 @@ pub mut:
 	current_module_name          string
 	current_file_name            string
 	scc_files                    map[string]bool
+	scc_prefixes                 map[string]string
 	module_all                   []string
 	defined_top_level_symbols    map[string]bool
 	warnings                     []string
@@ -215,6 +216,7 @@ pub fn new_translator_state() &TranslatorState {
 		current_module_name:          'main'
 		current_file_name:            ''
 		scc_files:                    map[string]bool{}
+		scc_prefixes:                 map[string]string{}
 		module_all:                   []string{}
 		defined_top_level_symbols:    map[string]bool{}
 		warnings:                     []string{}

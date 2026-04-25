@@ -20,6 +20,7 @@ fn (env &ClassVisitEnv) type_utils_context() base.TypeUtilsContext {
 	return base.TypeUtilsContext{
 		imported_symbols:    env.state.imported_symbols
 		scc_files:           env.state.scc_files
+		scc_prefixes:        env.state.scc_prefixes
 		used_builtins:       env.state.used_builtins
 		warnings:            env.state.warnings
 		include_all_symbols: env.state.include_all_symbols
