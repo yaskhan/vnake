@@ -8,21 +8,19 @@ struct PrecedenceTokenCarrier {
 	token ast.Token
 }
 
+// precedence_from_operator returns precedence levels for V 0.5.1
 fn precedence_from_operator(op string) int {
 	return match op {
 		'or' { 10 }
 		'and' { 20 }
 		'not' { 30 }
 		'in', 'not in', 'is', 'is not', '==', '!=', '<', '<=', '>', '>=' { 40 }
-		'|' { 50 }
-		'^' { 60 }
-		'&' { 70 }
-		'<<', '>>' { 80 }
-		'+', '-' { 90 }
-		'*', '@', '/', '//', '%' { 100 }
-		'u+', 'u-', '~' { 110 }
-		'**' { 120 }
-		else { 130 }
+		'|', '^', '+', '-' { 50 } // V: |, ^ have same precedence as +
+		'&', '*', '/', '//', '%' { 60 } // V: & has same precedence as *
+		'<<', '>>' { 70 } // V: Shifts have higher precedence than * in some cases, but definitely > +
+		'u+', 'u-', '~' { 80 }
+		'**' { 90 }
+		else { 100 }
 	}
 }
 
@@ -45,7 +43,7 @@ fn is_right_associative_operator(op string) bool {
 	return op == '**'
 }
 
-// get_precedence returns Python-like operator precedence for AST nodes.
+// get_precedence returns precedence for AST nodes.
 pub fn get_precedence(node voidptr) int {
 	return precedence_from_operator(node_operator(node))
 }
@@ -62,9 +60,13 @@ pub fn visit_with_parens(parent_node voidptr, child_node voidptr, is_right_opera
 	if child_prec < parent_prec {
 		needs_parens = true
 	} else if child_prec == parent_prec && is_right_operand {
-		needs_parens = !is_commutative_operator(parent_op)
-		if is_right_associative_operator(parent_op) && parent_op == child_op {
-			needs_parens = false
+		if parent_op != child_op {
+			needs_parens = true
+		} else {
+			needs_parens = !is_commutative_operator(parent_op)
+			if is_right_associative_operator(parent_op) && parent_op == child_op {
+				needs_parens = false
+			}
 		}
 	}
 
