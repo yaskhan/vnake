@@ -182,7 +182,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			} else {
 				''
 			}
-			mut m_pfx := if is_mutated { 'mut ' } else { '' }
+			mut m_pfx := if is_mutated || node.name == '__init__' { 'mut ' } else { '' }
 			mut s_pfx := '&'
 			receiver_str = '(${m_pfx}${args[0].arg} ${s_pfx}${struct_name}${gen_s}) '
 			receiver_name = args[0].arg
@@ -508,20 +508,8 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	mut is_init := false
 	match node.name {
 		'__init__' {
-			if struct_name.len > 0 && env.state.defined_classes[struct_name]['has_new'] {
-				func_name = 'init'
-			} else {
-				is_init = true
-				func_name = base.get_factory_name(struct_name, env.state.class_hierarchy)
-				receiver_str = ''
-				ret_type = '&' + struct_name
-				if env.state.current_class_generics.len > 0 {
-					ret_type += '[${env.state.current_class_generics.join(', ')}]'
-				}
-				if env.state.defined_classes[struct_name]['is_pydantic'] {
-					ret_type = '!' + ret_type
-				}
-			}
+			func_name = 'py_init'
+			ret_type = 'void'
 		}
 		'__new__' {
 			func_name = base.get_factory_name(struct_name, env.state.class_hierarchy)

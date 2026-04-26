@@ -75,6 +75,8 @@ pub fn (h ClassMethodsHandler) rename_dunder_methods(mut methods []ast.FunctionD
 			method.name = 'await_'
 		} else if orig_name == '__post_init__' {
 			method.name = 'post_init'
+		} else if orig_name == '__init__' {
+			method.name = 'py_init'
 		}
 	}
 }

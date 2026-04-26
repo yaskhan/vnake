@@ -63,8 +63,7 @@ fn (mut eg ExprGen) emit(line string) {
 	eg.state.output << '${eg.indent()}${line}'
 }
 
-pub fn (mut eg ExprGen) visit(node ast.Expression) string {
-	// println('ExprGen Visiting: ' + typeof(node).name)
+fn (mut eg ExprGen) visit_helper1(node ast.Expression) ?string {
 	match node {
 		ast.Name {
 			return eg.visit_name(node)
@@ -108,6 +107,13 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 		ast.Subscript {
 			return eg.visit_subscript(node)
 		}
+		else { return none }
+	}
+}
+
+fn (mut eg ExprGen) visit_helper2(node ast.Expression) string {
+	match node {
+
 		ast.Slice {
 			return eg.visit_slice(node)
 		}
@@ -151,9 +157,16 @@ pub fn (mut eg ExprGen) visit(node ast.Expression) string {
 			return eg.visit_named_expr(node)
 		}
 		else {
-			return '/* unsupported expr */'
+			return '/* unsupported: ' + node.str() + ' */'
 		}
 	}
+}
+
+pub fn (mut eg ExprGen) visit(node ast.Expression) string {
+	if res := eg.visit_helper1(node) {
+		return res
+	}
+	return eg.visit_helper2(node)
 }
 
 pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
@@ -912,8 +925,7 @@ pub fn (mut eg ExprGen) map_python_type(type_str string, is_return bool) string 
 	return eg.map_type_ext(type_str, false, true, is_return)
 }
 
-pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register bool, is_return bool) string {
-	opts := base.TypeMapOptions{
+pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register bool, is_return bool) string {	opts := base.TypeMapOptions{
 		struct_name:        eg.state.current_class
 		allow_union:        allow_union
 		register_sum_types: register
@@ -939,7 +951,7 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 		actual_struct = 'Self'
 	}
 
-	return base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string, def string) string {
+	mut res := base.map_type(type_str, opts, mut ctx, fn [mut eg, actual_struct] (name string, def string) string {
 		if name == 'Self' || name == 'typing.Self' {
 			mut v_gens := []string{}
 			for gn in eg.state.current_class_generics {
@@ -957,6 +969,16 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 		}
 		return ''
 	}, noop_literal_registrar, noop_tuple_registrar)
+
+	// Ensure class types are references
+	if eg.state.is_v_class_type(res) && !res.contains('&') && !is_return {
+		if res.starts_with('?') {
+			res = '?&' + res[1..]
+		} else {
+			res = '&' + res
+		}
+	}
+	return res
 }
 
 fn noop_sum_type_registrar(_ string, _ string) string {

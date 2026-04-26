@@ -141,43 +141,38 @@ pub fn (mut q HasPlaceholders) visit_placeholder_type(t &PlaceholderType) bool {
 }
 
 pub fn find_dataclass_transform_spec(node ?Node) ?&DataclassTransformSpec {
-	mut n := node or { return none }
+	n := node or { return none }
 
-	match mut n {
-		CallExpr { /* n = n.callee */ }
-		else {}
+	if n is CallExpr {
+		return find_dataclass_transform_spec((n as CallExpr).callee)
 	}
 
-	match mut n {
+	if n is Decorator {
+		return find_dataclass_transform_spec((n as Decorator).func)
+	}
+
+	match n {
 		RefExpr {
 			// match n { NameExpr { ... } MemberExpr { ... } }
 		}
-		else {}
-	}
 
-	match mut n {
-		Decorator { /* n = n.func */ }
-		else {}
-	}
-
-	match mut n {
 		OverloadedFuncDef {
-			for candidate in n.items {
+			for candidate in (n as OverloadedFuncDef).items {
 				if spec := find_dataclass_transform_spec(candidate) {
 					return spec
 				}
 			}
 		}
 		FuncDef {
-			return n.dataclass_transform_spec
+			return (n as FuncDef).dataclass_transform_spec
 		}
 		ClassDef {
-			if info := n.info {
+			if info := (n as ClassDef).info {
 				return find_dataclass_transform_spec_from_info(info)
 			}
 		}
 		TypeInfo {
-			return find_dataclass_transform_spec_from_info(n)
+			return find_dataclass_transform_spec_from_info(n as TypeInfo)
 		}
 		else {}
 	}
