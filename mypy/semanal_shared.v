@@ -144,7 +144,7 @@ pub fn find_dataclass_transform_spec(node ?Node) ?&DataclassTransformSpec {
 	mut n := node or { return none }
 
 	match mut n {
-		CallExpr { n = n.callee }
+		CallExpr { /* n = n.callee */ }
 		else {}
 	}
 
@@ -156,7 +156,7 @@ pub fn find_dataclass_transform_spec(node ?Node) ?&DataclassTransformSpec {
 	}
 
 	match mut n {
-		Decorator { n = n.func }
+		Decorator { /* n = n.func */ }
 		else {}
 	}
 
