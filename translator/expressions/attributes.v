@@ -205,8 +205,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 		mut base_access := '${obj}.${attr_name}'
 		eprintln('DEBUG: visit_attribute obj=${obj} type=${obj_type} mapped=${mapped_check} narrowed=${eg.state.narrowed_vars.keys()}')
-		if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && obj != 'w'
-			&& obj != 'wkq' {
+			if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && obj != 'w' && !obj.contains('(') && !obj.contains(' ') && !obj.contains(' as ') && !obj.contains('.py_init') && obj != 'wkq' {
 			name_node := node.value
 			if name_node is ast.Name {
 				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},

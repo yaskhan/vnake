@@ -148,6 +148,9 @@ pub fn build_truthiness_check(expr string, v_type string) string {
 
 // truthiness_condition returns the condition that checks if a value is truthy for non-optional types.
 fn truthiness_condition(expr string, v_type string) string {
+	if v_type.starts_with('&') {
+		return ''
+	}
 	if is_collection_type(v_type) {
 		return '${expr}.len > 0'
 	}

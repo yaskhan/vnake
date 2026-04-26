@@ -125,7 +125,8 @@ pub fn register_sum_type(v_union_type string, active_v_generics []string, includ
 	gen_decl := if used_generics.len > 0 { '[${used_generics.join(', ')}]' } else { '' }
 	gen_args := gen_decl
 	pub_prefix := if include_all_symbols { 'pub ' } else { '' }
-	emitter.add_helper_struct('${pub_prefix}type ${type_name}${gen_decl} = ${normalized}')
+		final_normalized := if normalized.contains('NoneType') { normalized } else { 'NoneType | ' + normalized }
+		emitter.add_helper_struct('${pub_prefix}type ${type_name}${gen_decl} = ${final_normalized}')
 	result := '${type_name}${gen_args}'
 	generated_sum_types[normalized] = result
 	return result
