@@ -936,6 +936,7 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 		imported_symbols:    eg.state.imported_symbols
 		defined_classes:     eg.state.defined_classes
 		scc_files:           eg.state.scc_files
+		scc_prefixes:        eg.state.scc_prefixes
 		used_builtins:       eg.state.used_builtins
 		warnings:            eg.state.warnings
 		include_all_symbols: eg.state.include_all_symbols

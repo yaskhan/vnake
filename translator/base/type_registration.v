@@ -99,20 +99,13 @@ pub fn register_sum_type(v_union_type string, active_v_generics []string, includ
 	mut counter := 1
 
 	// Optimize collision detection: Avoid redundant .values() heap allocations by using a single-pass
-	// lookup map if a collision is detected.
-	mut found_collision := false
+	// lookup map.
+	mut existing_names := map[string]bool{}
 	for _, name in generated_sum_types {
-		if name == type_name {
-			found_collision = true
-			break
-		}
+		existing_names[name] = true
 	}
 
-	if found_collision {
-		mut existing_names := map[string]bool{}
-		for _, name in generated_sum_types {
-			existing_names[name] = true
-		}
+	if type_name in existing_names {
 		for {
 			type_name = '${base_name}_${counter}'
 			if type_name !in existing_names {
@@ -152,7 +145,7 @@ pub fn register_tuple_struct(tuple_types_str string, include_all_symbols bool, m
 		fields << '    it_${i} ${v_type}'
 	}
 	pub_prefix := if include_all_symbols { 'pub ' } else { '' }
-	struct_def := '${pub_prefix}struct ${struct_name} {\n${fields.join('\n')}\n}'
+	struct_def := '@[heap]\n${pub_prefix}struct ${struct_name} {\n${fields.join('\n')}\n}'
 	emitter.add_helper_struct(struct_def)
 	generated_tuple_structs[struct_name] = struct_name
 	return struct_name

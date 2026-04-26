@@ -9,49 +9,57 @@ fn to_snake_case(name string) string {
 @[heap]
 pub struct VCodeEmitter {
 pub mut:
-	module_name      string
-	imports          []string
-	structs          []string
-	functions        []string
-	main_body        []string
-	init_body        []string
-	globals          []string
-	constants        []string
-	helper_imports   []string
-	helper_structs   []string
-	helper_functions []string
-	used_builtins    map[string]bool
-	defined_classes  map[string]bool
-	omit_builtins    bool
+	module_name            string
+	imports                []string
+	structs                []string
+	functions              []string
+	main_body              []string
+	init_body              []string
+	globals                []string
+	constants              []string
+	helper_imports         []string
+	helper_structs         []string
+	helper_functions       []string
+	used_builtins          map[string]bool
+	defined_classes        map[string]bool
+	omit_builtins          bool
+	defined_imports        map[string]bool
+	defined_helper_imports map[string]bool
+	defined_globals        map[string]bool
 }
 
 pub fn new_vcode_emitter(module_name string) VCodeEmitter {
 	return VCodeEmitter{
-		module_name:      module_name
-		imports:          []string{}
-		structs:          []string{}
-		functions:        []string{}
-		main_body:        []string{}
-		init_body:        []string{}
-		globals:          []string{}
-		constants:        []string{}
-		helper_imports:   []string{}
-		helper_structs:   []string{}
-		helper_functions: []string{}
-		used_builtins:    map[string]bool{}
-		defined_classes:  map[string]bool{}
-		omit_builtins:    false
+		module_name:            module_name
+		imports:                []string{}
+		structs:                []string{}
+		functions:              []string{}
+		main_body:              []string{}
+		init_body:              []string{}
+		globals:                []string{}
+		constants:              []string{}
+		helper_imports:         []string{}
+		helper_structs:         []string{}
+		helper_functions:       []string{}
+		used_builtins:          map[string]bool{}
+		defined_classes:        map[string]bool{}
+		omit_builtins:          false
+		defined_imports:        map[string]bool{}
+		defined_helper_imports: map[string]bool{}
+		defined_globals:        map[string]bool{}
 	}
 }
 
 pub fn (mut e VCodeEmitter) add_import(module_name string) {
-	if module_name !in e.imports {
+	if module_name !in e.defined_imports {
+		e.defined_imports[module_name] = true
 		e.imports << module_name
 	}
 }
 
 pub fn (mut e VCodeEmitter) add_helper_import(module_name string) {
-	if module_name !in e.helper_imports {
+	if module_name !in e.defined_helper_imports {
+		e.defined_helper_imports[module_name] = true
 		e.helper_imports << module_name
 	}
 }
@@ -65,18 +73,10 @@ pub fn (mut e VCodeEmitter) add_global(global_def string) {
 		name = name.all_before(' ')
 	}
 
-	for existing in e.globals {
-		mut ex_name := existing.trim_space()
-		if ex_name.starts_with('__global ') {
-			ex_name = ex_name['__global '.len..].trim_space()
-		}
-		if ex_name.contains(' ') {
-			ex_name = ex_name.all_before(' ')
-		}
-		if name == ex_name {
-			return
-		}
+	if name in e.defined_globals {
+		return
 	}
+	e.defined_globals[name] = true
 	e.globals << global_def
 }
 
@@ -167,14 +167,22 @@ pub fn (e &VCodeEmitter) emit() string {
 		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
 			'map[string]Any', 'map[i64]Any']
 		variants << ['[]i64', '[]f64', '[]int']
+		// ⚡ Bolt: Using a map for O(1) variant deduplication reduces complexity from O(C * V) to O(C).
+		mut variants_seen := map[string]bool{}
+		for v in variants {
+			variants_seen[v] = true
+		}
 		for cls, _ in e.defined_classes {
 			v_cls := cls.trim_left('&')
 			if v_cls.len > 0 && v_cls[0].is_capital()
 				&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
-				if '&' + v_cls !in variants {
-					variants << '&' + v_cls
+				target := '&' + v_cls
+				if target !in variants_seen {
+					variants_seen[target] = true
+					variants << target
 				}
-			} else if v_cls !in variants {
+			} else if v_cls !in variants_seen {
+				variants_seen[v_cls] = true
 				variants << v_cls
 			}
 		}
@@ -331,11 +339,18 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 	mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
 		'map[string]Any', 'map[i64]Any']
 	variants << ['[]i64', '[]f64', '[]int', '[]Packet', '[]Task', '[]TaskRec']
+	// ⚡ Bolt: Using a map for O(1) variant deduplication reduces complexity from O(C * V) to O(C).
+	mut variants_seen := map[string]bool{}
+	for v in variants {
+		variants_seen[v] = true
+	}
 	if used_builtins['Template'] {
-		if 'Interpolation' !in variants {
+		if 'Interpolation' !in variants_seen {
+			variants_seen['Interpolation'] = true
 			variants << 'Interpolation'
 		}
-		if 'Template' !in variants {
+		if 'Template' !in variants_seen {
+			variants_seen['Template'] = true
 			variants << 'Template'
 		}
 	}
@@ -344,10 +359,13 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		// Ensure classes in Any are always references to match V 0.5 heap-allocated memory model for Python objects
 		if v_cls.len > 0 && v_cls[0].is_capital()
 			&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
-			if '&' + v_cls !in variants {
-				variants << '&' + v_cls
+			target := '&' + v_cls
+			if target !in variants_seen {
+				variants_seen[target] = true
+				variants << target
 			}
-		} else if v_cls !in variants {
+		} else if v_cls !in variants_seen {
+			variants_seen[v_cls] = true
 			variants << v_cls
 		}
 	}
@@ -402,7 +420,9 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		lines << 'pub fn (t1 Template) + (t2 Template) Template {'
 		lines << '    if t1.strings.len == 0 { return t2 }'
 		lines << '    if t2.strings.len == 0 { return t1 }'
-		lines << '    mut new_strings := t1.strings[..t1.strings.len - 1].clone()'
+		lines << '    // ⚡ Bolt: Using clone() + delete_last() preserves capacity, avoiding reallocation on next append.'
+		lines << '    mut new_strings := t1.strings.clone()'
+		lines << '    new_strings.delete_last()'
 		lines << '    new_strings << t1.strings.last() + t2.strings[0]'
 		lines << '    if t2.strings.len > 1 {'
 		lines << '        new_strings << t2.strings[1..]'

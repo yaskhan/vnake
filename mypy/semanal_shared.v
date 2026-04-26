@@ -155,6 +155,7 @@ pub fn find_dataclass_transform_spec(node ?Node) ?&DataclassTransformSpec {
 		RefExpr {
 			// match n { NameExpr { ... } MemberExpr { ... } }
 		}
+
 		OverloadedFuncDef {
 			for candidate in (n as OverloadedFuncDef).items {
 				if spec := find_dataclass_transform_spec(candidate) {

@@ -176,18 +176,26 @@ pub fn (e &ModuleEmitter) emit() string {
 
 		mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
 			'map[string]Any']
+		mut variants_seen := map[string]bool{}
+		for v in any_variants {
+			variants_seen[v] = true
+		}
+
 		if e.used_builtins['Template'] {
-			if 'Interpolation' !in any_variants {
+			if 'Interpolation' !in variants_seen {
 				any_variants << 'Interpolation'
+				variants_seen['Interpolation'] = true
 			}
-			if 'Template' !in any_variants {
+			if 'Template' !in variants_seen {
 				any_variants << 'Template'
+				variants_seen['Template'] = true
 			}
 		}
 		for cls_name, _ in e.defined_classes {
 			v_cls := cls_name.trim_left('&')
-			if v_cls !in any_variants {
+			if v_cls !in variants_seen {
 				any_variants << v_cls
+				variants_seen[v_cls] = true
 			}
 		}
 		parts << 'pub type Any = ${any_variants.join(' | ')}'
