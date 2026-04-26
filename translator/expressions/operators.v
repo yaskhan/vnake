@@ -241,8 +241,12 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 		return '${eg.visit(node.left)}.joinpath(${eg.visit(node.right)})'
 	}
 
-	mut left := eg.visit(node.left)
-	mut right := eg.visit(node.right)
+	mut left := base.visit_with_parens(&node, node.left, false, fn [mut eg] (n voidptr) string {
+		return eg.visit(unsafe { &ast.Expression(n) })
+	})
+	mut right := base.visit_with_parens(&node, node.right, true, fn [mut eg] (n voidptr) string {
+		return eg.visit(unsafe { &ast.Expression(n) })
+	})
 
 	// Bitwise and shift operators should always use numeric types
 	is_bitwise := match op {
@@ -320,6 +324,10 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 			return 'int(math.powi(f64(${left}), ${right}))'
 		}
 		'//' {
+			if (left_type in ['int', 'i64'] || right_type in ['int', 'i64'])
+				&& node.right is ast.Constant && node.right.value == '2' {
+				return '(${left} >> 1)'
+			}
 			eg.state.used_builtins['math.floor'] = true
 			eg.state.used_builtins['math'] = true
 			if left_type in ['int', 'i64'] || right_type in ['int', 'i64'] {
@@ -384,8 +392,12 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 	left_type := eg.guess_type(node.left)
 	right_type := eg.guess_type(node.right)
 
-	l_val := eg.visit(node.left)
-	r_val := eg.visit(node.right)
+	l_val := base.visit_with_parens(&node, node.left, false, fn [mut eg] (n voidptr) string {
+		return eg.visit(unsafe { &ast.Expression(n) })
+	})
+	r_val := base.visit_with_parens(&node, node.right, true, fn [mut eg] (n voidptr) string {
+		return eg.visit(unsafe { &ast.Expression(n) })
+	})
 
 	// Idiomatic V 'or' block for Optional types
 	if !is_and && (left_type.starts_with('?') || (left_type == 'Any' && l_val.contains(' as '))) {
@@ -509,7 +521,9 @@ pub fn (mut eg ExprGen) visit_unary_op(node ast.UnaryOp) string {
 		return eg.wrap_bool(node.operand, true)
 	}
 
-	mut operand := eg.visit(node.operand)
+	mut operand := base.visit_with_parens(&node, node.operand, true, fn [mut eg] (n voidptr) string {
+		return eg.visit(unsafe { &ast.Expression(n) })
+	})
 	op := node.op.value
 
 	// Type-Directed Operator Overloading for Unary Ops
@@ -565,8 +579,12 @@ pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
 
 	// Handle 2-value case
 	if node.values.len == 2 {
-		mut left := eg.visit(node.values[0])
-		mut right := eg.visit(node.values[1])
+		mut left := base.visit_with_parens(&node, node.values[0], false, fn [mut eg] (n voidptr) string {
+			return eg.visit(unsafe { &ast.Expression(n) })
+		})
+		mut right := base.visit_with_parens(&node, node.values[1], true, fn [mut eg] (n voidptr) string {
+			return eg.visit(unsafe { &ast.Expression(n) })
+		})
 		left_type := eg.guess_type(node.values[0])
 		right_type := eg.guess_type(node.values[1])
 
@@ -596,12 +614,16 @@ pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
 	}
 
 	// Handle 3+ values using short-circuit pattern
-	mut result := eg.visit(node.values[node.values.len - 1])
+	mut result := base.visit_with_parens(&node, node.values[node.values.len - 1], true, fn [mut eg] (n voidptr) string {
+		return eg.visit(unsafe { &ast.Expression(n) })
+	})
 	for i := node.values.len - 2; i >= 0; i-- {
 		v := node.values[i]
 		// Use build_truthiness_for_or for proper none handling
 		cond := eg.build_truthiness_for_or(v, !is_and)
-		mut v_val := eg.visit(v)
+		mut v_val := base.visit_with_parens(&node, v, false, fn [mut eg] (n voidptr) string {
+			return eg.visit(unsafe { &ast.Expression(n) })
+		})
 		if eg.state.current_assignment_type == 'Any' {
 			v_type := eg.guess_type(v)
 			if !v_val.starts_with('Any(') && v_type != 'Any' {
@@ -619,9 +641,13 @@ pub fn (mut eg ExprGen) visit_bool_op(node ast.BoolOp) string {
 
 pub fn (mut eg ExprGen) visit_compare(node ast.Compare) string {
 	mut comps := []string{cap: node.comparators.len + 1}
-	comps << eg.visit(node.left)
+	comps << base.visit_with_parens(&node, node.left, false, fn [mut eg] (n voidptr) string {
+		return eg.visit(unsafe { &ast.Expression(n) })
+	})
 	for c in node.comparators {
-		comps << eg.visit(c)
+		comps << base.visit_with_parens(&node, c, true, fn [mut eg] (n voidptr) string {
+			return eg.visit(unsafe { &ast.Expression(n) })
+		})
 	}
 
 	if node.ops.len == 1 && comps.len == 2 {
