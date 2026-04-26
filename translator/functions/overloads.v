@@ -56,7 +56,7 @@ pub fn generate_overload_variants(node &ast.FunctionDef,
 
 		mut func_name := base.op_methods_to_symbols[node.name] or {
 			mut res := if node.name == '__init__' {
-				'init'
+				'py_init'
 			} else if node.name == '__new__' {
 				'new'
 			} else {
@@ -118,7 +118,7 @@ pub fn generate_overload_variants(node &ast.FunctionDef,
 			} else {
 				''
 			}
-			receiver_str = '(self ${struct_name}${gen_s_class}) ' // changed from cls to self
+			receiver_str = '(self &${struct_name}${gen_s_class}) ' // changed from cls to self
 		}
 
 		is_operator := node.name in base.op_methods_to_symbols
@@ -135,7 +135,13 @@ pub fn generate_overload_variants(node &ast.FunctionDef,
 
 		mut receiver_parts := receiver_str.trim('() ').split(' ')
 		if receiver_parts.len == 2 && (node.name == '__init__' || node.name == '__setattr__') {
-			receiver_str = '(mut ${receiver_parts[0]} ${receiver_parts[1]}) '
+			r_name := receiver_parts[0]
+			r_type := receiver_parts[1]
+			if !r_type.starts_with('&') {
+				receiver_str = '(mut ${r_name} &${r_type}) '
+			} else {
+				receiver_str = '(mut ${r_name} ${r_type}) '
+			}
 		}
 
 		spacing := if is_operator { ' ' } else { '' }

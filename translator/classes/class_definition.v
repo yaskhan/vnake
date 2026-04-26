@@ -475,9 +475,21 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					}
 					f_code << '${prefix}fn ${mangled_factory}${generics}(${factory_args.join(', ')}) ${factory_ret} {'
 					f_code << '    mut self := &${struct_name_for_body}${generics}{}'
-					if factory_assignments.len > 0 {
-						f_code << '    ' + factory_assignments.join('\n    ')
+					// Use py_init to handle initialization side effects correctly
+					mut arg_names_only := []string{}
+					for k, _ in sig {
+						if k == 'return' || k in ['self', 'cls'] {
+							continue
+						}
+						arg_names_only << base.sanitize_name(k, false, map[string]bool{}, '', map[string]bool{})
 					}
+					mut mangled_init := 'py_init'
+					if type_suffix_parts.len > 0 {
+						mangled_init = '${mangled_init}_${type_suffix_parts.join('_')}'
+					} else {
+						mangled_init = '${mangled_init}_noargs'
+					}
+					f_code << '    self.' + mangled_init + '(' + arg_names_only.join(', ') + ')'
 					if is_pydantic {
 						f_code << '    self.validate() or { return err }'
 					}
@@ -510,6 +522,10 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					mut f_code := []string{}
 					f_code << '${prefix}fn ${mangled_factory}${generics}() ${factory_ret} {'
 					f_code << '    mut self := &${struct_name_for_body}${generics}{}'
+					// Call py_init (ensured to exist for _Impl)
+					if struct_name_for_body.ends_with('_Impl') {
+						f_code << '    self.py_init()'
+					}
 					if is_pydantic {
 						f_code << '    self.validate() or { return err }'
 					}
@@ -528,6 +544,9 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 			}
 		}
 		has_str := classes.class_methods_handler.has_method(methods, '__str__')
+				if !classes.class_methods_handler.has_method(methods, '__init__') && struct_name_for_body.ends_with('_Impl') {
+			env.emit_function_fn('fn (mut self ' + struct_name_for_body + generics_str + ') py_init() {}')
+		}
 		classes.class_methods_handler.rename_dunder_methods(mut methods, has_str)
 		for method in methods {
 			env.visit_stmt_fn(method)
