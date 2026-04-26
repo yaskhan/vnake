@@ -30,6 +30,7 @@ pub mut:
 	imported_symbols    map[string]string
 	defined_classes     map[string]map[string]bool
 	scc_files           map[string]bool
+	scc_prefixes        map[string]string
 	used_builtins       map[string]bool
 	warnings            []string
 	include_all_symbols bool
@@ -162,6 +163,16 @@ fn truthiness_condition(expr string, v_type string) string {
 	return expr
 }
 
+// compute_scc_prefixes pre-calculates SCC prefixes for O(1) lookup.
+pub fn compute_scc_prefixes(scc_files map[string]bool) map[string]string {
+	mut prefixes := map[string]string{}
+	for f, _ in scc_files {
+		norm := f.replace('.py', '').replace('/', '.').replace('\\', '.')
+		prefixes[norm] = get_scc_prefix(f)
+	}
+	return prefixes
+}
+
 // map_type is a centralized Python-to-V type mapper with post-processing.
 pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	if type_str.contains('TypeForm') {
@@ -218,12 +229,15 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 				return nested_name
 			}
 
-			for f, _ in ctx.scc_files {
-				norm := f.replace('.py', '').replace('/', '.').replace('\\', '.')
-				if module_prefix.ends_with(norm) {
-					prefix := get_scc_prefix(f)
+			// ⚡ Bolt: Using pre-calculated scc_prefixes map with suffix-based lookup
+			// reduces complexity from O(N) to O(D) where D is the module depth.
+			mut current_prefix := module_prefix
+			for {
+				if prefix := ctx.scc_prefixes[current_prefix] {
 					return '${prefix}__${typename}'
 				}
+				dot_idx := current_prefix.index('.') or { break }
+				current_prefix = current_prefix[dot_idx + 1..]
 			}
 		}
 	}
