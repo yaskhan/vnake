@@ -183,7 +183,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 	if eg.state.in_assignment_lhs {
 		obj_type = eg.guess_type(node.value)
 		mapped_check := eg.map_python_type(obj_type, false)
-		if obj == 'pkt' || obj == 'pkt_mut' || obj in ['work', 'dev', 'w', 'wkq']
+		if mapped_check.starts_with('?') {
 			|| mapped_check.starts_with('?') {
 			res = '${obj}.${attr_name}'
 		} else {
@@ -204,8 +204,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		}
 
 		mut base_access := '${obj}.${attr_name}'
-		eprintln('DEBUG: visit_attribute obj=${obj} type=${obj_type} mapped=${mapped_check} narrowed=${eg.state.narrowed_vars.keys()}')
-			if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && obj != 'w' && !obj.contains('(') && !obj.contains(' ') && !obj.contains(' as ') && !obj.contains('.py_init') && obj != 'wkq' {
+		if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && !obj.contains('(') && !obj.contains(' ') && !obj.contains(' as ') && !obj.contains('.py_init') {
 			name_node := node.value
 			if name_node is ast.Name {
 				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
