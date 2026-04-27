@@ -198,7 +198,8 @@ pub fn (e &ModuleEmitter) emit() string {
 				variants_seen[v_cls] = true
 			}
 		}
-		parts << 'pub type Any = ${any_variants.join(' | ')}'
+			any_normalized := if 'NoneType' in variants_seen { any_variants.join(' | ') } else { 'NoneType | ' + any_variants.join(' | ') }
+			parts << 'pub type Any = ' + any_normalized
 	}
 
 	if e.constants.len > 0 {

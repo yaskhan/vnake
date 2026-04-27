@@ -214,7 +214,7 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 				base_name = base_name.all_before(' or {').trim_left('(')
 			}
 			mut b_name := base_name.trim('()').trim_space()
-			if obj_type.starts_with('?') || obj_expr.contains(' or {') || b_name.contains('_mut') {
+				if (obj_type.starts_with('?') || obj_expr.contains(' or {') || b_name.contains('_mut')) && !t.state.narrowed_vars[b_name] {
 				t.emit_indented('if mut ${b_name} != none {')
 				t.state.narrowed_vars[b_name] = true
 				t.state.indent_level++
