@@ -13,19 +13,6 @@ pub mut:
 	guess_type_handler fn (ast.Expression, models.TypeGuessingContext) string = unsafe { nil }
 }
 
-fn sanitize_field_name(name string) string {
-	mut res := ''
-	for i := 0; i < name.len; i++ {
-		ch := name[i]
-		if ch.is_capital() && i > 0 {
-			res += '_' + ch.ascii_str().to_lower()
-		} else {
-			res += ch.ascii_str().to_lower()
-		}
-	}
-	return res
-}
-
 pub fn new_type_inference_visitor_mixin() TypeInferenceVisitorMixin {
 	return TypeInferenceVisitorMixin{
 		TypeInferenceUtilsMixin: new_type_inference_utils_mixin()
