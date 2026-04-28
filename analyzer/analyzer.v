@@ -58,9 +58,9 @@ pub fn (a Analyzer) get_type(name string) ?string {
 		}
 	}
 
-	if !name.contains('.') && a.scope_names.len > 0 {
-		for i := a.scope_names.len - 1; i >= 0; i-- {
-			qual := a.scope_names[..i + 1].join('.') + '.' + name
+	if !name.contains('.') && a.scope_prefixes.len > 0 {
+		for i := a.scope_prefixes.len - 1; i >= 0; i-- {
+			qual := a.scope_prefixes[i] + '.' + name
 			if qual in a.type_map {
 				return a.type_map[qual]
 			}

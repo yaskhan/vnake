@@ -1096,7 +1096,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		ast.ClassDef {
 			f.scope_stack << node.name
 			if f.analyzer != unsafe { nil } {
-				f.analyzer.scope_names << node.name
+				f.analyzer.push_scope(node.name)
 			}
 			for stmt in node.body {
 				f.visit_stmt(stmt)
@@ -1104,7 +1104,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			if f.scope_stack.len > 0 {
 				f.scope_stack = f.scope_stack[..f.scope_stack.len - 1]
 				if f.analyzer != unsafe { nil } {
-					f.analyzer.scope_names.pop()
+					f.analyzer.pop_scope()
 				}
 			}
 		}
@@ -1117,7 +1117,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 
 			f.current_func = node.name
 			if f.analyzer != unsafe { nil } {
-				f.analyzer.scope_names << node.name
+				f.analyzer.push_scope(node.name)
 			}
 			mut params := []string{}
 			for param in node.args.posonlyargs {
@@ -1139,7 +1139,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			}
 
 			if f.analyzer != unsafe { nil } {
-				f.analyzer.scope_names.pop()
+				f.analyzer.pop_scope()
 			}
 
 			prefix := f.scope_stack.join('.')
