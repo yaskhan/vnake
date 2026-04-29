@@ -322,17 +322,12 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 			return
 		}
 		if lhs in m.state.global_vars {
-			m.emitter.add_init_statement('${lhs} = ${rhs}')
+			m.emitter.add_init_statement('unsafe { ${lhs} = ${rhs} }')
 			return
 		}
 	}
 
 	is_mut := m.is_mutable_target(target, lhs)
-	if is_mut && m.is_clonable_collection(v_type) && !rhs.contains('.clone()')
-		&& !rhs.starts_with('[') && !rhs.starts_with('map[') {
-		rhs = '${rhs}.clone()'
-	}
-
 	// For Optional[SomeClass] assignments with a concrete value, use the optional type
 	if v_type.starts_with('?') && rhs != 'none' && !rhs.contains('unsafe { nil }') {
 		if v_type in m.local_vars_in_scope {
@@ -456,10 +451,6 @@ fn (mut m VariablesModule) visit_destructuring(target ast.Expression, source_exp
 		is_mut := m.is_mutable_target(target, lhs)
 		mut_prefix := if is_mut { 'mut ' } else { '' }
 		mut rhs := source_expr
-		if is_mut && m.is_clonable_collection(m.guess_type(target, false))
-			&& !rhs.contains('.clone()') && !rhs.starts_with('[') {
-			rhs = '${rhs}.clone()'
-		}
 		m.emit('${mut_prefix}${lhs} := ${rhs}')
 		if !m.state.in_main {
 			m.local_vars_in_scope[lhs] = true

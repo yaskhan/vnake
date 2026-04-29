@@ -28,6 +28,7 @@ pub mut:
 	type_map               map[string]string
 	raw_type_map           map[string]string
 	mutability_map         map[string]MutabilityInfo
+	narrowed_from           map[string]string
 	location_map           map[string]string
 	call_signatures        map[string]CallSignature
 	mixin_to_main          map[string][]string
@@ -38,6 +39,7 @@ pub mut:
 	is_abc                 map[string]bool
 	class_hierarchy        map[string][]string
 	scope_names            []string
+	scope_prefixes         []string
 	explicit_any_types     map[string]bool
 	func_param_mutability  map[string][]int
 	typed_dicts            map[string]bool
@@ -64,6 +66,7 @@ pub fn new_type_inference_base() TypeInferenceBase {
 		is_abc:                 map[string]bool{}
 		class_hierarchy:        map[string][]string{}
 		scope_names:            []string{}
+		scope_prefixes:         []string{}
 		explicit_any_types:     map[string]bool{}
 		func_param_mutability:  map[string][]int{}
 		typed_dicts:            map[string]bool{}
@@ -76,21 +79,29 @@ pub fn new_type_inference_base() TypeInferenceBase {
 	}
 }
 
+// push_scope adds a new scope level and updates the cached prefix.
+// ⚡ Bolt: Maintaining pre-joined scope prefixes avoids O(N^2) work in lookups.
 pub fn (mut t TypeInferenceBase) push_scope(name string) {
 	t.scope_names << name
+	if t.scope_prefixes.len == 0 {
+		t.scope_prefixes << name
+	} else {
+		t.scope_prefixes << t.scope_prefixes[t.scope_prefixes.len - 1] + '.' + name
+	}
 }
 
 pub fn (mut t TypeInferenceBase) pop_scope() {
 	if t.scope_names.len > 0 {
 		t.scope_names = t.scope_names[..t.scope_names.len - 1]
+		t.scope_prefixes = t.scope_prefixes[..t.scope_prefixes.len - 1]
 	}
 }
 
 pub fn (t &TypeInferenceBase) get_qualified_name(name string) string {
-	if t.scope_names.len == 0 {
+	if t.scope_prefixes.len == 0 {
 		return name
 	}
-	return t.scope_names.join('.') + '.' + name
+	return t.scope_prefixes[t.scope_prefixes.len - 1] + '.' + name
 }
 
 pub fn (mut t TypeInferenceBase) set_type(name string, typ string) {
@@ -98,12 +109,11 @@ pub fn (mut t TypeInferenceBase) set_type(name string, typ string) {
 }
 
 pub fn (t &TypeInferenceBase) get_type(name string) string {
-	if !name.contains('.') && t.scope_names.len > 0 {
-		for i := t.scope_names.len - 1; i >= 0; i-- {
-			qual := t.scope_names[..i + 1].join('.') + '.' + name
+	if !name.contains('.') && t.scope_prefixes.len > 0 {
+		for i := t.scope_prefixes.len - 1; i >= 0; i-- {
+			qual := t.scope_prefixes[i] + '.' + name
 			if qual in t.type_map {
 				res := t.type_map[qual]
-				eprintln('DEBUG: analyzer.get_type scoped(${name}) ${qual} = ${res}')
 				return res
 			}
 		}
@@ -111,7 +121,6 @@ pub fn (t &TypeInferenceBase) get_type(name string) string {
 
 	if name in t.type_map {
 		res := t.type_map[name]
-		eprintln('DEBUG: analyzer.get_type ${name} = ${res}')
 		return res
 	}
 
@@ -170,9 +179,9 @@ pub fn (mut t TypeInferenceBase) set_mutability(name string, info MutabilityInfo
 }
 
 pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
-	if !name.contains('.') && t.scope_names.len > 0 {
-		for i := t.scope_names.len - 1; i >= 0; i-- {
-			qual := t.scope_names[..i + 1].join('.') + '.' + name
+	if !name.contains('.') && t.scope_prefixes.len > 0 {
+		for i := t.scope_prefixes.len - 1; i >= 0; i-- {
+			qual := t.scope_prefixes[i] + '.' + name
 			if qual in t.mutability_map {
 				return t.mutability_map[qual]
 			}
@@ -213,7 +222,6 @@ pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
 }
 
 pub fn (mut t TypeInferenceBase) add_class_to_hierarchy(class_name string, bases []string) {
-	eprintln('DEBUG: TypeInferenceBase.add_class_to_hierarchy name=${class_name}')
 	t.class_hierarchy[class_name] = bases
 	t.defined_classes_cache[class_name] = map[string]bool{}
 }

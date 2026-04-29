@@ -202,6 +202,16 @@ fn (h ClassFieldsHandler) get_field_def_info(name string, field_type string, str
 	normalized_type := h.normalize_field_type(field_type)
 	// Add & to class types for fields, but not for interfaces
 	mut final_type := normalized_type
+
+	// Ensure class types are references in fields
+	if env.state.is_v_class_type(final_type) && !final_type.starts_with('&') {
+		if final_type.starts_with('?') {
+			final_type = '?&' + final_type[1..]
+		} else {
+			final_type = '&' + final_type
+		}
+	}
+
 	clean := final_type.trim_left('?!')
 	mut def := '    ${name} ${final_type}'
 	if default_val.len > 0 && !h.should_strip_init(field_type, default_val) {

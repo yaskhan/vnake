@@ -92,6 +92,7 @@ pub mut:
 	current_module_name          string
 	current_file_name            string
 	scc_files                    map[string]bool
+	scc_prefixes                 map[string]string
 	module_all                   []string
 	defined_top_level_symbols    map[string]bool
 	warnings                     []string
@@ -111,6 +112,7 @@ pub mut:
 	readonly_fields              map[string]map[string]bool
 	cond_optional_var_type       map[string]string
 	narrowed_vars                map[string]bool
+	narrowed_from                map[string]string
 	typed_dicts                  map[string]bool
 	class_hierarchy_initialized  bool
 	cached_indents               []string
@@ -215,6 +217,7 @@ pub fn new_translator_state() &TranslatorState {
 		current_module_name:          'main'
 		current_file_name:            ''
 		scc_files:                    map[string]bool{}
+		scc_prefixes:                 map[string]string{}
 		module_all:                   []string{}
 		defined_top_level_symbols:    map[string]bool{}
 		warnings:                     []string{}
@@ -231,6 +234,7 @@ pub fn new_translator_state() &TranslatorState {
 		readonly_fields:              map[string]map[string]bool{}
 		cond_optional_var_type:       map[string]string{}
 		narrowed_vars:                map[string]bool{}
+		narrowed_from:                map[string]string{}
 		typed_dicts:                  map[string]bool{}
 		class_hierarchy_initialized:  false
 		cached_indents:               cached_indents.clone()

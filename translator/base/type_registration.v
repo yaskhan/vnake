@@ -97,12 +97,22 @@ pub fn register_sum_type(v_union_type string, active_v_generics []string, includ
 	mut type_name := 'SumType_' + parts.map(clean_sum_part(it)).join('')
 	base_name := type_name
 	mut counter := 1
-	for {
-		if !generated_sum_types.values().contains(type_name) {
-			break
+
+	// Optimize collision detection: Avoid redundant .values() heap allocations by using a single-pass
+	// lookup map.
+	mut existing_names := map[string]bool{}
+	for _, name in generated_sum_types {
+		existing_names[name] = true
+	}
+
+	if type_name in existing_names {
+		for {
+			type_name = '${base_name}_${counter}'
+			if type_name !in existing_names {
+				break
+			}
+			counter++
 		}
-		type_name = '${base_name}_${counter}'
-		counter++
 	}
 
 	mut used_generics := []string{}
@@ -115,7 +125,8 @@ pub fn register_sum_type(v_union_type string, active_v_generics []string, includ
 	gen_decl := if used_generics.len > 0 { '[${used_generics.join(', ')}]' } else { '' }
 	gen_args := gen_decl
 	pub_prefix := if include_all_symbols { 'pub ' } else { '' }
-	emitter.add_helper_struct('${pub_prefix}type ${type_name}${gen_decl} = ${normalized}')
+		final_normalized := if normalized.contains('NoneType') { normalized } else { 'NoneType | ' + normalized }
+		emitter.add_helper_struct('${pub_prefix}type ${type_name}${gen_decl} = ${final_normalized}')
 	result := '${type_name}${gen_args}'
 	generated_sum_types[normalized] = result
 	return result
@@ -135,7 +146,7 @@ pub fn register_tuple_struct(tuple_types_str string, include_all_symbols bool, m
 		fields << '    it_${i} ${v_type}'
 	}
 	pub_prefix := if include_all_symbols { 'pub ' } else { '' }
-	struct_def := '${pub_prefix}struct ${struct_name} {\n${fields.join('\n')}\n}'
+	struct_def := '@[heap]\n${pub_prefix}struct ${struct_name} {\n${fields.join('\n')}\n}'
 	emitter.add_helper_struct(struct_def)
 	generated_tuple_structs[struct_name] = struct_name
 	return struct_name

@@ -52,6 +52,7 @@ pub fn (mut m ControlFlowModule) visit_continue(_ ast.Continue) {
 }
 
 pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
+	m.env.emit_save_back_all()
 	if m.env.state.scope_names.len > 0 {
 		last_scope := m.env.state.scope_names[m.env.state.scope_names.len - 1]
 		if last_scope == '__next__' || last_scope == 'next' {
@@ -93,6 +94,25 @@ pub fn (mut m ControlFlowModule) visit_return(node ast.Return) {
 				is_opt_source := v_type.starts_with('?')
 
 				is_any_source := v_type == 'Any' || v_type == ''
+				v_pure_src_optimized := v_type.trim_left('?&').all_before('[')
+
+				// Optimization: if we are returning Any, or source type is already known to implement the interface
+				if pure == 'Any' || (!is_any_source && (m.env.state.implements_interface(v_pure_src_optimized, pure) || v_pure_src_optimized == pure)) {
+					if is_opt_source {
+						if is_opt_target {
+							m.emit('return if val_raw := ' + expr + ' { ?' + pure + '(val_raw as ' + pure + ') } else { none }')
+						} else {
+							m.emit('return ((' + expr + ' or { panic("missing return value") }) as ' + pure + ')')
+						}
+					} else {
+						if is_opt_target {
+							m.emit('return ?' + pure + '(' + expr + ' as ' + pure + ')')
+						} else {
+							m.emit('return ' + expr + ' as ' + pure)
+						}
+					}
+					return
+				}
 				if is_any_source || is_opt_source
 					|| (expr.contains('.') && !expr.contains('(')) || expr == 't' {
 					m.emit('mut ret_match_val := ?${pure}(none)')

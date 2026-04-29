@@ -22,43 +22,57 @@ pub mut:
 
 pub struct GlobalHelpers {
 pub mut:
-	imports       []string
-	structs       []string
-	functions     []string
-	classes       []string
-	used_builtins map[string]bool
+	imports           []string
+	structs           []string
+	functions         []string
+	classes           []string
+	used_builtins     map[string]bool
+	defined_imports   map[string]bool
+	defined_structs   map[string]bool
+	defined_functions map[string]bool
+	defined_classes   map[string]bool
 }
 
 pub fn new_global_helpers() GlobalHelpers {
 	return GlobalHelpers{
-		imports:       []string{}
-		structs:       []string{}
-		functions:     []string{}
-		classes:       []string{}
-		used_builtins: map[string]bool{}
+		imports:           []string{}
+		structs:           []string{}
+		functions:         []string{}
+		classes:           []string{}
+		used_builtins:     map[string]bool{}
+		defined_imports:   map[string]bool{}
+		defined_structs:   map[string]bool{}
+		defined_functions: map[string]bool{}
+		defined_classes:   map[string]bool{}
 	}
 }
 
+// merge combines helper symbols from a translator into the global helpers.
+// ⚡ Bolt: Uses tracking maps for O(1) duplicate checks to avoid O(N^2) complexity during merging.
 pub fn (mut g GlobalHelpers) merge(trans &translator.Translator) {
 	for imp in trans.get_helper_imports() {
-		if imp !in g.imports {
+		if imp !in g.defined_imports {
+			g.defined_imports[imp] = true
 			g.imports << imp
 		}
 	}
 	for s in trans.get_helper_structs() {
-		if s !in g.structs {
+		if s !in g.defined_structs {
+			g.defined_structs[s] = true
 			g.structs << s
 		}
 	}
 	for f in trans.get_helper_functions() {
-		if f !in g.functions {
+		if f !in g.defined_functions {
+			g.defined_functions[f] = true
 			g.functions << f
 		}
 	}
 
 	for k, _ in trans.state.defined_classes {
 		v_cls := trans.state.class_to_impl[k] or { k }
-		if v_cls !in g.classes {
+		if v_cls !in g.defined_classes {
+			g.defined_classes[v_cls] = true
 			g.classes << v_cls
 		}
 	}

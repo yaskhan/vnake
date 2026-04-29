@@ -826,9 +826,10 @@ pub mut:
 	scope_stack           []string
 	mutability_map        map[string]MutabilityInfo
 	seen_in_scope         map[string]bool
+	analyzer              &Analyzer = unsafe { nil }
 }
 
-pub fn new_function_mutability_scanner() FunctionMutabilityScanner {
+pub fn new_function_mutability_scanner(a &Analyzer) FunctionMutabilityScanner {
 	return FunctionMutabilityScanner{
 		func_param_mutability: map[string][]int{}
 		current_func:          ''
@@ -838,6 +839,7 @@ pub fn new_function_mutability_scanner() FunctionMutabilityScanner {
 		scope_stack:           []string{}
 		mutability_map:        map[string]MutabilityInfo{}
 		seen_in_scope:         map[string]bool{}
+		analyzer:              a
 	}
 }
 
@@ -942,11 +944,22 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 				attr := node.func
 				if is_mutating_method(attr.attr) {
 					f.mark_mutated(attr.value)
-				} else {
-					// Propagate mutability from called method (best effort without full types)
-					// We might not know obj_type here, so we check various possibilities
-					if attr.value is ast.Name {
-						// name.method()
+				} else if f.analyzer != unsafe { nil } {
+					// Propagate mutability from called method
+					obj_type := f.analyzer.guess_expr_type(attr.value).trim_left('?&')
+					if obj_type != 'Any' && obj_type != '' {
+						mut_key := '${obj_type}.${attr.attr}.self'
+						info := f.analyzer.get_mutability(mut_key)
+						if info.is_mutated {
+							f.mark_mutated(attr.value)
+						} else {
+							// Try CamelCase
+							mut_key_cc := '${obj_type}.${to_camel_case(attr.attr)}.self'
+							info_cc := f.analyzer.get_mutability(mut_key_cc)
+							if info_cc.is_mutated {
+								f.mark_mutated(attr.value)
+							}
+						}
 					}
 				}
 			}
@@ -1082,11 +1095,17 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 	match node {
 		ast.ClassDef {
 			f.scope_stack << node.name
+			if f.analyzer != unsafe { nil } {
+				f.analyzer.push_scope(node.name)
+			}
 			for stmt in node.body {
 				f.visit_stmt(stmt)
 			}
 			if f.scope_stack.len > 0 {
 				f.scope_stack = f.scope_stack[..f.scope_stack.len - 1]
+				if f.analyzer != unsafe { nil } {
+					f.analyzer.pop_scope()
+				}
 			}
 		}
 		ast.FunctionDef {
@@ -1097,6 +1116,9 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			old_seen := f.seen_in_scope.clone()
 
 			f.current_func = node.name
+			if f.analyzer != unsafe { nil } {
+				f.analyzer.push_scope(node.name)
+			}
 			mut params := []string{}
 			for param in node.args.posonlyargs {
 				params << param.arg
@@ -1114,6 +1136,10 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 
 			for stmt in node.body {
 				f.visit_stmt(stmt)
+			}
+
+			if f.analyzer != unsafe { nil } {
+				f.analyzer.pop_scope()
 			}
 
 			prefix := f.scope_stack.join('.')

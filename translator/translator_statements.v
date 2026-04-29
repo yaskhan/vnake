@@ -181,6 +181,7 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 
 		if t.is_declared_local(target_lhs) {
 			t.emit_indented('${target_lhs} = ${source_expr}')
+			t.emit_save_back(target_lhs)
 		} else {
 			t.emit_indented('${target_lhs} := ${source_expr}')
 			t.declare_local(target_lhs)
@@ -313,19 +314,13 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 				for i := args_to_skip; i < val.args.len; i++ {
 					arg_strs << t.visit_expr(val.args[i])
 				}
-				mut factory_name := base.get_factory_name(parent_name, t.state.class_hierarchy)
-				if parent_name in t.state.current_class_generic_bases {
-					base_type := t.state.current_class_generic_bases[parent_name]
-					if bracket_idx := base_type.index('[') {
-						factory_name += base_type[bracket_idx..]
-					}
-				}
+
 				target_name := if parent_name in t.state.known_interfaces {
 					'${parent_name}_Impl'
 				} else {
 					parent_name
 				}
-				t.emit_indented('self.${target_name} = *${factory_name}(${arg_strs.join(', ')})')
+				t.emit_indented('self.${target_name}.py_init(${arg_strs.join(', ')})')
 				return
 			}
 		}
@@ -337,6 +332,9 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 	expr := t.visit_expr(val)
 	if expr.len > 0 {
 		t.emit_indented(expr)
+	}
+	if val is ast.Call {
+		t.emit_call_save_backs(val)
 	}
 }
 
@@ -428,6 +426,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			} else {
 				t.emit_indented('${names.join(', ')} = ${values.join(', ')}')
+				for name in names { t.emit_save_back(name) }
 			}
 			return
 		}
@@ -490,6 +489,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 				}
 			} else {
 				t.emit_indented('${lhs_parts.join(', ')} = ${rhs_parts.join(', ')}')
+				for p in lhs_parts { t.emit_save_back(p) }
 			}
 			return
 		}
@@ -948,7 +948,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 					}
 					mut ve := unsafe { &VCodeEmitter(t.state.emitter) }
 					ve.add_global('__global ${v_id} ${decl_type}')
-					t.emit_indented('${v_id} = ${rhs_text}')
+					t.emit_indented('unsafe { ${v_id} = ${rhs_text} }')
 				} else {
 					t.emit_indented('${pub_prefix}const ${v_id} = ${rhs_text}')
 				}
@@ -1084,6 +1084,7 @@ fn (mut t Translator) visit_aug_assign(node ast.AugAssign) {
 			'int(math.pow(f64(${target_expr}), f64(${value_expr})))'
 		}
 		t.emit_indented('${target_expr} = ${rhs}')
+		t.mark_as_mutated(node.target)
 		return
 	}
 
@@ -1097,6 +1098,7 @@ fn (mut t Translator) visit_aug_assign(node ast.AugAssign) {
 			'${out_type}(math.floor(f64(${target_expr}) / f64(${value_expr})))'
 		}
 		t.emit_indented('${target_expr} = ${rhs}')
+		t.mark_as_mutated(node.target)
 		return
 	}
 
@@ -1162,4 +1164,79 @@ fn (mut t Translator) emit_yield_from(node ast.YieldFrom) {
 		}
 	}
 	t.emit_indented('/* yield from outside generator */ ${val}')
+}
+
+fn (mut t Translator) emit_save_back(name string) {
+	mut current := name
+	mut seen := map[string]bool{}
+	for {
+		if current in seen { break }
+		seen[current] = true
+		source := t.state.narrowed_from[current] or { break }
+		if source.len == 0 { break }
+		t.emit_indented('${source} = ${current}')
+		if source.contains('.') {
+			base_obj := source.all_before('.')
+			if base_obj in t.state.narrowed_from {
+				current = base_obj
+				continue
+			}
+		} else if source in t.state.narrowed_from {
+			current = source
+			continue
+		}
+		break
+	}
+}
+
+fn (mut t Translator) emit_call_save_backs(node ast.Call) {
+	mut eg := expressions.new_expr_gen(&t.model, t.analyzer, t.state)
+	func_name_str, loc_key := eg.extract_func_info(node)
+	call_sig := eg.get_call_signature(func_name_str, loc_key)
+	if sig := call_sig {
+		for i, arg in node.args {
+			if i < sig.arg_names.len {
+				formal_arg := sig.arg_names[i]
+				p_key := '${func_name_str}.${formal_arg}'
+				m_info := t.analyzer.get_mutability(p_key)
+				if m_info.is_mutated {
+					if arg is ast.Name {
+						t.emit_save_back(arg.id)
+					} else if arg is ast.Attribute {
+						if arg.value is ast.Name {
+							t.emit_save_back(arg.value.id)
+						}
+					}
+				}
+			}
+		}
+		if node.func is ast.Attribute {
+			attr := node.func
+			obj_type := t.guess_type(attr.value)
+			obj_type_clean := obj_type.trim_left('?&')
+			keys := [
+				'${obj_type_clean}.${attr.attr}.self',
+				'${obj_type_clean}.${base.to_camel_case(attr.attr)}.self',
+			]
+			for k in keys {
+				info := t.analyzer.get_mutability(k)
+				if info.is_mutated {
+					if attr.value is ast.Name {
+						t.emit_save_back(attr.value.id)
+					}
+					break
+				}
+			}
+		}
+	}
+}
+
+fn (mut t Translator) mark_as_mutated(expr ast.Expression) {
+	if expr is ast.Name {
+		t.emit_save_back(expr.id)
+	} else if expr is ast.Attribute {
+		if expr.value is ast.Name {
+			t.emit_save_back(expr.value.id)
+		}
+	}
 }

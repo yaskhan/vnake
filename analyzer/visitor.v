@@ -3,7 +3,7 @@ module analyzer
 import ast
 import models
 
-const mutating_methods = ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update',
+const mutating_methods = ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'workInAdd', 'deviceInAdd',
 	'setdefault', 'delete', 'add', 'discard']
 
 pub struct TypeInferenceVisitorMixin {
@@ -11,19 +11,6 @@ pub struct TypeInferenceVisitorMixin {
 pub mut:
 	analyzer_ptr       voidptr = unsafe { nil }
 	guess_type_handler fn (ast.Expression, models.TypeGuessingContext) string = unsafe { nil }
-}
-
-fn sanitize_field_name(name string) string {
-	mut res := ''
-	for i := 0; i < name.len; i++ {
-		ch := name[i]
-		if ch.is_capital() && i > 0 {
-			res += '_' + ch.ascii_str().to_lower()
-		} else {
-			res += ch.ascii_str().to_lower()
-		}
-	}
-	return res
 }
 
 pub fn new_type_inference_visitor_mixin() TypeInferenceVisitorMixin {
@@ -164,7 +151,6 @@ fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 	if name.len == 0 || typ.len == 0 {
 		return
 	}
-	eprintln('DEBUG: analyzer.store_type ${name} = ${typ} (in ${t.scope_names.join('/')})')
 	if t.scope_names.len == 0 {
 		t.type_map[name] = typ
 	}
@@ -596,7 +582,6 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_expr(node ast.Expression) {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_module(node ast.Module) {
-	eprintln('DEBUG: visit_module body_len=${node.body.len}')
 	for stmt in node.body {
 		t.visit_stmt(stmt)
 	}
@@ -1284,6 +1269,13 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_class_def(node ast.ClassDef) {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
+	if node.targets.len > 0 && node.targets[0] is ast.Name && node.value is ast.Call {
+		target := node.targets[0] as ast.Name
+		call := node.value as ast.Call
+		if call.func is ast.Name && (call.func as ast.Name).id == "cast" && call.args.len >= 2 {
+			t.narrowed_from[target.id] = t.render_expr(call.args[1])
+		}
+	}
 	t.visit_expr(node.value)
 
 	mut value_type := t.guess_expr_type(node.value)
@@ -1531,7 +1523,6 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 				s := t.scope_names[i]
 				if s.len > 0 && s[0].is_capital() {
 					t.type_map['${s}.${target_name}'] = v_type
-					eprintln('DEBUG: analyzer visit_ann_assign STORED ${s}.${target_name} = ${v_type}')
 					break
 				}
 			}

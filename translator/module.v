@@ -13,23 +13,31 @@ pub mut:
 	init_statements  []string
 	main_statements  []string
 	constants        []string
-	globals          []string
-	defined_classes  map[string]bool
-	omit_builtins    bool
-	used_builtins    map[string]bool
+	globals                  []string
+	defined_classes          map[string]bool
+	defined_helper_functions map[string]bool
+	defined_helper_structs   map[string]bool
+	defined_constants        map[string]bool
+	defined_globals          map[string]bool
+	omit_builtins            bool
+	used_builtins            map[string]bool
 }
 
 pub fn new_module_emitter() ModuleEmitter {
 	return ModuleEmitter{
-		module_name:      'main'
-		helper_structs:   []string{}
-		helper_functions: []string{}
-		imports:          map[string]bool{}
-		init_statements:  []string{}
-		main_statements:  []string{}
-		constants:        []string{}
-		globals:          []string{}
-		defined_classes:  map[string]bool{}
+		module_name:              'main'
+		helper_structs:           []string{}
+		helper_functions:         []string{}
+		imports:                  map[string]bool{}
+		init_statements:          []string{}
+		main_statements:          []string{}
+		constants:                []string{}
+		globals:                  []string{}
+		defined_classes:          map[string]bool{}
+		defined_helper_functions: map[string]bool{}
+		defined_helper_structs:   map[string]bool{}
+		defined_constants:        map[string]bool{}
+		defined_globals:          map[string]bool{}
 	}
 }
 
@@ -72,12 +80,10 @@ pub fn (mut e ModuleEmitter) add_helper_struct(code string) {
 		return
 	}
 
-	for existing in e.helper_structs {
-		ex_name := extract_symbol_name(existing, ['pub', 'struct', 'interface', 'type'])
-		if name == ex_name {
-			return
-		}
+	if name in e.defined_helper_structs {
+		return
 	}
+	e.defined_helper_structs[name] = true
 	e.helper_structs << code
 }
 
@@ -88,12 +94,10 @@ pub fn (mut e ModuleEmitter) add_helper_function(code string) {
 		return
 	}
 
-	for existing in e.helper_functions {
-		ex_name := extract_symbol_name(existing, ['pub', 'fn'])
-		if name == ex_name {
-			return
-		}
+	if name in e.defined_helper_functions {
+		return
 	}
+	e.defined_helper_functions[name] = true
 	e.helper_functions << code
 }
 
@@ -122,20 +126,10 @@ pub fn (mut e ModuleEmitter) add_constant(code string) {
 		name = name.all_before('=').trim_space()
 	}
 
-	for existing in e.constants {
-		mut ex_name := existing.trim_space()
-		if ex_name.starts_with('pub const ') {
-			ex_name = ex_name['pub const '.len..].trim_space()
-		} else if ex_name.starts_with('const ') {
-			ex_name = ex_name['const '.len..].trim_space()
-		}
-		if ex_name.contains('=') {
-			ex_name = ex_name.all_before('=').trim_space()
-		}
-		if name == ex_name {
-			return
-		}
+	if name in e.defined_constants {
+		return
 	}
+	e.defined_constants[name] = true
 	e.constants << code
 }
 
@@ -148,18 +142,10 @@ pub fn (mut e ModuleEmitter) add_global(code string) {
 		name = name.all_before(' ')
 	}
 
-	for existing in e.globals {
-		mut ex_name := existing.trim_space()
-		if ex_name.starts_with('__global ') {
-			ex_name = ex_name['__global '.len..].trim_space()
-		}
-		if ex_name.contains(' ') {
-			ex_name = ex_name.all_before(' ')
-		}
-		if name == ex_name {
-			return
-		}
+	if name in e.defined_globals {
+		return
 	}
+	e.defined_globals[name] = true
 	e.globals << code
 }
 
@@ -190,21 +176,30 @@ pub fn (e &ModuleEmitter) emit() string {
 
 		mut any_variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
 			'map[string]Any']
+		mut variants_seen := map[string]bool{}
+		for v in any_variants {
+			variants_seen[v] = true
+		}
+
 		if e.used_builtins['Template'] {
-			if 'Interpolation' !in any_variants {
+			if 'Interpolation' !in variants_seen {
 				any_variants << 'Interpolation'
+				variants_seen['Interpolation'] = true
 			}
-			if 'Template' !in any_variants {
+			if 'Template' !in variants_seen {
 				any_variants << 'Template'
+				variants_seen['Template'] = true
 			}
 		}
 		for cls_name, _ in e.defined_classes {
 			v_cls := cls_name.trim_left('&')
-			if v_cls !in any_variants {
+			if v_cls !in variants_seen {
 				any_variants << v_cls
+				variants_seen[v_cls] = true
 			}
 		}
-		parts << 'pub type Any = ${any_variants.join(' | ')}'
+			any_normalized := if 'NoneType' in variants_seen { any_variants.join(' | ') } else { 'NoneType | ' + any_variants.join(' | ') }
+			parts << 'pub type Any = ' + any_normalized
 	}
 
 	if e.constants.len > 0 {

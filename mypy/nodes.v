@@ -119,7 +119,7 @@ pub fn (n NodeBase) get_context() Context {
 // Import nodes
 // ---------------------------------------------------------------------------
 
-// import foo [as bar], import baz
+// Import represents an 'import ...' statement.
 @[heap]
 pub struct Import {
 pub mut:
@@ -146,7 +146,7 @@ pub fn (mut n Import) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_import(mut n)!
 }
 
-// from foo import bar [as baz]
+// ImportFrom represents a 'from ... import ...' statement.
 @[heap]
 pub struct ImportFrom {
 pub mut:
@@ -167,7 +167,7 @@ pub fn (mut n ImportFrom) accept(mut v NodeVisitor) !AnyNode {
 	return v.visit_import_from(mut n)!
 }
 
-// from foo import *
+// ImportAll represents a 'from ... import *' statement.
 @[heap]
 pub struct ImportAll {
 pub mut:

@@ -1090,6 +1090,9 @@ pub fn (mut eg ExprGen) handle_special_cases(node ast.Call, module_name string, 
 pub fn (mut eg ExprGen) handle_via_mapper(node ast.Call, module_name string, func_name string, args []string) ?string {
 	if module_name == 'typing' && func_name == 'cast' && args.len >= 2 {
 		typ := args[0].trim("'").trim('"')
+		if eg.state.current_assignment_lhs.len > 0 {
+			eg.state.narrowed_from[eg.state.current_assignment_lhs] = args[1]
+		}
 		return '(${args[1]} as ${typ})'
 	}
 	if module_name == 'typing' && func_name == 'NewType' && args.len >= 2 {
@@ -1384,14 +1387,11 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 		}
 	} else if original_type_raw.starts_with('SumType_') || original_type_raw.contains('|') {
 		// Automatic narrowing for common methods if not explicitly narrowed
-		mut inferred := ''
-		mut variants := ['bool', 'f64', 'i64', 'int', 'string', 'voidptr', 'NoneType', '[]Any',
-			'map[string]Any', '[]i64', '[]f64', '[]int']
-		if attr in ['lower', 'upper', 'capitalize', 'title', 'strip', 'split', 'join', 'isdigit',
-			'isalpha', 'isalnum', 'replace', 'startswith', 'endswith'] {
-			inferred = 'string'
-		} else if attr in ['append', 'extend', 'pop', 'remove', 'sort', 'reverse'] {
-			inferred = '[]Any'
+		mut inferred := match attr {
+			'lower', 'upper', 'capitalize', 'title', 'strip', 'split', 'join', 'isdigit',
+			'isalpha', 'isalnum', 'replace', 'startswith', 'endswith' { 'string' }
+			'append', 'extend', 'pop', 'remove', 'sort', 'reverse' { '[]Any' }
+			else { '' }
 		}
 
 		if inferred.len > 0 {

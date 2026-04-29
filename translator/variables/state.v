@@ -105,6 +105,7 @@ fn (m &VariablesModule) type_utils_context() base.TypeUtilsContext {
 	return base.TypeUtilsContext{
 		imported_symbols:    m.state.imported_symbols
 		scc_files:           m.state.scc_files
+		scc_prefixes:        m.state.scc_prefixes
 		used_builtins:       m.state.used_builtins
 		warnings:            m.state.warnings
 		include_all_symbols: m.state.include_all_symbols
