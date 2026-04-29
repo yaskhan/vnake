@@ -71,25 +71,20 @@ pub fn (a Analyzer) get_type(name string) ?string {
 
 // get_mypy_type returns type from mypy store
 pub fn (a Analyzer) get_mypy_type(name string, loc string) ?string {
-	eprintln('DEBUG: get_mypy_type name=${name} loc=${loc}')
 	if name.len > 0 && loc.len > 0 {
 		if res := a.mypy_store.collected_types[name] {
 			if typ := res[loc] {
-				eprintln('DEBUG: get_mypy_type name=${name} loc=${loc} RESULT=${typ}')
 				return typ
 			}
-			eprintln('DEBUG: get_mypy_type name=${name} loc=${loc} NOT FOUND in keys=${res.keys()}')
 		}
 	}
 	if loc.len > 0 {
 		if res := a.mypy_store.collected_types['@'] {
 			if typ := res[loc] {
-				eprintln('DEBUG: get_mypy_type name=@ loc=${loc} RESULT=${typ}')
 				return typ
 			}
 		}
 	}
-	eprintln('DEBUG: get_mypy_type name=${name} loc=${loc} RESULT=none')
 	return none
 }
 
@@ -118,11 +113,9 @@ pub fn (a Analyzer) get_mutability(name string) MutabilityInfo {
 		lookup = lookup.replace('_Impl.', '.')
 	}
 	if lookup in a.mutability_map {
-		eprintln('DEBUG: get_mutability name=${name} lookup=${lookup} -> FOUND')
 		return a.mutability_map[lookup]
 	}
 	if name != lookup && name in a.mutability_map {
-		eprintln('DEBUG: get_mutability name=${name} ORIGINAL -> FOUND')
 		return a.mutability_map[name]
 	}
 
@@ -137,7 +130,6 @@ pub fn (mut a Analyzer) set_mutability(name string, info MutabilityInfo) {
 
 // add_class_to_hierarchy adds class to hierarchy
 pub fn (mut a Analyzer) add_class_to_hierarchy(class_name string, bases []string) {
-	eprintln('DEBUG: add_class_to_hierarchy name=${class_name}')
 	a.class_hierarchy[class_name] = bases
 	a.defined_classes_cache[class_name] = map[string]bool{}
 }
@@ -176,11 +168,7 @@ pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
 
 // load_mypy_data loads data from MypyPluginStore
 pub fn (mut a Analyzer) load_mypy_data(store MypyPluginStore) {
-	eprintln('DEBUG: load_mypy_data entries=${store.collected_types.len}')
 	for k, v in store.collected_types {
-		if k == 'taskWorkArea' {
-			eprintln('DEBUG: load_mypy_data FOUND taskWorkArea')
-		}
 		if k !in a.mypy_store.collected_types {
 			a.mypy_store.collected_types[k] = map[string]string{}
 		}

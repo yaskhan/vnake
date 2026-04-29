@@ -151,7 +151,6 @@ fn (mut t TypeInferenceVisitorMixin) store_type(name string, typ string) {
 	if name.len == 0 || typ.len == 0 {
 		return
 	}
-	eprintln('DEBUG: analyzer.store_type ${name} = ${typ} (in ${t.scope_names.join('/')})')
 	if t.scope_names.len == 0 {
 		t.type_map[name] = typ
 	}
@@ -583,7 +582,6 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_expr(node ast.Expression) {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_module(node ast.Module) {
-	eprintln('DEBUG: visit_module body_len=${node.body.len}')
 	for stmt in node.body {
 		t.visit_stmt(stmt)
 	}
@@ -1525,7 +1523,6 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 				s := t.scope_names[i]
 				if s.len > 0 && s[0].is_capital() {
 					t.type_map['${s}.${target_name}'] = v_type
-					eprintln('DEBUG: analyzer visit_ann_assign STORED ${s}.${target_name} = ${v_type}')
 					break
 				}
 			}
