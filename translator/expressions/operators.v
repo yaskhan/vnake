@@ -400,7 +400,8 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 	})
 
 	// Idiomatic V 'or' block for Optional types
-	if !is_and && (left_type.starts_with('?') || (left_type == 'Any' && l_val.contains(' as '))) {
+	is_narrowed_l := eg.state.narrowed_vars[l_val] || l_val.ends_with('_mut')
+	if !is_and && !is_narrowed_l && (left_type.starts_with('?') || (left_type == 'Any' && l_val.contains(' as '))) {
 		return '${l_val} or { ${r_val} }'
 	}
 
@@ -415,10 +416,19 @@ fn (mut eg ExprGen) build_pythonic_bool_op(node ast.BinaryOp, is_and bool) strin
 	mut r_expr := r_val
 	if eg.state.current_assignment_type == 'Any' {
 		if !l_expr.starts_with('Any(') && left_type != 'Any' {
-			l_expr = if left_type.starts_with('?') { 'Any(${l_expr}!)' } else { 'Any(${l_expr})' }
+			l_expr = if left_type.starts_with('?') && !is_narrowed_l {
+				'Any(${l_expr}!)'
+			} else {
+				'Any(${l_expr})'
+			}
 		}
+		is_narrowed_r := eg.state.narrowed_vars[r_val] || r_val.ends_with('_mut')
 		if !r_expr.starts_with('Any(') && right_type != 'Any' {
-			r_expr = if right_type.starts_with('?') { 'Any(${r_expr}!)' } else { 'Any(${r_expr})' }
+			r_expr = if right_type.starts_with('?') && !is_narrowed_r {
+				'Any(${r_expr}!)'
+			} else {
+				'Any(${r_expr})'
+			}
 		}
 	}
 
@@ -442,15 +452,28 @@ fn (mut eg ExprGen) build_truthiness_for_or(node ast.Expression, is_or bool) str
 
 	// For optional types
 	if v_type.starts_with('?') {
+		is_narrowed := eg.state.narrowed_vars[expr] || expr.ends_with('_mut')
 		inner := v_type[1..]
 		if is_collection_type(inner) {
+			if is_narrowed {
+				return '${expr}.len > 0'
+			}
 			return '(${expr} != none && ${expr}!.len > 0)'
 		}
 		if is_numeric_type(inner) {
+			if is_narrowed {
+				return '${expr} != 0'
+			}
 			return '(${expr} != none && ${expr}! != 0)'
 		}
 		if inner == 'string' || inner == 'LiteralString' {
+			if is_narrowed {
+				return '${expr}.len > 0'
+			}
 			return '(${expr} != none && ${expr}!.len > 0)'
+		}
+		if is_narrowed {
+			return 'true'
 		}
 		return '${expr} != none'
 	}

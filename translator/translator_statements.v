@@ -214,13 +214,15 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 				base_name = base_name.all_before(' or {').trim_left('(')
 			}
 			mut b_name := base_name.trim('()').trim_space()
-				if (obj_type.starts_with('?') || obj_expr.contains(' or {') || b_name.contains('_mut')) && !t.state.narrowed_vars[b_name] {
+			sanitized_b := base.sanitize_name_helper(b_name, false)
+			is_narrowed := t.state.narrowed_vars[sanitized_b] || sanitized_b.ends_with('_mut')
+			if (obj_type.starts_with('?') || obj_expr.contains(' or {') || b_name.contains('_mut')) && !is_narrowed {
 				t.emit_indented('if mut ${b_name} != none {')
-				t.state.narrowed_vars[b_name] = true
+				t.state.narrowed_vars[sanitized_b] = true
 				t.state.indent_level++
 				t.emit_indented('${t.visit_expr(target)} = ${source_expr}')
 				t.state.indent_level--
-				t.state.narrowed_vars.delete(b_name)
+				t.state.narrowed_vars.delete(sanitized_b)
 				t.emit_indented('} else { panic("unwrap failed for assignment to ${b_name}") }')
 				return
 			}

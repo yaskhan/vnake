@@ -80,7 +80,14 @@ pub fn wrap_bool(node ast.Expression, expr string, v_type string, invert bool) s
 
 	if v_type.starts_with('?') {
 		inner := v_type[1..]
-		inner_cond := bool_condition(expr, inner, invert)
+		// In V 0.5, we must unwrap for the inner condition if it's not a simple != none check.
+		// We use (expr or { default }) to safely unwrap within the condition.
+		mut unwrapped_expr := expr
+		if (is_numeric_type(inner) || is_collection_type(inner) || inner == 'bool' || is_string_type(inner)) && !expr.contains(' ') && !expr.contains('(') && !expr.contains('{') {
+			unwrapped_expr = '(${expr} or { ${get_v_default_value(inner, []string{})} })'
+		}
+
+		inner_cond := bool_condition(unwrapped_expr, inner, invert)
 		if invert {
 			if inner_cond.len > 0 {
 				return '(${expr} == none || ${inner_cond})'
