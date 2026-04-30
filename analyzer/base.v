@@ -38,6 +38,7 @@ pub mut:
 	class_methods          map[string][]string
 	is_abc                 map[string]bool
 	class_hierarchy        map[string][]string
+	class_children         map[string][]string
 	scope_names            []string
 	scope_prefixes         []string
 	explicit_any_types     map[string]bool
@@ -65,6 +66,7 @@ pub fn new_type_inference_base() TypeInferenceBase {
 		class_methods:          map[string][]string{}
 		is_abc:                 map[string]bool{}
 		class_hierarchy:        map[string][]string{}
+		class_children:         map[string][]string{}
 		scope_names:            []string{}
 		scope_prefixes:         []string{}
 		explicit_any_types:     map[string]bool{}
@@ -179,6 +181,16 @@ pub fn (mut t TypeInferenceBase) set_mutability(name string, info MutabilityInfo
 }
 
 pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
+	mut visited := map[string]bool{}
+	return t.get_mutability_recursive(name, mut visited)
+}
+
+fn (t &TypeInferenceBase) get_mutability_recursive(name string, mut visited map[string]bool) MutabilityInfo {
+	if name in visited {
+		return MutabilityInfo{}
+	}
+	visited[name] = true
+
 	if !name.contains('.') && t.scope_prefixes.len > 0 {
 		for i := t.scope_prefixes.len - 1; i >= 0; i-- {
 			qual := t.scope_prefixes[i] + '.' + name
@@ -191,6 +203,7 @@ pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
 	if name in t.mutability_map {
 		return t.mutability_map[name]
 	}
+
 	if name.contains('.') {
 		cls := name.all_before_last('.')
 		meth_arg := name.all_after_last('.')
@@ -201,20 +214,18 @@ pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
 			if b == 'object' {
 				continue
 			}
-			res := t.get_mutability('${b}.${meth_arg}')
+			res := t.get_mutability_recursive('${b}.${meth_arg}', mut visited)
 			if res.is_mutated || res.is_reassigned {
 				return res
 			}
 		}
 
 		// 2. Look DOWN (interfaces -> implementations)
-		// If current class is a base/interface, check if ANY child-impl has mut
-		for potential_impl, parents in t.class_hierarchy {
-			if cls in parents {
-				res := t.get_mutability('${potential_impl}.${meth_arg}')
-				if res.is_mutated || res.is_reassigned {
-					return res
-				}
+		// ⚡ Bolt: Using pre-calculated class_children map avoids O(N) scan of entire hierarchy.
+		for child in t.class_children[cls] {
+			res := t.get_mutability_recursive('${child}.${meth_arg}', mut visited)
+			if res.is_mutated || res.is_reassigned {
+				return res
 			}
 		}
 	}
@@ -224,6 +235,11 @@ pub fn (t &TypeInferenceBase) get_mutability(name string) MutabilityInfo {
 pub fn (mut t TypeInferenceBase) add_class_to_hierarchy(class_name string, bases []string) {
 	t.class_hierarchy[class_name] = bases
 	t.defined_classes_cache[class_name] = map[string]bool{}
+	for b in bases {
+		if class_name !in t.class_children[b] {
+			t.class_children[b] << class_name
+		}
+	}
 }
 
 pub fn (t &TypeInferenceBase) get_class_bases(class_name string) []string {
