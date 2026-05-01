@@ -184,7 +184,6 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 		obj_type = eg.guess_type(node.value)
 		mapped_check := eg.map_python_type(obj_type, false)
 		if mapped_check.starts_with('?') {
-			|| mapped_check.starts_with('?') {
 			res = '${obj}.${attr_name}'
 		} else {
 			res = '${obj}.${attr_name}'
