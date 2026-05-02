@@ -59,9 +59,9 @@ pub fn (mut t Translator) visit_stmt(node ast.Statement) {
 	} else if node is ast.TypeAlias {
 		t.visit_type_alias(node)
 	} else if node is ast.Global {
-		t.emit_indented('// global ${node.names.join(', ')}')
+		t.emit_indented('// global ${node.names.join(", ")}')
 	} else if node is ast.Nonlocal {
-		t.emit_indented('// nonlocal ${node.names.join(', ')}')
+		t.emit_indented('// nonlocal ${node.names.join(", ")}')
 	} else {
 		t.emit_indented('//##LLM@@ Unsupported statement: ${node.str()}')
 	}
@@ -239,7 +239,7 @@ fn (mut t Translator) visit_expr_stmt(node ast.Expr) {
 			}
 			// If it's a type hint string (e.g. 'map[string]Node') we don't emit it as comment
 			trimmed := content.trim_space()
-			if trimmed.starts_with('map[') || trimmed.starts_with('[]')) && trimmed.contains(']' {
+			if (trimmed.starts_with('map[') || trimmed.starts_with('[]')) && trimmed.contains(']') {
 				return
 			}
 			for line in content.split_into_lines() {
@@ -862,7 +862,8 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			mut rhs_text := eg.visit(value)
 			t.state.current_assignment_lhs = ''
 
-			if t.state.current_ann_raw == 'LiteralString' || t.state.current_ann_raw == 'typing.LiteralString' {
+			if (t.state.current_ann_raw == 'LiteralString'
+				|| t.state.current_ann_raw == 'typing.LiteralString') {
 				if !base.is_literal_string_expr(value, eg.type_ctx()) {
 					t.emit_indented('//##LLM@@ SECURITY WARNING: Assigning non-literal string to LiteralString.')
 				}

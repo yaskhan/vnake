@@ -518,116 +518,67 @@ pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_stmt(node ast.Statement) {
-	if node is ast.Expr {
-		t.visit_expr_stmt(node)
-	} else if node is ast.Assign {
-		t.visit_assign(node)
-	} else if node is ast.AugAssign {
-		t.visit_aug_assign(node)
-	} else if node is ast.AnnAssign {
-		t.visit_ann_assign(node)
-	} else if node is ast.FunctionDef {
-		t.visit_function_def(node)
-	} else if node is ast.ClassDef {
-		t.visit_class_def(node)
-	} else if node is ast.If {
-		t.visit_if(node)
-	} else if node is ast.For {
-		t.visit_for(node)
-	} else if node is ast.While {
-		t.visit_while(node)
-	} else if node is ast.With {
-		t.visit_with(node)
-	} else if node is ast.Try {
-		t.visit_try(node)
-	} else if node is ast.TryStar {
-		t.visit_try_star(node)
-	} else if node is ast.Match {
-		t.visit_match(node)
-	} else if node is ast.Return {
-		t.visit_return(node)
-	} else if node is ast.Import {
-		t.visit_import(node)
-	} else if node is ast.ImportFrom {
-		t.visit_import_from(node)
-	} else if node is ast.Global {
-		t.visit_global(node)
-	} else if node is ast.Nonlocal {
-		t.visit_nonlocal(node)
-	} else if node is ast.Assert {
-		t.visit_assert(node)
-	} else if node is ast.Raise {
-		t.visit_raise(node)
-	} else if node is ast.Delete {
-		t.visit_delete(node)
-	} else if node is ast.Pass {
-		t.visit_pass(node)
-	} else if node is ast.Break {
-		t.visit_break(node)
-	} else if node is ast.Continue {
-		t.visit_continue(node)
-	} else if node is ast.TypeAlias {
-		t.visit_type_alias(node)
+	match node {
+		ast.Expr { t.visit_expr_stmt(node) }
+		ast.Assign { t.visit_assign(node) }
+		ast.AugAssign { t.visit_aug_assign(node) }
+		ast.AnnAssign { t.visit_ann_assign(node) }
+		ast.FunctionDef { t.visit_function_def(node) }
+		ast.ClassDef { t.visit_class_def(node) }
+		ast.If { t.visit_if(node) }
+		ast.For { t.visit_for(node) }
+		ast.While { t.visit_while(node) }
+		ast.With { t.visit_with(node) }
+		ast.Try { t.visit_try(node) }
+		ast.TryStar { t.visit_try_star(node) }
+		ast.Match { t.visit_match(node) }
+		ast.Return { t.visit_return(node) }
+		ast.Import { t.visit_import(node) }
+		ast.ImportFrom { t.visit_import_from(node) }
+		ast.Global { t.visit_global(node) }
+		ast.Nonlocal { t.visit_nonlocal(node) }
+		ast.Assert { t.visit_assert(node) }
+		ast.Raise { t.visit_raise(node) }
+		ast.Delete { t.visit_delete(node) }
+		ast.Pass { t.visit_pass(node) }
+		ast.Break { t.visit_break(node) }
+		ast.Continue { t.visit_continue(node) }
+		ast.TypeAlias { t.visit_type_alias(node) }
+		else {}
 	}
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_expr(node ast.Expression) {
-	if node is ast.Name {
-		t.visit_name(node)
-	if node is ast.Constant {
-		t.visit_constant(node)
-	if node is ast.NoneExpr {
-		t.visit_none_expr(node)
-	if node is ast.List {
-		t.visit_list(node)
-	if node is ast.Dict {
-		t.visit_dict(node)
-	if node is ast.Tuple {
-		t.visit_tuple(node)
-	if node is ast.Set {
-		t.visit_set(node)
-	if node is ast.BinaryOp {
-		t.visit_binary_op(node)
-	if node is ast.UnaryOp {
-		t.visit_unary_op(node)
-	if node is ast.Compare {
-		t.visit_compare(node)
-	if node is ast.Call {
-		t.visit_call(node)
-	if node is ast.Attribute {
-		t.visit_attribute(node)
-	if node is ast.Subscript {
-		t.visit_subscript(node)
-	if node is ast.Slice {
-		t.visit_slice(node)
-	if node is ast.Lambda {
-		t.visit_lambda(node)
-	if node is ast.ListComp {
-		t.visit_list_comp(node)
-	if node is ast.DictComp {
-		t.visit_dict_comp(node)
-	if node is ast.SetComp {
-		t.visit_set_comp(node)
-	if node is ast.GeneratorExp {
-		t.visit_generator(node)
-	if node is ast.IfExp {
-		t.visit_if_exp(node)
-	if node is ast.Await {
-		t.visit_await(node)
-	if node is ast.Yield {
-		t.visit_yield(node)
-	if node is ast.YieldFrom {
-		t.visit_yield_from(node)
-	if node is ast.Starred {
-		t.visit_starred(node)
-	if node is ast.JoinedStr {
-		t.visit_joined_str(node)
-	if node is ast.FormattedValue {
-		t.visit_formatted_value(node)
-	if node is ast.NamedExpr {
-		t.visit_named_expr(node)
+	match node {
+		ast.Name { t.visit_name(node) }
+		ast.Constant { t.visit_constant(node) }
+		ast.NoneExpr { t.visit_none_expr(node) }
+		ast.List { t.visit_list(node) }
+		ast.Dict { t.visit_dict(node) }
+		ast.Tuple { t.visit_tuple(node) }
+		ast.Set { t.visit_set(node) }
+		ast.BinaryOp { t.visit_binary_op(node) }
+		ast.UnaryOp { t.visit_unary_op(node) }
+		ast.Compare { t.visit_compare(node) }
+		ast.Call { t.visit_call(node) }
+		ast.Attribute { t.visit_attribute(node) }
+		ast.Subscript { t.visit_subscript(node) }
+		ast.Slice { t.visit_slice(node) }
+		ast.Lambda { t.visit_lambda(node) }
+		ast.ListComp { t.visit_list_comp(node) }
+		ast.DictComp { t.visit_dict_comp(node) }
+		ast.SetComp { t.visit_set_comp(node) }
+		ast.GeneratorExp { t.visit_generator(node) }
+		ast.IfExp { t.visit_if_exp(node) }
+		ast.Await { t.visit_await(node) }
+		ast.Yield { t.visit_yield(node) }
+		ast.YieldFrom { t.visit_yield_from(node) }
+		ast.Starred { t.visit_starred(node) }
+		ast.JoinedStr { t.visit_joined_str(node) }
+		ast.FormattedValue { t.visit_formatted_value(node) }
+		ast.NamedExpr { t.visit_named_expr(node) }
+		else {}
 	}
-}
 }
 
 pub fn (mut t TypeInferenceVisitorMixin) visit_module(node ast.Module) {

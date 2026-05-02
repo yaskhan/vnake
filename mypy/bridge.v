@@ -164,8 +164,8 @@ fn convert_arguments(args ast.Arguments) ([]Argument, []string, []ArgKind) {
 
 fn convert_statement(stmt ast.Statement) ?Statement {
 	ctx := convert_context(stmt.get_token())
-	if stmt is ast.FunctionDef {
-
+	match stmt {
+		ast.FunctionDef {
 			args, names, kinds := convert_arguments(stmt.args)
 			mut ret_type := ?MypyTypeNode(none)
 			if rt := stmt.returns {
@@ -184,8 +184,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				type_:     ret_type // Mypy semantic analyzer expects the returns type here or a full CallableType
 			}
 			return Statement(func_def)
-	} else if stmt is ast.ClassDef {
-
+		}
+		ast.ClassDef {
 			mut base_exprs := []Expression{}
 			for b in stmt.bases {
 				if e := convert_expression(b) {
@@ -202,8 +202,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				base_type_exprs: base_exprs
 			}
 			return Statement(class_def)
-	} else if stmt is ast.Assign {
-
+		}
+		ast.Assign {
 			mut rvalue := convert_expression(stmt.value) or { return none }
 			mut lvalues := []Expression{}
 			for t in stmt.targets {
@@ -219,8 +219,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				}
 			}
 			return Statement(assign_stmt)
-	} else if stmt is ast.Return {
-
+		}
+		ast.Return {
 			mut value := ?Expression(none)
 			if v := stmt.value {
 				value = convert_expression(v)
@@ -232,8 +232,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				}
 			}
 			return Statement(return_stmt)
-	} else if stmt is ast.If {
-
+		}
+		ast.If {
 			mut else_stmt := ?Block(none)
 			if stmt.orelse.len > 0 {
 				else_stmt = convert_block(stmt.orelse)
@@ -247,8 +247,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				}
 			}
 			return Statement(if_stmt)
-	} else if stmt is ast.While {
-
+		}
+		ast.While {
 			while_stmt := WhileStmt{
 				expr:      convert_expression(stmt.test) or { return none }
 				body:      convert_block(stmt.body)
@@ -258,8 +258,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				}
 			}
 			return Statement(while_stmt)
-	} else if stmt is ast.For {
-
+		}
+		ast.For {
 			for_stmt := ForStmt{
 				index:     convert_expression(stmt.target) or { return none }
 				expr:      convert_expression(stmt.iter) or { return none }
@@ -270,8 +270,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				}
 			}
 			return Statement(for_stmt)
-	} else if stmt is ast.Try {
-
+		}
+		ast.Try {
 			mut handlers := []Block{}
 			mut types := []?Expression{}
 			mut vars := []?NameExpr{}
@@ -305,8 +305,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				}
 			}
 			return Statement(try_stmt)
-	} else if stmt is ast.With {
-
+		}
+		ast.With {
 			mut items := []Expression{}
 			mut targets := []?Expression{}
 			for item in stmt.items {
@@ -322,8 +322,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				}
 			}
 			return Statement(with_stmt)
-	} else if stmt is ast.Expr {
-
+		}
+		ast.Expr {
 			if expr := convert_expression(stmt.value) {
 				expr_stmt := ExpressionStmt{
 					expr: expr
@@ -334,8 +334,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				return Statement(expr_stmt)
 			}
 			return none
-	} else if stmt is ast.Import {
-
+		}
+		ast.Import {
 			mut ids := []ImportAlias{}
 			for alias in stmt.names {
 				ids << ImportAlias{
@@ -350,8 +350,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				ids:  ids
 			}
 			return Statement(import_stmt)
-	} else if stmt is ast.ImportFrom {
-
+		}
+		ast.ImportFrom {
 			mut names := []ImportAlias{}
 			for alias in stmt.names {
 				names << ImportAlias{
@@ -368,8 +368,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				names:    names
 			}
 			return Statement(import_from_stmt)
-	} else if stmt is ast.Assert {
-
+		}
+		ast.Assert {
 			assert_stmt := AssertStmt{
 				base: NodeBase{
 					ctx: ctx
@@ -378,32 +378,32 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				msg:  if m := stmt.msg { convert_expression(m) } else { none }
 			}
 			return Statement(assert_stmt)
-	} else if stmt is ast.Pass {
-
+		}
+		ast.Pass {
 			pass_stmt := PassStmt{
 				base: NodeBase{
 					ctx: ctx
 				}
 			}
 			return Statement(pass_stmt)
-	} else if stmt is ast.Break {
-
+		}
+		ast.Break {
 			break_stmt := BreakStmt{
 				base: NodeBase{
 					ctx: ctx
 				}
 			}
 			return Statement(break_stmt)
-	} else if stmt is ast.Continue {
-
+		}
+		ast.Continue {
 			continue_stmt := ContinueStmt{
 				base: NodeBase{
 					ctx: ctx
 				}
 			}
 			return Statement(continue_stmt)
-	} else if stmt is ast.Raise {
-
+		}
+		ast.Raise {
 			raise_stmt := RaiseStmt{
 				base:      NodeBase{
 					ctx: ctx
@@ -412,8 +412,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				from_node: if f := stmt.cause { convert_expression(f) } else { none }
 			}
 			return Statement(raise_stmt)
-	} else if stmt is ast.AnnAssign {
-
+		}
+		ast.AnnAssign {
 			mut rvalue := if v := stmt.value { convert_expression(v) } else { none }
 			mut target := convert_expression(stmt.target) or { return none }
 
@@ -432,8 +432,8 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				}
 			}
 			return Statement(assign_stmt)
-	} else if stmt is ast.AugAssign {
-
+		}
+		ast.AugAssign {
 			mut rvalue := convert_expression(stmt.value) or { return none }
 			mut target := convert_expression(stmt.target) or { return none }
 			if mut lval := target.as_lvalue() {
@@ -448,17 +448,22 @@ fn convert_statement(stmt ast.Statement) ?Statement {
 				return Statement(aug_stmt)
 			}
 			return none
+		}
+		else {
+			return none
+		}
 	}
-	return none
 }
 
 fn convert_mypy_type(expr ast.Expression, ctx Context) ?MypyTypeNode {
-	if expr is ast.Name {
+	match expr {
+		ast.Name {
 			return MypyTypeNode(UnboundType{
 				name:   expr.id
 				line:   ctx.line
 				column: ctx.column
 			})
+		}
 		ast.Constant {
 			// Handle string literal types (forward refs)
 			return MypyTypeNode(UnboundType{
@@ -502,16 +507,16 @@ fn convert_mypy_type(expr ast.Expression, ctx Context) ?MypyTypeNode {
 
 fn convert_expression(expr ast.Expression) ?Expression {
 	ctx := convert_context(expr.get_token())
-	if expr is ast.Name {
-
+	match expr {
+		ast.Name {
 			return Expression(NameExpr{
 				name: expr.id
 				base: NodeBase{
 					ctx: ctx
 				}
 			})
-	} else if expr is ast.Constant {
-
+		}
+		ast.Constant {
 			if expr.token.typ == .number {
 				if expr.value.contains('.') {
 					return Expression(FloatExpr{
@@ -542,8 +547,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 					ctx: ctx
 				}
 			})
-	} else if expr is ast.Attribute {
-
+		}
+		ast.Attribute {
 			if val := convert_expression(expr.value) {
 				return Expression(MemberExpr{
 					expr: val
@@ -554,8 +559,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				})
 			}
 			return none
-	} else if expr is ast.Call {
-
+		}
+		ast.Call {
 			if func := convert_expression(expr.func) {
 				mut args := []Expression{}
 				for a in expr.args {
@@ -572,8 +577,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				})
 			}
 			return none
-	} else if expr is ast.Subscript {
-
+		}
+		ast.Subscript {
 			if val := convert_expression(expr.value) {
 				if idx := convert_expression(expr.slice) {
 					return Expression(IndexExpr{
@@ -586,8 +591,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				}
 			}
 			return none
-	} else if expr is ast.BinaryOp {
-
+		}
+		ast.BinaryOp {
 			if left := convert_expression(expr.left) {
 				if right := convert_expression(expr.right) {
 					return Expression(OpExpr{
@@ -601,8 +606,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				}
 			}
 			return none
-	} else if expr is ast.UnaryOp {
-
+		}
+		ast.UnaryOp {
 			if operand := convert_expression(expr.operand) {
 				return Expression(UnaryExpr{
 					op:   expr.op.value
@@ -613,8 +618,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				})
 			}
 			return none
-	} else if expr is ast.Compare {
-
+		}
+		ast.Compare {
 			mut opds := []Expression{}
 			opds << convert_expression(expr.left) or { return none }
 			mut operators := []string{}
@@ -631,8 +636,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 					ctx: ctx
 				}
 			})
-	} else if expr is ast.List {
-
+		}
+		ast.List {
 			mut items := []Expression{}
 			for i in expr.elements {
 				items << convert_expression(i) or { continue }
@@ -643,8 +648,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 					ctx: ctx
 				}
 			})
-	} else if expr is ast.Tuple {
-
+		}
+		ast.Tuple {
 			mut items := []Expression{}
 			for i in expr.elements {
 				items << convert_expression(i) or { continue }
@@ -655,8 +660,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 					ctx: ctx
 				}
 			})
-	} else if expr is ast.Dict {
-
+		}
+		ast.Dict {
 			mut entries := []DictEntry{}
 			for i, key in expr.keys {
 				if k := convert_expression(key) {
@@ -674,8 +679,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 					ctx: ctx
 				}
 			})
-	} else if expr is ast.IfExp {
-
+		}
+		ast.IfExp {
 			mut cond := convert_expression(expr.test) or { return none }
 			mut if_true := convert_expression(expr.body) or { return none }
 			mut if_false := convert_expression(expr.orelse) or { return none }
@@ -687,8 +692,8 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				if_expr:   if_true
 				else_expr: if_false
 			})
-	} else if expr is ast.BoolOp {
-
+		}
+		ast.BoolOp {
 			if expr.values.len < 1 {
 				return none
 			}
@@ -705,6 +710,9 @@ fn convert_expression(expr ast.Expression) ?Expression {
 				})
 			}
 			return res_
+		}
+		else {
+			return none
+		}
 	}
-	return none
 }
