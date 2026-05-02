@@ -180,73 +180,63 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 	mut current := v_attr_base
 	res = '${obj}.${attr_name}'
-	if eg.state.in_assignment_lhs {
-		obj_type = eg.guess_type(node.value)
-		mapped_check := eg.map_python_type(obj_type, false)
-		if mapped_check.starts_with('?') {
-			|| mapped_check.starts_with('?') {
-			res = '${obj}.${attr_name}'
-		} else {
-			res = '${obj}.${attr_name}'
-		}
-	} else {
-		if narrowed := eg.analyzer.location_map[loc_key] {
-			current = eg.map_python_type(narrowed, true)
-		} else if inferred := eg.analyzer.get_type(full_name) {
-			if inferred != 'Any' && inferred != 'unknown' {
-				current = eg.map_python_type(inferred, true)
-			}
-		}
 
-		mut mapped_check := eg.map_python_type(obj_type, false)
-		if narrowed_receiver_type != '' {
-			mapped_check = eg.map_python_type(narrowed_receiver_type, false)
+	if narrowed := eg.analyzer.location_map[loc_key] {
+		current = eg.map_python_type(narrowed, true)
+	} else if inferred := eg.analyzer.get_type(full_name) {
+		if inferred != 'Any' && inferred != 'unknown' {
+			current = eg.map_python_type(inferred, true)
 		}
+	}
 
-		mut base_access := '${obj}.${attr_name}'
-		if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && !obj.contains('(') && !obj.contains(' ') && !obj.contains(' as ') && !obj.contains('.py_init') {
-			name_node := node.value
-			if name_node is ast.Name {
-				sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
-					'', map[string]bool{})
-				if sanitized in eg.state.narrowed_vars || sanitized.ends_with('_mut')
-					|| obj.ends_with('_mut') || eg.state.in_assignment_lhs {
-					// Use base_access implicitly narrowed by V
-				} else {
-					base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
-				}
+	mut mapped_check := eg.map_python_type(obj_type, false)
+	if narrowed_receiver_type != '' {
+		mapped_check = eg.map_python_type(narrowed_receiver_type, false)
+	}
+
+	mut base_access := '${obj}.${attr_name}'
+	if mapped_check.starts_with('?') && !obj.starts_with('narrowed_') && !obj.contains('(') && !obj.contains(' ') && !obj.contains(' as ') && !obj.contains('.py_init') {
+		name_node := node.value
+		if name_node is ast.Name {
+			sanitized := base.sanitize_name(name_node.id, false, map[string]bool{},
+				'', map[string]bool{})
+			if sanitized in eg.state.narrowed_vars || sanitized.ends_with('_mut')
+				|| obj.ends_with('_mut') || eg.state.in_assignment_lhs {
+				// Use base_access implicitly narrowed by V
 			} else {
-				if eg.state.in_assignment_lhs {
-					base_access = '${obj}.${attr_name}'
-				} else {
-					base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
-				}
+				base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
+			}
+		} else {
+			if eg.state.in_assignment_lhs {
+				base_access = '${obj}.${attr_name}'
+			} else {
+				base_access = "(${obj} or { panic('narrowed var is none') }).${attr_name}"
 			}
 		}
+	}
 
-		res = base_access
+	res = base_access
 
-		if current != 'Any' {
-			mut should_cast := original_type.contains('|') || original_type == 'Any'
-			if !should_cast && (eg.state.current_file_name.contains('narrowing')
-				|| eg.state.current_file_name.contains('Narrowing')) {
-				should_cast = true
-			}
-			if !eg.state.in_assignment_lhs && should_cast
-				&& (current != original_type || eg.state.current_file_name.contains('narrowing')) {
-				if original_type.starts_with('?') && !current.starts_with('?') {
-					res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
-				} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-					res = '(${res} as ${current})'
-				}
-			} else if !eg.state.in_assignment_lhs && original_type.starts_with('?')
-				&& !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-				res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
+	if current != 'Any' {
+		mut should_cast := original_type.contains('|') || original_type == 'Any'
+		if !should_cast && (eg.state.current_file_name.contains('narrowing')
+			|| eg.state.current_file_name.contains('Narrowing')) {
+			should_cast = true
+		}
+		if !eg.state.in_assignment_lhs && should_cast
+			&& (current != original_type || eg.state.current_file_name.contains('narrowing')) {
+			if original_type.starts_with('?') && !current.starts_with('?') {
+				res = "(${res} or { panic('narrowing failed for ${attr_name}') })"
+			} else if !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+				res = '(${res} as ${current})'
 			}
 		} else if !eg.state.in_assignment_lhs && original_type.starts_with('?')
 			&& !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
-			res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
+			res = "(${res} or { panic('unwrap failed for ${attr_name}') })"
 		}
+	} else if !eg.state.in_assignment_lhs && original_type.starts_with('?')
+		&& !eg.target_type.starts_with('?') && eg.target_type != 'Any' {
+		res = "(${res} or { panic('implicit unwrap failed for ${attr_name}') })"
 	}
 
 	// ALWAYS apply interface parens at the VERY END if needed
