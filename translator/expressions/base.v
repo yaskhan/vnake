@@ -64,51 +64,36 @@ fn (mut eg ExprGen) emit(line string) {
 }
 
 fn (mut eg ExprGen) visit_helper1(node ast.Expression) ?string {
-	match node {
-		ast.Name {
-			return eg.visit_name(node)
-		}
-		ast.Constant {
-			return eg.visit_constant(node)
-		}
-		ast.NoneExpr {
-			return 'none'
-		}
-		ast.List {
-			return eg.visit_list(node)
-		}
-		ast.Tuple {
-			return eg.visit_tuple(node)
-		}
-		ast.Dict {
-			return eg.visit_dict(node)
-		}
-		ast.Set {
-			return eg.visit_set(node)
-		}
-		ast.BinaryOp {
-			return eg.visit_bin_op(node)
-		}
-		ast.UnaryOp {
-			return eg.visit_unary_op(node)
-		}
-		ast.BoolOp {
-			return eg.visit_bool_op(node)
-		}
-		ast.Compare {
-			return eg.visit_compare(node)
-		}
-		ast.Call {
-			return eg.visit_call(node)
-		}
-		ast.Attribute {
-			return eg.visit_attribute(node)
-		}
-		ast.Subscript {
-			return eg.visit_subscript(node)
-		}
-		else { return none }
+	if node is ast.Name {
+		return eg.visit_name(node)
+	} else if node is ast.Constant {
+		return eg.visit_constant(node)
+	} else if node is ast.NoneExpr {
+		return 'none'
+	} else if node is ast.List {
+		return eg.visit_list(node)
+	} else if node is ast.Tuple {
+		return eg.visit_tuple(node)
+	} else if node is ast.Dict {
+		return eg.visit_dict(node)
+	} else if node is ast.Set {
+		return eg.visit_set(node)
+	} else if node is ast.BinaryOp {
+		return eg.visit_bin_op(node)
+	} else if node is ast.UnaryOp {
+		return eg.visit_unary_op(node)
+	} else if node is ast.BoolOp {
+		return eg.visit_bool_op(node)
+	} else if node is ast.Compare {
+		return eg.visit_compare(node)
+	} else if node is ast.Call {
+		return eg.visit_call(node)
+	} else if node is ast.Attribute {
+		return eg.visit_attribute(node)
+	} else if node is ast.Subscript {
+		return eg.visit_subscript(node)
 	}
+	return none
 }
 
 fn (mut eg ExprGen) visit_helper2(node ast.Expression) string {
@@ -193,7 +178,7 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 			return sanitized
 		}
 		// Unwrap if the target context requires non-optional type
-		if (!eg.target_type.starts_with('?') && eg.target_type != 'Any' && eg.target_type != '') {
+		if !eg.target_type.starts_with('?') && eg.target_type != 'Any' && eg.target_type != '' {
 			return "(${sanitized} or { panic('narrowed var is none') })"
 		}
 	}
@@ -211,7 +196,7 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 		return 'bool'
 	}
 
-	if (name.contains('(') || name.contains(' ') || name.contains(' as ')) {
+	if name.contains('(') || name.contains(' ') || name.contains(' as ') {
 		return name
 	}
 
