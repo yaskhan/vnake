@@ -63,33 +63,53 @@ pub fn new_type_inference_utils_mixin() TypeInferenceUtilsMixin {
 	}
 }
 
+// get_ancestors returns a list of all ancestors of a type, including the type itself.
+// ⚡ Bolt: Using a visited map avoids exponential complexity in complex hierarchies (e.g. diamond inheritance).
 pub fn (t &TypeInferenceUtilsMixin) get_ancestors(typ string) []string {
 	mut ancestors := []string{}
-	t.get_ancestors_into(typ, mut ancestors)
+	mut visited := map[string]bool{}
+	t.get_ancestors_into(typ, mut ancestors, mut visited)
 	return ancestors
 }
 
-fn (t &TypeInferenceUtilsMixin) get_ancestors_into(typ string, mut ancestors []string) {
+fn (t &TypeInferenceUtilsMixin) get_ancestors_into(typ string, mut ancestors []string, mut visited map[string]bool) {
+	if typ in visited {
+		return
+	}
+	visited[typ] = true
 	ancestors << typ
 	if typ in t.class_hierarchy {
 		for base in t.class_hierarchy[typ] {
-			t.get_ancestors_into(base, mut ancestors)
+			t.get_ancestors_into(base, mut ancestors, mut visited)
 		}
 	}
 }
 
+// get_depth calculates the maximum depth of a type in the class hierarchy.
 pub fn (t &TypeInferenceUtilsMixin) get_depth(typ string, current_depth int) int {
+	mut memo := map[string]int{}
+	return t.get_depth_with_memo(typ, current_depth, mut memo)
+}
+
+// get_depth_with_memo is a private helper that uses memoization to avoid exponential complexity.
+// ⚡ Bolt: Using a memoization map avoids re-calculating depths for shared base classes.
+fn (t &TypeInferenceUtilsMixin) get_depth_with_memo(typ string, current_depth int, mut memo map[string]int) int {
+	if typ in memo {
+		return current_depth + memo[typ]
+	}
 	if typ !in t.class_hierarchy || t.class_hierarchy[typ].len == 0 {
+		memo[typ] = 0
 		return current_depth
 	}
-	mut max_d := current_depth
+	mut max_base_depth := 0
 	for base in t.class_hierarchy[typ] {
-		d := t.get_depth(base, current_depth + 1)
-		if d > max_d {
-			max_d = d
+		d := t.get_depth_with_memo(base, 0, mut memo)
+		if d > max_base_depth {
+			max_base_depth = d
 		}
 	}
-	return max_d
+	memo[typ] = max_base_depth + 1
+	return current_depth + memo[typ]
 }
 
 pub fn (mut t TypeInferenceUtilsMixin) find_lcs(types []string) string {
@@ -143,8 +163,9 @@ pub fn (mut t TypeInferenceUtilsMixin) find_lcs(types []string) string {
 	// Select the common ancestor with the greatest depth
 	mut lcs := 'Any'
 	mut max_depth := -1
+	mut memo := map[string]int{}
 	for candidate, _ in common {
-		d := t.get_depth(candidate, 0)
+		d := t.get_depth_with_memo(candidate, 0, mut memo)
 		if d > max_depth {
 			max_depth = d
 			lcs = candidate
