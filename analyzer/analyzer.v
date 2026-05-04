@@ -43,8 +43,8 @@ pub fn (mut a Analyzer) analyze(node ast.Module) {
 
 // get_type returns variable type
 pub fn (a Analyzer) get_type(name string) ?string {
-	if name in a.type_map {
-		return a.type_map[name]
+	if res := a.type_map[name] {
+		return res
 	}
 
 	if name.contains('.') {
@@ -61,8 +61,8 @@ pub fn (a Analyzer) get_type(name string) ?string {
 	if !name.contains('.') && a.scope_prefixes.len > 0 {
 		for i := a.scope_prefixes.len - 1; i >= 0; i-- {
 			qual := a.scope_prefixes[i] + '.' + name
-			if qual in a.type_map {
-				return a.type_map[qual]
+			if res := a.type_map[qual] {
+				return res
 			}
 		}
 	}
@@ -95,8 +95,8 @@ pub fn (mut a Analyzer) set_type(name string, typ string) {
 
 // get_raw_type returns raw type string
 pub fn (a Analyzer) get_raw_type(name string) ?string {
-	if name in a.raw_type_map {
-		return a.raw_type_map[name]
+	if res := a.raw_type_map[name] {
+		return res
 	}
 	return none
 }
@@ -112,11 +112,13 @@ pub fn (a Analyzer) get_mutability(name string) MutabilityInfo {
 	if lookup.contains('_Impl.') {
 		lookup = lookup.replace('_Impl.', '.')
 	}
-	if lookup in a.mutability_map {
-		return a.mutability_map[lookup]
+	if res := a.mutability_map[lookup] {
+		return res
 	}
-	if name != lookup && name in a.mutability_map {
-		return a.mutability_map[name]
+	if name != lookup {
+		if res := a.mutability_map[name] {
+			return res
+		}
 	}
 
 	// Delegate to mixin for hierarchical lookup
