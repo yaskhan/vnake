@@ -267,6 +267,12 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 	if v_type.starts_with('?') {
 		return 'none'
 	}
+	if v_type.contains('|') {
+		variants := v_type.split('|')
+		if variants.len > 0 {
+			return get_v_default_value(variants[0].trim_space(), active_v_generics)
+		}
+	}
 	if v_type in ['int', 'i64', 'u32', 'u64', 'i8', 'i16', 'u8', 'u16'] {
 		return '0'
 	}
@@ -285,9 +291,14 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 	if v_type == 'Any' {
 		return 'Any(NoneType{})'
 	}
-	if v_type.len > 0 && v_type[0].is_capital() && !v_type.contains('|') {
+	if v_type.len > 0 && v_type[0].is_capital() {
 		if v_type in active_v_generics {
 			return 'py_zero[${v_type}]()'
+		}
+		if v_type.starts_with('SumType_') {
+			// For named sum types, we'd ideally need the registry to find the first variant.
+			// As a fallback, 'none' might work if NoneType is a variant.
+			return 'none'
 		}
 		return '${v_type}{}'
 	}

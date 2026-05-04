@@ -717,8 +717,7 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	if ret_type != 'void' && ret_type != '' && !is_init && !ends_with_return(node.body) {
 		// V requires explicit return
 		default_val := base.get_v_default_value(ret_type, v_gens_to_declare)
-		env.emit_fn(env.state.indent() +
-			'return ${default_val} // TODO: default value for ${ret_type}')
+		env.emit_fn(env.state.indent() + 'return ${default_val}')
 	}
 
 	if is_generator {
