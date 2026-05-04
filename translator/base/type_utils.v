@@ -223,8 +223,8 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 		return v_type
 	}
 
-	if v_type in ctx.imported_symbols {
-		return ctx.imported_symbols[v_type]
+	if res := ctx.imported_symbols[v_type] {
+		return res
 	}
 
 	if v_type.contains('.') {
