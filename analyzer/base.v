@@ -50,6 +50,7 @@ pub mut:
 	defined_classes_cache  map[string]map[string]bool
 	empty_v_types_cache    map[string]string
 	empty_name_remap_cache map[string]string
+	depth_cache            map[string]int
 }
 
 pub fn new_type_inference_base() TypeInferenceBase {
@@ -78,6 +79,7 @@ pub fn new_type_inference_base() TypeInferenceBase {
 		defined_classes_cache:  map[string]map[string]bool{}
 		empty_v_types_cache:    map[string]string{}
 		empty_name_remap_cache: map[string]string{}
+		depth_cache:            map[string]int{}
 	}
 }
 
