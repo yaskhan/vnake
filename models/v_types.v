@@ -91,10 +91,20 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Strip surrounding quotes
-	for clean_type.len > 0 && ((clean_type.starts_with("'") && clean_type.ends_with("'"))
-		|| (clean_type.starts_with('"') && clean_type.ends_with('"'))) {
-		clean_type = clean_type[1..clean_type.len - 1]
+	// ⚡ Bolt: Using a single-pass index-based range avoids multiple string allocations from slicing in a loop.
+	mut start := 0
+	mut end := clean_type.len
+	for start + 1 < end {
+		c_start := clean_type[start]
+		c_end := clean_type[end - 1]
+		if (c_start == `'` && c_end == `'`) || (c_start == `"` && c_end == `"`) {
+			start++
+			end--
+		} else {
+			break
+		}
 	}
+	clean_type = if start > 0 { clean_type[start..end] } else { clean_type }
 
 	// Handle Mypy specific: tuple[int, int, fallback=Point]
 	if clean_type.contains('fallback=') {

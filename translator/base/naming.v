@@ -144,6 +144,11 @@ pub fn get_factory_name(struct_name string, hierarchy map[string][]string) strin
 // is_v_reserved_keyword checks if the name is a V reserved keyword.
 // This is optimized to use a match Expression for faster lookup.
 pub fn is_v_reserved_keyword(name string) bool {
+	// ⚡ Bolt: Fast path for identifiers that cannot be keywords based on length.
+	// Reserved keywords are 2-9 chars long.
+	if name.len < 2 || name.len > 9 {
+		return false
+	}
 	return match name {
 		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface', 'enum',
 		'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared', 'spawn',
@@ -160,6 +165,11 @@ pub fn is_v_reserved_keyword(name string) bool {
 // is_v_reserved_type checks if the name is a V reserved type.
 // This is optimized to use a match Expression for faster lookup.
 pub fn is_v_reserved_type(name string) bool {
+	// ⚡ Bolt: Fast path for identifiers that cannot be types based on length.
+	// Reserved types are 2-6 chars long.
+	if name.len < 2 || name.len > 6 {
+		return false
+	}
 	return match name {
 		'int', 'string', 'bool', 'f64', 'f32', 'i64', 'byte', 'rune', 'void', 'Any', 'none', 'i8',
 		'i16', 'i32', 'u16', 'u32', 'u64' {
@@ -188,16 +198,17 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 	}
 
 	// V compliance: no leading underscores
-	mut clean_name := name
+	// ⚡ Bolt: Using a single-pass index search avoids multiple string allocations from starts_with and slicing.
 	mut prefix_count := 0
-	for clean_name.starts_with('_') && clean_name != '_' {
+	for prefix_count < name.len && name[prefix_count] == `_` {
 		prefix_count++
-		clean_name = clean_name[1..]
 	}
 
-	if clean_name.len == 0 {
-		return '_'.repeat(prefix_count)
+	if prefix_count == name.len {
+		return name
 	}
+
+	mut clean_name := name[prefix_count..]
 
 	if is_type {
 		// ⚡ Bolt: Fast path for type names already in PascalCase.
