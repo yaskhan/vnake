@@ -481,8 +481,15 @@ pub fn (mut a AliasInferer) analyze(tree ast.Module, mut utils TypeInferenceUtil
 	for var_name, func_name in instantiations {
 		if func_name in aliases {
 			mut used := alias_usages[func_name] or { []string{} }
+			mut used_set := map[string]bool{}
+			for u in used {
+				used_set[u] = true
+			}
 			for t in appends[var_name] or { []string{} } {
-				add_unique(mut used, t)
+				if t !in used_set {
+					used_set[t] = true
+					used << t
+				}
 			}
 			alias_usages[func_name] = used
 		}
@@ -824,6 +831,7 @@ pub mut:
 	mutated_params        map[string]bool
 	reassigned_params     map[string]bool
 	scope_stack           []string
+	scope_prefixes        []string
 	mutability_map        map[string]MutabilityInfo
 	seen_in_scope         map[string]bool
 	analyzer              &Analyzer = unsafe { nil }
@@ -837,9 +845,26 @@ pub fn new_function_mutability_scanner(a &Analyzer) FunctionMutabilityScanner {
 		mutated_params:        map[string]bool{}
 		reassigned_params:     map[string]bool{}
 		scope_stack:           []string{}
+		scope_prefixes:        []string{}
 		mutability_map:        map[string]MutabilityInfo{}
 		seen_in_scope:         map[string]bool{}
 		analyzer:              a
+	}
+}
+
+pub fn (mut f FunctionMutabilityScanner) push_scope(name string) {
+	f.scope_stack << name
+	if f.scope_prefixes.len == 0 {
+		f.scope_prefixes << name
+	} else {
+		f.scope_prefixes << f.scope_prefixes[f.scope_prefixes.len - 1] + '.' + name
+	}
+}
+
+pub fn (mut f FunctionMutabilityScanner) pop_scope() {
+	if f.scope_stack.len > 0 {
+		f.scope_stack = f.scope_stack[..f.scope_stack.len - 1]
+		f.scope_prefixes = f.scope_prefixes[..f.scope_prefixes.len - 1]
 	}
 }
 
@@ -882,8 +907,8 @@ fn (mut f FunctionMutabilityScanner) mark_mutated(node ast.Expression) {
 		ast.Attribute {
 			if node.value is ast.Name {
 				f.mutated_params[node.value.id] = true
-				if f.scope_stack.len > 0 && node.value.id in ['self', 'cls'] {
-					prefix := f.scope_stack.join('.')
+				if f.scope_prefixes.len > 0 && node.value.id in ['self', 'cls'] {
+					prefix := f.scope_prefixes[f.scope_prefixes.len - 1]
 					key := '${prefix}.${node.attr}'
 					mut info := f.mutability_map[key] or { MutabilityInfo{} }
 					info.is_mutated = true
@@ -1094,18 +1119,16 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 	match node {
 		ast.ClassDef {
-			f.scope_stack << node.name
+			f.push_scope(node.name)
 			if f.analyzer != unsafe { nil } {
 				f.analyzer.push_scope(node.name)
 			}
 			for stmt in node.body {
 				f.visit_stmt(stmt)
 			}
-			if f.scope_stack.len > 0 {
-				f.scope_stack = f.scope_stack[..f.scope_stack.len - 1]
-				if f.analyzer != unsafe { nil } {
-					f.analyzer.pop_scope()
-				}
+			f.pop_scope()
+			if f.analyzer != unsafe { nil } {
+				f.analyzer.pop_scope()
 			}
 		}
 		ast.FunctionDef {
@@ -1116,6 +1139,7 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			old_seen := f.seen_in_scope.clone()
 
 			f.current_func = node.name
+			f.push_scope(node.name)
 			if f.analyzer != unsafe { nil } {
 				f.analyzer.push_scope(node.name)
 			}
@@ -1142,7 +1166,13 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 				f.analyzer.pop_scope()
 			}
 
-			prefix := f.scope_stack.join('.')
+			prefix := if f.scope_prefixes.len > 1 {
+				f.scope_prefixes[f.scope_prefixes.len - 2]
+			} else {
+				''
+			}
+			f.pop_scope()
+
 			func_qual_name := if prefix.len > 0 { '${prefix}.${node.name}' } else { node.name }
 			mut mutated_indices := []int{}
 			for i, p in f.current_params {
