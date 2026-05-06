@@ -116,15 +116,13 @@ pub fn (t &TypeInferenceBase) get_type(name string) string {
 	if !name.contains('.') && t.scope_prefixes.len > 0 {
 		for i := t.scope_prefixes.len - 1; i >= 0; i-- {
 			qual := t.scope_prefixes[i] + '.' + name
-			if qual in t.type_map {
-				res := t.type_map[qual]
+			if res := t.type_map[qual] {
 				return res
 			}
 		}
 	}
 
-	if name in t.type_map {
-		res := t.type_map[name]
+	if res := t.type_map[name] {
 		return res
 	}
 
@@ -151,8 +149,8 @@ pub fn (t &TypeInferenceBase) get_type(name string) string {
 }
 
 pub fn (t &TypeInferenceBase) get_call_signature(name string) ?CallSignature {
-	if name in t.call_signatures {
-		return t.call_signatures[name]
+	if res := t.call_signatures[name] {
+		return res
 	}
 	if name.contains('.') {
 		cls := name.all_before_last('.')
@@ -196,14 +194,14 @@ fn (t &TypeInferenceBase) get_mutability_recursive(name string, mut visited map[
 	if !name.contains('.') && t.scope_prefixes.len > 0 {
 		for i := t.scope_prefixes.len - 1; i >= 0; i-- {
 			qual := t.scope_prefixes[i] + '.' + name
-			if qual in t.mutability_map {
-				return t.mutability_map[qual]
+			if res := t.mutability_map[qual] {
+				return res
 			}
 		}
 	}
 
-	if name in t.mutability_map {
-		return t.mutability_map[name]
+	if res := t.mutability_map[name] {
+		return res
 	}
 
 	if name.contains('.') {
