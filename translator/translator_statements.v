@@ -12,83 +12,58 @@ fn (mut t Translator) emit_block(stmts []ast.Statement) {
 }
 
 pub fn (mut t Translator) visit_stmt(node ast.Statement) {
-	match node {
-		ast.Import {
-			t.visit_import(node)
-		}
-		ast.ImportFrom {
-			t.visit_import_from(node)
-		}
-		ast.Assign {
-			t.visit_assign(node)
-		}
-		ast.AnnAssign {
-			t.visit_ann_assign(node)
-		}
-		ast.Expr {
-			t.visit_expr_stmt(node)
-		}
-		ast.AugAssign {
-			t.visit_aug_assign(node)
-		}
-		ast.Delete {
-			t.visit_delete_stmt(node)
-		}
-		ast.Pass {}
-		ast.If {
-			t.visit_if(node)
-		}
-		ast.For {
-			t.visit_for(node)
-		}
-		ast.While {
-			t.visit_while(node)
-		}
-		ast.With {
-			t.visit_with(node)
-		}
-		ast.Try {
-			t.visit_try(node)
-		}
-		ast.TryStar {
-			t.visit_trystar(node)
-		}
-		ast.Return {
-			t.visit_return(node)
-		}
-		ast.Break {
-			t.visit_break(node)
-		}
-		ast.Continue {
-			t.visit_continue(node)
-		}
-		ast.Assert {
-			t.visit_assert(node)
-		}
-		ast.FunctionDef {
-			t.visit_function_def(node)
-		}
-		ast.ClassDef {
-			t.visit_class_def(node)
-		}
-		ast.Match {
-			t.visit_match(node)
-		}
-		ast.Raise {
-			t.visit_raise(node)
-		}
-		ast.TypeAlias {
-			t.visit_type_alias(node)
-		}
-		ast.Global {
-			t.emit_indented('// global ${node.names.join(', ')}')
-		}
-		ast.Nonlocal {
-			t.emit_indented('// nonlocal ${node.names.join(', ')}')
-		}
-		else {
-			t.emit_indented('//##LLM@@ Unsupported statement: ${node.str()}')
-		}
+	if node is ast.Import {
+		t.visit_import(node)
+	} else if node is ast.ImportFrom {
+		t.visit_import_from(node)
+	} else if node is ast.Assign {
+		t.visit_assign(node)
+	} else if node is ast.AnnAssign {
+		t.visit_ann_assign(node)
+	} else if node is ast.Expr {
+		t.visit_expr_stmt(node)
+	} else if node is ast.AugAssign {
+		t.visit_aug_assign(node)
+	} else if node is ast.Delete {
+		t.visit_delete_stmt(node)
+	} else if node is ast.Pass {
+		// Nothing to do
+	} else if node is ast.If {
+		t.visit_if(node)
+	} else if node is ast.For {
+		t.visit_for(node)
+	} else if node is ast.While {
+		t.visit_while(node)
+	} else if node is ast.With {
+		t.visit_with(node)
+	} else if node is ast.Try {
+		t.visit_try(node)
+	} else if node is ast.TryStar {
+		t.visit_trystar(node)
+	} else if node is ast.Return {
+		t.visit_return(node)
+	} else if node is ast.Break {
+		t.visit_break(node)
+	} else if node is ast.Continue {
+		t.visit_continue(node)
+	} else if node is ast.Assert {
+		t.visit_assert(node)
+	} else if node is ast.FunctionDef {
+		t.visit_function_def(node)
+	} else if node is ast.ClassDef {
+		t.visit_class_def(node)
+	} else if node is ast.Match {
+		t.visit_match(node)
+	} else if node is ast.Raise {
+		t.visit_raise(node)
+	} else if node is ast.TypeAlias {
+		t.visit_type_alias(node)
+	} else if node is ast.Global {
+		t.emit_indented('// global ${node.names.join(", ")}')
+	} else if node is ast.Nonlocal {
+		t.emit_indented('// nonlocal ${node.names.join(", ")}')
+	} else {
+		t.emit_indented('//##LLM@@ Unsupported statement: ${node.str()}')
 	}
 	if t.state.pending_llm_call_comments.len > 0 {
 		for comment in t.state.pending_llm_call_comments {
