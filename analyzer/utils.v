@@ -93,7 +93,7 @@ pub fn (mut t TypeInferenceUtilsMixin) get_depth(typ string, current_depth int) 
 		return current_depth + t.depth_cache[typ]
 	}
 	if typ !in t.class_hierarchy || t.class_hierarchy[typ].len == 0 {
-		memo[typ] = 0
+		t.depth_cache[typ] = 0
 		return current_depth
 	}
 	mut max_h := 0
@@ -159,9 +159,8 @@ pub fn (mut t TypeInferenceUtilsMixin) find_lcs(types []string) string {
 	// Select the common ancestor with the greatest depth
 	mut lcs := 'Any'
 	mut max_depth := -1
-	mut memo := map[string]int{}
 	for candidate, _ in common {
-		d := t.get_depth_with_memo(candidate, 0, mut memo)
+		d := t.get_depth(candidate, 0)
 		if d > max_depth {
 			max_depth = d
 			lcs = candidate

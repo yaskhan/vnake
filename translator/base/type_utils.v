@@ -65,7 +65,10 @@ pub fn is_string_type(v_type string) bool {
 }
 
 pub fn is_numeric_type(v_type string) bool {
-	return v_type in ['int', 'f64', 'i64', 'u32', 'u64', 'i8', 'i16', 'u8', 'u16']
+	return match v_type {
+		'int', 'f64', 'i64', 'u32', 'u64', 'i8', 'i16', 'u8', 'u16' { true }
+		else { false }
+	}
 }
 
 // wrap_bool lowers Python truthiness into explicit V boolean checks.

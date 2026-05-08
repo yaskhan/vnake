@@ -13,3 +13,7 @@
 ## 2026-04-08 - [Single-pass Type Homogeneity Tracking]
 **Learning:** Allocating temporary arrays or maps to determine the common type of collection elements (e.g., in list or dict literals) during recursive AST traversal creates significant GC pressure and overhead.
 **Action:** Use a single-pass loop with state variables to track homogeneity and nullability, returning early or defaulting to a base type if an inconsistency is detected.
+
+## 2024-05-16 - [V-Lang match vs in for string sets]
+**Learning:** In V 0.5.1, using a `match` expression for string constant sets is significantly faster (~23% in -prod) than the `in` operator with an array literal, as `match` is optimized to a jump table or efficient branching while `in` may involve array iteration.
+**Action:** Use `match` for fixed-set identifier lookups in hot paths.
