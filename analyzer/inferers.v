@@ -28,8 +28,20 @@ fn add_unique_int(mut items []int, value int) {
 }
 
 fn is_mutating_method(name string) bool {
-	return name in ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'setdefault',
-		'delete', 'add', 'discard']
+	// ⚡ Bolt: Fast path for identifiers that cannot be mutating methods based on length.
+	// Mutating methods are 3-10 chars long.
+	if name.len < 3 || name.len > 10 {
+		return false
+	}
+	return match name {
+		'append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'setdefault', 'delete',
+		'add', 'discard' {
+			true
+		}
+		else {
+			false
+		}
+	}
 }
 
 fn collect_stmt_children(stmt ast.Statement) []ast.Statement {

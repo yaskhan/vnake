@@ -47,6 +47,18 @@ pub:
 	generic_map        map[string]string
 }
 
+pub fn is_reserved_python_type(v_type string) bool {
+	// ⚡ Bolt: Fast path for identifiers that cannot be reserved types based on length.
+	// Reserved types are 3-13 chars long.
+	if v_type.len < 3 || v_type.len > 13 {
+		return false
+	}
+	return match v_type {
+		'NoneType', 'Any', 'LiteralString', 'Self', 'TaskState' { true }
+		else { false }
+	}
+}
+
 pub fn is_collection_type(v_type string) bool {
 	// ⚡ Bolt: Fast path using first character match avoids redundant starts_with calls.
 	// Measured ~2.4x speedup (4.1s -> 1.7s for 10M iterations).

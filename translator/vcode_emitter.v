@@ -175,7 +175,7 @@ pub fn (e &VCodeEmitter) emit() string {
 		for cls, _ in e.defined_classes {
 			v_cls := cls.trim_left('&')
 			if v_cls.len > 0 && v_cls[0].is_capital()
-				&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
+				&& !base.is_reserved_python_type(v_cls) {
 				target := '&' + v_cls
 				if target !in variants_seen {
 					variants_seen[target] = true
@@ -358,7 +358,7 @@ pub fn VCodeEmitter.emit_global_helpers(imports []string, structs []string, func
 		v_cls := cls.trim_left('&')
 		// Ensure classes in Any are always references to match V 0.5 heap-allocated memory model for Python objects
 		if v_cls.len > 0 && v_cls[0].is_capital()
-			&& v_cls !in ['NoneType', 'Any', 'LiteralString', 'Self', 'TaskState'] {
+			&& !base.is_reserved_python_type(v_cls) {
 			target := '&' + v_cls
 			if target !in variants_seen {
 				variants_seen[target] = true
