@@ -22,13 +22,12 @@ fn test_depth_memoization() {
 	t.class_hierarchy['C'] = ['A']
 	t.class_hierarchy['A'] = []
 
-	mut memo := map[string]int{}
-	depth := t.get_depth_with_memo('D', 0, mut memo)
+	depth := t.get_depth('D', 0)
 	assert depth == 2
-	assert memo['D'] == 2
-	assert memo['B'] == 1
-	assert memo['C'] == 1
-	assert memo['A'] == 0
+	assert t.depth_cache['D'] == 2
+	assert t.depth_cache['B'] == 1
+	assert t.depth_cache['C'] == 1
+	assert t.depth_cache['A'] == 0
 }
 
 fn test_ancestors_deduplication() {
