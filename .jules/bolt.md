@@ -21,3 +21,7 @@
 ## 2024-05-18 - [Backward Scope Stack Iteration and State Optimization]
 **Learning:** In compiler/translator architectures, innermost scopes are accessed significantly more frequently than outer ones. Forward iteration through a scope stack results in $O(N)$ lookup complexity for the common case. Switching to backward iteration (innermost to outermost) yielded a measured ~3.7x speedup for typical local variable accesses. Additionally, cloning static configuration data (like indentation arrays) into every state instance creates unnecessary heap pressure.
 **Action:** Always iterate scope stacks from local to global (backward) and prefer direct access to global constants over cloning for read-only state data.
+
+## 2024-05-19 - [Optimized method lookups and allocation reduction]
+**Learning:** In V, linear search in an array literal (`if x in ['a', 'b']`) is less efficient than a `match` expression, especially with a length-based fast path. Furthermore, creating temporary arrays for lookups in hot paths (like a visitor) adds significant heap pressure.
+**Action:** Centralize fixed-set lookups into optimized functions with `match` and length guards. Avoid temporary array allocations for lookups by using direct map access with string interpolation.

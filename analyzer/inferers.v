@@ -21,21 +21,6 @@ fn add_unique(mut items []string, value string) {
 	}
 }
 
-fn is_mutating_method(name string) bool {
-	// ⚡ Bolt: Fast path using length and match expression avoids array allocation and linear search.
-	if name.len < 3 || name.len > 10 {
-		return false
-	}
-	return match name {
-		'append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'setdefault', 'delete',
-		'add', 'discard' {
-			true
-		}
-		else {
-			false
-		}
-	}
-}
 
 fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 	return match stmt {

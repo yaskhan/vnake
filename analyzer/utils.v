@@ -211,6 +211,22 @@ pub fn (mut t TypeInferenceUtilsMixin) guess_node_type(node_type string) string 
 	}
 }
 
+pub fn is_mutating_method(name string) bool {
+	// ⚡ Bolt: Fast path using length and match expression avoids array allocation and linear search.
+	if name.len < 3 || name.len > 11 {
+		return false
+	}
+	return match name {
+		'append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'setdefault', 'delete',
+		'add', 'discard', 'workInAdd', 'deviceInAdd' {
+			true
+		}
+		else {
+			false
+		}
+	}
+}
+
 pub fn map_python_type_to_v(py_type string) string {
 	mut clean_type := py_type.trim_space().trim('\'"')
 	if clean_type.starts_with('typing_extensions.') {
