@@ -21,3 +21,7 @@
 ## 2024-05-18 - [Backward Scope Stack Iteration and State Optimization]
 **Learning:** In compiler/translator architectures, innermost scopes are accessed significantly more frequently than outer ones. Forward iteration through a scope stack results in $O(N)$ lookup complexity for the common case. Switching to backward iteration (innermost to outermost) yielded a measured ~3.7x speedup for typical local variable accesses. Additionally, cloning static configuration data (like indentation arrays) into every state instance creates unnecessary heap pressure.
 **Action:** Always iterate scope stacks from local to global (backward) and prefer direct access to global constants over cloning for read-only state data.
+
+## 2024-05-20 - [Hot Path Optimization with Byte Dispatch and Fast Paths]
+**Learning:** In V 0.5.1, `trim_left` and linear `in` array checks on strings can be significant bottlenecks in hot paths like type classification. Implementing a byte-level fast path for common prefixes (like `?` and `&`) and using a first-character `match` dispatch to avoid multiple `starts_with` calls can yield significant performance gains (~2.1x speedup in -prod).
+**Action:** Use single-byte character checks for early exit and dispatching in string processing hot paths to avoid redundant allocations and scans.
