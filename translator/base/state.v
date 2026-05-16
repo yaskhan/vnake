@@ -375,20 +375,48 @@ pub fn (s &TranslatorState) collect_assigned_nodes(nodes []voidptr) map[string]b
 // is_v_class_type checks if v_type is a class type that should be passed by reference.
 // It correctly handles generic types by checking the current state.
 pub fn (s &TranslatorState) is_v_class_type(v_type string) bool {
-	clean := v_type.trim_left('?&')
-	if clean.len == 0 {
+	if v_type.len == 0 {
 		return false
 	}
+
+	// ⚡ Bolt: Fast path to avoid trim_left allocations when no trimming is needed.
+	mut clean := v_type
+	if v_type[0] == `?` || v_type[0] == `&` {
+		clean = v_type.trim_left('?&')
+		if clean.len == 0 {
+			return false
+		}
+	}
+
 	if !clean[0].is_capital() {
 		return false
 	}
-	if clean in ['Any', 'LiteralString', 'Self', 'NoneType', 'TaskState'] {
+
+	// ⚡ Bolt: Optimized reserved type check using match.
+	if is_reserved_python_type(clean) {
 		return false
 	}
-	if clean.starts_with('SumType_') || clean.starts_with('LiteralEnum_')
-		|| clean.starts_with('TupleStruct_') {
-		return false
+
+	// ⚡ Bolt: First-character byte dispatch avoids multiple starts_with calls.
+	match clean[0] {
+		`S` {
+			if clean.starts_with('SumType_') {
+				return false
+			}
+		}
+		`L` {
+			if clean.starts_with('LiteralEnum_') {
+				return false
+			}
+		}
+		`T` {
+			if clean.starts_with('TupleStruct_') {
+				return false
+			}
+		}
+		else {}
 	}
+
 	if clean.ends_with('Protocol') {
 		return false
 	}
