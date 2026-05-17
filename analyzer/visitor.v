@@ -3,8 +3,6 @@ module analyzer
 import ast
 import models
 
-const mutating_methods = ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'workInAdd', 'deviceInAdd',
-	'setdefault', 'delete', 'add', 'discard']
 
 pub struct TypeInferenceVisitorMixin {
 	TypeInferenceUtilsMixin
@@ -1570,7 +1568,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_type_param(node ast.TypeParam) {
 pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 	if node.func is ast.Attribute {
 		attr := node.func
-		if attr.attr in mutating_methods {
+		if is_mutating_method(attr.attr) {
 			t.mark_mutated_expr(attr.value)
 		}
 		if attr.attr == 'append' && node.args.len == 1 {
@@ -1595,20 +1593,21 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 		}
 
 		// Check for method-based mutability if object is a parameter
+		// ⚡ Bolt: Direct map lookups with string interpolation avoid creating a temporary array and reduce heap allocations.
 		obj_name := t.expr_to_name(attr.value)
 		if obj_name.len > 0 {
 			obj_type := t.guess_expr_type(attr.value).trim_left('?&')
-			mut_keys := [
-				'${obj_type}.${attr.attr}.self',
-				'${obj_type}.${to_camel_case(attr.attr)}.self',
-			]
-			for mk in mut_keys {
-				if m_info := t.mutability_map[mk] {
-					if m_info.is_mutated {
-						t.mark_mutated(obj_name)
-						break
-					}
+			mut is_mut := false
+			if m_info := t.mutability_map['${obj_type}.${attr.attr}.self'] {
+				is_mut = m_info.is_mutated
+			}
+			if !is_mut {
+				if m_info_cc := t.mutability_map['${obj_type}.${to_camel_case(attr.attr)}.self'] {
+					is_mut = m_info_cc.is_mutated
 				}
+			}
+			if is_mut {
+				t.mark_mutated(obj_name)
 			}
 		}
 	}
