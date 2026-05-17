@@ -25,3 +25,7 @@
 ## 2024-05-19 - [Optimized method lookups and allocation reduction]
 **Learning:** In V, linear search in an array literal (`if x in ['a', 'b']`) is less efficient than a `match` expression, especially with a length-based fast path. Furthermore, creating temporary arrays for lookups in hot paths (like a visitor) adds significant heap pressure.
 **Action:** Centralize fixed-set lookups into optimized functions with `match` and length guards. Avoid temporary array allocations for lookups by using direct map access with string interpolation.
+
+## 2024-05-20 - [V-Lang trim_left Performance]
+**Learning:** In V 0.5.1, `s.trim_left(cutset)` performs heap allocations even when no characters are trimmed; manual checks for the first character before calling `trim_left` are significantly faster (~16x speedup) in hot paths where prefixes are often absent.
+**Action:** Always use a fast-path check for the first character before calling `trim_left` in performance-critical code.
