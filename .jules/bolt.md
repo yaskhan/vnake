@@ -29,3 +29,7 @@
 ## 2024-05-20 - [V-Lang trim_left Performance]
 **Learning:** In V 0.5.1, `s.trim_left(cutset)` performs heap allocations even when no characters are trimmed; manual checks for the first character before calling `trim_left` are significantly faster (~16x speedup) in hot paths where prefixes are often absent.
 **Action:** Always use a fast-path check for the first character before calling `trim_left` in performance-critical code.
+
+## 2024-05-21 - [Optimized Type Mapping with Byte Dispatch and Map Deduplication]
+**Learning:** In V 0.5.1, sequential `starts_with` checks and linear search deduplication in recursive functions (like type mapping) create significant overhead. Byte-level dispatch on the first character of a string provides a fast path for branching. Additionally, map-based deduplication is crucial even for small sets (like Union types) to avoid O(N^2) complexity in nested scenarios.
+**Action:** Use byte-level `match` dispatch for string-based branching and prefer map-based deduplication for type processing.
