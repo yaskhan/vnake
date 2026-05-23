@@ -33,3 +33,7 @@
 ## 2024-05-21 - [Optimized Type Mapping with Byte Dispatch and Map Deduplication]
 **Learning:** In V 0.5.1, sequential `starts_with` checks and linear search deduplication in recursive functions (like type mapping) create significant overhead. Byte-level dispatch on the first character of a string provides a fast path for branching. Additionally, map-based deduplication is crucial even for small sets (like Union types) to avoid O(N^2) complexity in nested scenarios.
 **Action:** Use byte-level `match` dispatch for string-based branching and prefer map-based deduplication for type processing.
+
+## 2024-05-22 - [Optimized Type Mapping with Byte Dispatch and Conditional Trimming]
+**Learning:** In V 0.5.1, string operations like `trim_left`, `trim_right`, and `trim_space` always perform heap allocations even if no characters are removed. Adding a simple check for leading/trailing characters (e.g., `if s[0].is_space() || s[s.len-1].is_space()`) before calling them can avoid these allocations. Additionally, using byte-level dispatch (match on `s[0]`) for prefix stripping significantly reduces the overhead of multiple `starts_with` calls in hot paths.
+**Action:** Use conditional trimming and byte-level dispatch for hot-path string transformations.
