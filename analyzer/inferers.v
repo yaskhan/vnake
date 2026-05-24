@@ -46,7 +46,7 @@ fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 			children
 		}
 		ast.With {
-			stmt.body.clone()
+			stmt.body
 		}
 		ast.Try {
 			// ⚡ Bolt: Pre-calculating capacity for Try statement children.
@@ -91,10 +91,10 @@ fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 			children
 		}
 		ast.FunctionDef {
-			stmt.body.clone()
+			stmt.body
 		}
 		ast.ClassDef {
-			stmt.body.clone()
+			stmt.body
 		}
 		else {
 			[]ast.Statement{}
@@ -105,13 +105,13 @@ fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 fn collect_expr_children(expr ast.Expression) []ast.Expression {
 	return match expr {
 		ast.List {
-			expr.elements.clone()
+			expr.elements
 		}
 		ast.Tuple {
-			expr.elements.clone()
+			expr.elements
 		}
 		ast.Set {
-			expr.elements.clone()
+			expr.elements
 		}
 		ast.Dict {
 			// ⚡ Bolt: Pre-allocating children array with capacity.
@@ -238,7 +238,7 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			[expr.value]
 		}
 		ast.JoinedStr {
-			expr.values.clone()
+			expr.values
 		}
 		ast.FormattedValue {
 			mut children := []ast.Expression{}
@@ -485,30 +485,23 @@ pub fn (mut a AliasInferer) analyze(tree ast.Module, mut utils TypeInferenceUtil
 		a.collect_aliases_stmt(stmt, mut aliases, mut instantiations, mut appends)
 	}
 
-	mut alias_usages := map[string][]string{}
+	// ⚡ Bolt: Using a temporary map of maps for type collection provides O(N) complexity
+	// by avoiding rebuilding the unique type set for every instantiation.
+	mut alias_usages_map := map[string]map[string]bool{}
 	for alias, _ in aliases {
-		alias_usages[alias] = []string{}
+		alias_usages_map[alias] = map[string]bool{}
 	}
 
 	for var_name, func_name in instantiations {
 		if func_name in aliases {
-			mut used := alias_usages[func_name] or { []string{} }
-			mut used_set := map[string]bool{}
-			for u in used {
-				used_set[u] = true
-			}
 			for t in appends[var_name] or { []string{} } {
-				if t !in used_set {
-					used_set[t] = true
-					used << t
-				}
+				alias_usages_map[func_name][t] = true
 			}
-			alias_usages[func_name] = used
 		}
 	}
 
 	for alias, base_type in aliases {
-		used_types := alias_usages[alias] or { []string{} }
+		used_types := alias_usages_map[alias].keys()
 		if used_types.len == 0 {
 			if base_type == 'list' {
 				a.alias_to_type[alias] = '[]Any'
