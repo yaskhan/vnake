@@ -41,8 +41,18 @@ pub fn (mut a Analyzer) analyze(node ast.Module) {
 	a.func_param_mutability = fms.func_param_mutability.clone()
 }
 
-// get_type returns variable type
+// get_type returns variable type.
+// ⚡ Bolt: Optimized hierarchy traversal with visited map to avoid O(2^N) diamond inheritance recursion.
 pub fn (a Analyzer) get_type(name string) ?string {
+	if !name.contains('.') && a.scope_prefixes.len > 0 {
+		for i := a.scope_prefixes.len - 1; i >= 0; i-- {
+			qual := a.scope_prefixes[i] + '.' + name
+			if res := a.type_map[qual] {
+				return res
+			}
+		}
+	}
+
 	if res := a.type_map[name] {
 		return res
 	}
@@ -50,20 +60,29 @@ pub fn (a Analyzer) get_type(name string) ?string {
 	if name.contains('.') {
 		cls := name.all_before_last('.')
 		attr := name.all_after_last('.')
-		bases := a.get_class_bases(cls)
-		for b in bases {
-			if res := a.get_type('${b}.${attr}') {
-				return res
-			}
-		}
+		mut visited := map[string]bool{}
+		return a.get_type_recursive(cls, attr, mut visited)
+	}
+	return none
+}
+
+fn (a Analyzer) get_type_recursive(cls string, attr string, mut visited map[string]bool) ?string {
+	if cls in visited {
+		return none
+	}
+	visited[cls] = true
+
+	key := cls + '.' + attr
+	if res := a.type_map[key] {
+		return res
 	}
 
-	if !name.contains('.') && a.scope_prefixes.len > 0 {
-		for i := a.scope_prefixes.len - 1; i >= 0; i-- {
-			qual := a.scope_prefixes[i] + '.' + name
-			if res := a.type_map[qual] {
-				return res
-			}
+	for b in a.get_class_bases(cls) {
+		if b == 'object' {
+			continue
+		}
+		if res := a.get_type_recursive(b, attr, mut visited) {
+			return res
 		}
 	}
 	return none
@@ -145,6 +164,8 @@ pub fn (a Analyzer) get_class_bases(class_name string) []string {
 	return []
 }
 
+// get_call_signature returns the call signature of a function or method.
+// ⚡ Bolt: Optimized hierarchy traversal with visited map to avoid O(2^N) diamond inheritance recursion.
 pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
 	if sig := a.call_signatures[name] {
 		return sig
@@ -152,11 +173,29 @@ pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
 	if name.contains('.') {
 		cls := name.all_before_last('.')
 		attr := name.all_after_last('.')
-		bases := a.get_class_bases(cls)
-		for b in bases {
-			if res := a.get_call_signature('${b}.${attr}') {
-				return res
-			}
+		mut visited := map[string]bool{}
+		return a.get_call_signature_recursive(cls, attr, mut visited)
+	}
+	return none
+}
+
+fn (a Analyzer) get_call_signature_recursive(cls string, attr string, mut visited map[string]bool) ?CallSignature {
+	if cls in visited {
+		return none
+	}
+	visited[cls] = true
+
+	key := cls + '.' + attr
+	if sig := a.call_signatures[key] {
+		return sig
+	}
+
+	for b in a.get_class_bases(cls) {
+		if b == 'object' {
+			continue
+		}
+		if sig := a.get_call_signature_recursive(b, attr, mut visited) {
+			return sig
 		}
 	}
 	return none
