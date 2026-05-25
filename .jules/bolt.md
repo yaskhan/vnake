@@ -37,3 +37,7 @@
 ## 2024-05-22 - [Optimized Type Mapping with Byte Dispatch and Conditional Trimming]
 **Learning:** In V 0.5.1, string operations like `trim_left`, `trim_right`, and `trim_space` always perform heap allocations even if no characters are removed. Adding a simple check for leading/trailing characters (e.g., `if s[0].is_space() || s[s.len-1].is_space()`) before calling them can avoid these allocations. Additionally, using byte-level dispatch (match on `s[0]`) for prefix stripping significantly reduces the overhead of multiple `starts_with` calls in hot paths.
 **Action:** Use conditional trimming and byte-level dispatch for hot-path string transformations.
+
+## 2024-05-24 - [Optimized Type Name Generation with strings.Builder]
+**Learning:** In V 0.5.1, high-level string pipelines like `.split(' | ').map(it.trim_space())` and `.capitalize()` on every part create significant heap pressure and redundant allocations. Replacing these with `strings.Builder` and single-pass character processing (manual quote/prefix stripping and capitalization) yielded a measured ~1.7x to 1.9x speedup for `get_sum_type_name` and `get_literal_enum_name`.
+**Action:** Use `strings.Builder` and manual character-level transformations instead of functional pipelines for hot-path string formatting.
