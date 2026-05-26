@@ -112,7 +112,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 				mut attr := node.func
 				rec_type := t.guess_expr_type(attr.value)
 				if rec_type != 'Any' {
-					sig_key := rec_type.trim_left('?&') + '.' + attr.attr
+					sig_key := clean_v_type(rec_type) + '.' + attr.attr
 					if sig := t.get_call_signature(sig_key) {
 						return sig.return_type
 					}
@@ -123,7 +123,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 		ast.Attribute {
 			val_type := t.guess_expr_type(node.value)
 			if val_type != 'Any' && val_type != 'int' {
-				attr_type := t.get_type(val_type.trim_left('?&') + '.' + node.attr)
+				attr_type := t.get_type(clean_v_type(val_type) + '.' + node.attr)
 				if attr_type != 'Any' {
 					return attr_type
 				}
@@ -672,7 +672,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 	val_type := t.guess_expr_type(node.value)
 	if val_type != 'Any' && val_type != 'int' {
 		loc_key := '${node.token.line}:${node.token.column}'
-		t.location_map[loc_key] = val_type.trim_left('?&')
+		t.location_map[loc_key] = clean_v_type(val_type)
 	}
 
 	// TypedDict tracking for read access
@@ -1052,19 +1052,26 @@ fn (mut t TypeInferenceVisitorMixin) collect_return_types(stmts []ast.Statement,
 pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef) {
 	t.store_type(node.name, 'fn (...Any) Any')
 
-	mut combined_args := []ast.Parameter{}
+	// ⚡ Bolt: Pre-allocating combined_args array avoids reallocations.
+	mut combined_args := []ast.Parameter{cap: node.args.posonlyargs.len + node.args.args.len}
 	combined_args << node.args.posonlyargs
 	combined_args << node.args.args
-	mut signature_args := combined_args.clone()
-	if signature_args.len > 0 && signature_args[0].arg in ['self', 'cls'] {
-		s_arg := signature_args[0].arg
+
+	// ⚡ Bolt: Optimizing signature_args construction by avoiding redundant clones and pre-allocating.
+	mut signature_args := []ast.Parameter{cap: combined_args.len + node.args.kwonlyargs.len}
+	mut start_idx := 0
+	if combined_args.len > 0 && combined_args[0].arg in ['self', 'cls'] {
+		s_arg := combined_args[0].arg
 		if t.scope_names.len > 0 {
 			cls := t.scope_names[t.scope_names.len - 1]
 			if cls.len > 0 && cls[0].is_capital() {
 				t.store_type(s_arg, cls)
 			}
 		}
-		signature_args = signature_args[1..].clone()
+		start_idx = 1
+	}
+	if start_idx < combined_args.len {
+		signature_args << combined_args[start_idx..]
 	}
 	signature_args << node.args.kwonlyargs
 
@@ -1348,7 +1355,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 			ast.Attribute {
 				t.mark_mutated_expr(target)
 				mut obj_key := t.guess_expr_type(target.value)
-				obj_key = obj_key.trim_left('?&')
+				obj_key = clean_v_type(obj_key)
 				if obj_key in ['Any', 'int', 'unknown'] {
 					obj_key = t.render_expr(target.value)
 				}
@@ -1594,16 +1601,20 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 
 		// Check for method-based mutability if object is a parameter
 		// ⚡ Bolt: Direct map lookups with string interpolation avoid creating a temporary array and reduce heap allocations.
+		// Pre-calculating camelCase and avoiding redundant lookups if name is already camelCased.
 		obj_name := t.expr_to_name(attr.value)
 		if obj_name.len > 0 {
-			obj_type := t.guess_expr_type(attr.value).trim_left('?&')
+			obj_type := clean_v_type(t.guess_expr_type(attr.value))
 			mut is_mut := false
 			if m_info := t.mutability_map['${obj_type}.${attr.attr}.self'] {
 				is_mut = m_info.is_mutated
 			}
 			if !is_mut {
-				if m_info_cc := t.mutability_map['${obj_type}.${to_camel_case(attr.attr)}.self'] {
-					is_mut = m_info_cc.is_mutated
+				camel_attr := to_camel_case(attr.attr)
+				if camel_attr != attr.attr {
+					if m_info_cc := t.mutability_map['${obj_type}.${camel_attr}.self'] {
+						is_mut = m_info_cc.is_mutated
+					}
 				}
 			}
 			if is_mut {

@@ -976,7 +976,7 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 					f.mark_mutated(attr.value)
 				} else if f.analyzer != unsafe { nil } {
 					// Propagate mutability from called method
-					obj_type := f.analyzer.guess_expr_type(attr.value).trim_left('?&')
+					obj_type := clean_v_type(f.analyzer.guess_expr_type(attr.value))
 					if obj_type != 'Any' && obj_type != '' {
 						mut_key := '${obj_type}.${attr.attr}.self'
 						info := f.analyzer.get_mutability(mut_key)
@@ -984,10 +984,13 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 							f.mark_mutated(attr.value)
 						} else {
 							// Try CamelCase
-							mut_key_cc := '${obj_type}.${to_camel_case(attr.attr)}.self'
-							info_cc := f.analyzer.get_mutability(mut_key_cc)
-							if info_cc.is_mutated {
-								f.mark_mutated(attr.value)
+							camel_attr := to_camel_case(attr.attr)
+							if camel_attr != attr.attr {
+								mut_key_cc := '${obj_type}.${camel_attr}.self'
+								info_cc := f.analyzer.get_mutability(mut_key_cc)
+								if info_cc.is_mutated {
+									f.mark_mutated(attr.value)
+								}
 							}
 						}
 					}
