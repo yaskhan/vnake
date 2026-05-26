@@ -60,13 +60,16 @@ pub fn (a Analyzer) get_type(name string) ?string {
 	if name.contains('.') {
 		cls := name.all_before_last('.')
 		attr := name.all_after_last('.')
+		camel_attr := to_camel_case(attr)
+		has_camel := camel_attr != attr
+
 		mut visited := map[string]bool{}
-		return a.get_type_recursive(cls, attr, mut visited)
+		return a.get_type_recursive(cls, attr, camel_attr, has_camel, mut visited)
 	}
 	return none
 }
 
-fn (a Analyzer) get_type_recursive(cls string, attr string, mut visited map[string]bool) ?string {
+fn (a Analyzer) get_type_recursive(cls string, attr string, camel_attr string, has_camel bool, mut visited map[string]bool) ?string {
 	if cls in visited {
 		return none
 	}
@@ -77,11 +80,18 @@ fn (a Analyzer) get_type_recursive(cls string, attr string, mut visited map[stri
 		return res
 	}
 
+	if has_camel {
+		key_camel := cls + '.' + camel_attr
+		if res := a.type_map[key_camel] {
+			return res
+		}
+	}
+
 	for b in a.get_class_bases(cls) {
 		if b == 'object' {
 			continue
 		}
-		if res := a.get_type_recursive(b, attr, mut visited) {
+		if res := a.get_type_recursive(b, attr, camel_attr, has_camel, mut visited) {
 			return res
 		}
 	}
@@ -173,13 +183,16 @@ pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
 	if name.contains('.') {
 		cls := name.all_before_last('.')
 		attr := name.all_after_last('.')
+		camel_attr := to_camel_case(attr)
+		has_camel := camel_attr != attr
+
 		mut visited := map[string]bool{}
-		return a.get_call_signature_recursive(cls, attr, mut visited)
+		return a.get_call_signature_recursive(cls, attr, camel_attr, has_camel, mut visited)
 	}
 	return none
 }
 
-fn (a Analyzer) get_call_signature_recursive(cls string, attr string, mut visited map[string]bool) ?CallSignature {
+fn (a Analyzer) get_call_signature_recursive(cls string, attr string, camel_attr string, has_camel bool, mut visited map[string]bool) ?CallSignature {
 	if cls in visited {
 		return none
 	}
@@ -190,11 +203,18 @@ fn (a Analyzer) get_call_signature_recursive(cls string, attr string, mut visite
 		return sig
 	}
 
+	if has_camel {
+		key_camel := cls + '.' + camel_attr
+		if sig := a.call_signatures[key_camel] {
+			return sig
+		}
+	}
+
 	for b in a.get_class_bases(cls) {
 		if b == 'object' {
 			continue
 		}
-		if sig := a.get_call_signature_recursive(b, attr, mut visited) {
+		if sig := a.get_call_signature_recursive(b, attr, camel_attr, has_camel, mut visited) {
 			return sig
 		}
 	}
