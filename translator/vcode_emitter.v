@@ -6,6 +6,13 @@ fn to_snake_case(name string) string {
 	return base.to_snake_case(name)
 }
 
+fn is_reserved_python_type(name string) bool {
+	return match name {
+		'NoneType', 'Any', 'LiteralString', 'Self', 'TaskState' { true }
+		else { false }
+	}
+}
+
 @[heap]
 pub struct VCodeEmitter {
 pub mut:
