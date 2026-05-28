@@ -10,10 +10,6 @@ pub mut:
 }
 
 pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut env ClassVisitEnv, mut classes ClassesModule) {
-	if node.name == 'TaskState' {
-		for i, stmt in node.body {
-		}
-	}
 	mut struct_name := sanitize_name(node.name, true)
 	if h.class_stack.len > 0 {
 		struct_name = h.class_stack.join('') + struct_name
