@@ -1,6 +1,7 @@
 module analyzer
 
 import ast
+import strings
 
 // to_camel_case converts snake_case to camelCase.
 // ⚡ Bolt: Fast path for strings already camelCased or without underscores.
@@ -40,25 +41,31 @@ pub fn clean_v_type(v_type string) string {
 	return v_type
 }
 
+// expr_name returns dot-separated name for attributes.
+// ⚡ Bolt: Using strings.Builder and a recursive helper avoids repeated string interpolations.
 pub fn expr_name(node ast.Expression) string {
-	return match node {
+	mut sb := strings.new_builder(32)
+	expr_name_sb(node, mut sb)
+	return sb.str()
+}
+
+fn expr_name_sb(node ast.Expression, mut sb strings.Builder) {
+	match node {
 		ast.Name {
-			node.id
+			sb.write_string(node.id)
 		}
 		ast.Attribute {
-			base := expr_name(node.value)
-			if base.len > 0 {
-				'${base}.${node.attr}'
-			} else {
-				node.attr
+			old_len := sb.len
+			expr_name_sb(node.value, mut sb)
+			if sb.len > old_len {
+				sb.write_byte(`.`)
 			}
+			sb.write_string(node.attr)
 		}
 		ast.Subscript {
-			expr_name(node.value)
+			expr_name_sb(node.value, mut sb)
 		}
-		else {
-			''
-		}
+		else {}
 	}
 }
 
