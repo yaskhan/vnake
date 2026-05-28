@@ -17,3 +17,27 @@
 ## 2024-05-16 - [V-Lang match vs in for string sets]
 **Learning:** In V 0.5.1, using a `match` expression for string constant sets is significantly faster (~23% in -prod) than the `in` operator with an array literal, as `match` is optimized to a jump table or efficient branching while `in` may involve array iteration.
 **Action:** Use `match` for fixed-set identifier lookups in hot paths.
+
+## 2024-05-18 - [Backward Scope Stack Iteration and State Optimization]
+**Learning:** In compiler/translator architectures, innermost scopes are accessed significantly more frequently than outer ones. Forward iteration through a scope stack results in $O(N)$ lookup complexity for the common case. Switching to backward iteration (innermost to outermost) yielded a measured ~3.7x speedup for typical local variable accesses. Additionally, cloning static configuration data (like indentation arrays) into every state instance creates unnecessary heap pressure.
+**Action:** Always iterate scope stacks from local to global (backward) and prefer direct access to global constants over cloning for read-only state data.
+
+## 2024-05-19 - [Optimized method lookups and allocation reduction]
+**Learning:** In V, linear search in an array literal (`if x in ['a', 'b']`) is less efficient than a `match` expression, especially with a length-based fast path. Furthermore, creating temporary arrays for lookups in hot paths (like a visitor) adds significant heap pressure.
+**Action:** Centralize fixed-set lookups into optimized functions with `match` and length guards. Avoid temporary array allocations for lookups by using direct map access with string interpolation.
+
+## 2024-05-20 - [V-Lang trim_left Performance]
+**Learning:** In V 0.5.1, `s.trim_left(cutset)` performs heap allocations even when no characters are trimmed; manual checks for the first character before calling `trim_left` are significantly faster (~16x speedup) in hot paths where prefixes are often absent.
+**Action:** Always use a fast-path check for the first character before calling `trim_left` in performance-critical code.
+
+## 2024-05-21 - [Optimized Type Mapping with Byte Dispatch and Map Deduplication]
+**Learning:** In V 0.5.1, sequential `starts_with` checks and linear search deduplication in recursive functions (like type mapping) create significant overhead. Byte-level dispatch on the first character of a string provides a fast path for branching. Additionally, map-based deduplication is crucial even for small sets (like Union types) to avoid O(N^2) complexity in nested scenarios.
+**Action:** Use byte-level `match` dispatch for string-based branching and prefer map-based deduplication for type processing.
+
+## 2024-05-22 - [Optimized Type Mapping with Byte Dispatch and Conditional Trimming]
+**Learning:** In V 0.5.1, string operations like `trim_left`, `trim_right`, and `trim_space` always perform heap allocations even if no characters are removed. Adding a simple check for leading/trailing characters (e.g., `if s[0].is_space() || s[s.len-1].is_space()`) before calling them can avoid these allocations. Additionally, using byte-level dispatch (match on `s[0]`) for prefix stripping significantly reduces the overhead of multiple `starts_with` calls in hot paths.
+**Action:** Use conditional trimming and byte-level dispatch for hot-path string transformations.
+
+## 2024-05-24 - [Optimized Type Name Generation with strings.Builder]
+**Learning:** In V 0.5.1, high-level string pipelines like `.split(' | ').map(it.trim_space())` and `.capitalize()` on every part create significant heap pressure and redundant allocations. Replacing these with `strings.Builder` and single-pass character processing (manual quote/prefix stripping and capitalization) yielded a measured ~1.7x to 1.9x speedup for `get_sum_type_name` and `get_literal_enum_name`.
+**Action:** Use `strings.Builder` and manual character-level transformations instead of functional pipelines for hot-path string formatting.

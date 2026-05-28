@@ -21,42 +21,40 @@ fn add_unique(mut items []string, value string) {
 	}
 }
 
-fn add_unique_int(mut items []int, value int) {
-	if value !in items {
-		items << value
-	}
-}
-
-fn is_mutating_method(name string) bool {
-	return name in ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'setdefault',
-		'delete', 'add', 'discard']
-}
 
 fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 	return match stmt {
 		ast.If {
-			mut children := []ast.Statement{}
+			// ⚡ Bolt: Pre-allocating children array with capacity avoids reallocations.
+			mut children := []ast.Statement{cap: stmt.body.len + stmt.orelse.len}
 			children << stmt.body
 			children << stmt.orelse
 			children
 		}
 		ast.While {
-			mut children := []ast.Statement{}
+			// ⚡ Bolt: Pre-allocating children array with capacity avoids reallocations.
+			mut children := []ast.Statement{cap: stmt.body.len + stmt.orelse.len}
 			children << stmt.body
 			children << stmt.orelse
 			children
 		}
 		ast.For {
-			mut children := []ast.Statement{}
+			// ⚡ Bolt: Pre-allocating children array with capacity avoids reallocations.
+			mut children := []ast.Statement{cap: stmt.body.len + stmt.orelse.len}
 			children << stmt.body
 			children << stmt.orelse
 			children
 		}
 		ast.With {
-			stmt.body.clone()
+			stmt.body
 		}
 		ast.Try {
-			mut children := []ast.Statement{}
+			// ⚡ Bolt: Pre-calculating capacity for Try statement children.
+			mut total_len := stmt.body.len + stmt.orelse.len + stmt.finalbody.len
+			for handler in stmt.handlers {
+				total_len += handler.body.len
+			}
+			mut children := []ast.Statement{cap: total_len}
 			children << stmt.body
 			for handler in stmt.handlers {
 				children << handler.body
@@ -66,7 +64,12 @@ fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 			children
 		}
 		ast.TryStar {
-			mut children := []ast.Statement{}
+			// ⚡ Bolt: Pre-calculating capacity for TryStar statement children.
+			mut total_len := stmt.body.len + stmt.orelse.len + stmt.finalbody.len
+			for handler in stmt.handlers {
+				total_len += handler.body.len
+			}
+			mut children := []ast.Statement{cap: total_len}
 			children << stmt.body
 			for handler in stmt.handlers {
 				children << handler.body
@@ -76,17 +79,22 @@ fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 			children
 		}
 		ast.Match {
-			mut children := []ast.Statement{}
+			// ⚡ Bolt: Pre-calculating capacity for Match statement children.
+			mut total_len := 0
+			for case in stmt.cases {
+				total_len += case.body.len
+			}
+			mut children := []ast.Statement{cap: total_len}
 			for case in stmt.cases {
 				children << case.body
 			}
 			children
 		}
 		ast.FunctionDef {
-			stmt.body.clone()
+			stmt.body
 		}
 		ast.ClassDef {
-			stmt.body.clone()
+			stmt.body
 		}
 		else {
 			[]ast.Statement{}
@@ -97,16 +105,17 @@ fn collect_stmt_children(stmt ast.Statement) []ast.Statement {
 fn collect_expr_children(expr ast.Expression) []ast.Expression {
 	return match expr {
 		ast.List {
-			expr.elements.clone()
+			expr.elements
 		}
 		ast.Tuple {
-			expr.elements.clone()
+			expr.elements
 		}
 		ast.Set {
-			expr.elements.clone()
+			expr.elements
 		}
 		ast.Dict {
-			mut children := []ast.Expression{}
+			// ⚡ Bolt: Pre-allocating children array with capacity.
+			mut children := []ast.Expression{cap: expr.keys.len + expr.values.len}
 			for key in expr.keys {
 				if key !is ast.NoneExpr {
 					children << key
@@ -122,13 +131,15 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			[expr.operand]
 		}
 		ast.Compare {
-			mut children := []ast.Expression{}
+			// ⚡ Bolt: Pre-allocating children array with capacity.
+			mut children := []ast.Expression{cap: 1 + expr.comparators.len}
 			children << expr.left
 			children << expr.comparators
 			children
 		}
 		ast.Call {
-			mut children := []ast.Expression{}
+			// ⚡ Bolt: Pre-allocating children array with capacity.
+			mut children := []ast.Expression{cap: 1 + expr.args.len + expr.keywords.len}
 			children << expr.func
 			children << expr.args
 			for kw in expr.keywords {
@@ -143,7 +154,8 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			[expr.value, expr.slice]
 		}
 		ast.Slice {
-			mut children := []ast.Expression{}
+			// ⚡ Bolt: Pre-allocating children array with capacity.
+			mut children := []ast.Expression{cap: 3}
 			if lower := expr.lower {
 				children << lower
 			}
@@ -226,7 +238,7 @@ fn collect_expr_children(expr ast.Expression) []ast.Expression {
 			[expr.value]
 		}
 		ast.JoinedStr {
-			expr.values.clone()
+			expr.values
 		}
 		ast.FormattedValue {
 			mut children := []ast.Expression{}
@@ -473,30 +485,23 @@ pub fn (mut a AliasInferer) analyze(tree ast.Module, mut utils TypeInferenceUtil
 		a.collect_aliases_stmt(stmt, mut aliases, mut instantiations, mut appends)
 	}
 
-	mut alias_usages := map[string][]string{}
+	// ⚡ Bolt: Using a temporary map of maps for type collection provides O(N) complexity
+	// by avoiding rebuilding the unique type set for every instantiation.
+	mut alias_usages_map := map[string]map[string]bool{}
 	for alias, _ in aliases {
-		alias_usages[alias] = []string{}
+		alias_usages_map[alias] = map[string]bool{}
 	}
 
 	for var_name, func_name in instantiations {
 		if func_name in aliases {
-			mut used := alias_usages[func_name] or { []string{} }
-			mut used_set := map[string]bool{}
-			for u in used {
-				used_set[u] = true
-			}
 			for t in appends[var_name] or { []string{} } {
-				if t !in used_set {
-					used_set[t] = true
-					used << t
-				}
+				alias_usages_map[func_name][t] = true
 			}
-			alias_usages[func_name] = used
 		}
 	}
 
 	for alias, base_type in aliases {
-		used_types := alias_usages[alias] or { []string{} }
+		used_types := alias_usages_map[alias].keys()
 		if used_types.len == 0 {
 			if base_type == 'list' {
 				a.alias_to_type[alias] = '[]Any'
@@ -971,7 +976,7 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 					f.mark_mutated(attr.value)
 				} else if f.analyzer != unsafe { nil } {
 					// Propagate mutability from called method
-					obj_type := f.analyzer.guess_expr_type(attr.value).trim_left('?&')
+					obj_type := clean_v_type(f.analyzer.guess_expr_type(attr.value))
 					if obj_type != 'Any' && obj_type != '' {
 						mut_key := '${obj_type}.${attr.attr}.self'
 						info := f.analyzer.get_mutability(mut_key)
@@ -979,10 +984,13 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 							f.mark_mutated(attr.value)
 						} else {
 							// Try CamelCase
-							mut_key_cc := '${obj_type}.${to_camel_case(attr.attr)}.self'
-							info_cc := f.analyzer.get_mutability(mut_key_cc)
-							if info_cc.is_mutated {
-								f.mark_mutated(attr.value)
+							camel_attr := to_camel_case(attr.attr)
+							if camel_attr != attr.attr {
+								mut_key_cc := '${obj_type}.${camel_attr}.self'
+								info_cc := f.analyzer.get_mutability(mut_key_cc)
+								if info_cc.is_mutated {
+									f.mark_mutated(attr.value)
+								}
 							}
 						}
 					}
@@ -990,8 +998,8 @@ fn (mut f FunctionMutabilityScanner) visit_expr(node ast.Expression) {
 			}
 			if node.func is ast.Name {
 				func_name := node.func.id
-				if func_name in f.func_param_mutability {
-					mutated_indices := f.func_param_mutability[func_name]
+				// ⚡ Bolt: Using single-lookup existence check and retrieval.
+				if mutated_indices := f.func_param_mutability[func_name] {
 					for idx in mutated_indices {
 						if idx < node.args.len {
 							f.mark_mutated(node.args[idx])
@@ -1143,7 +1151,9 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			if f.analyzer != unsafe { nil } {
 				f.analyzer.push_scope(node.name)
 			}
-			mut params := []string{}
+			// ⚡ Bolt: Pre-allocating params array with capacity avoids reallocations.
+			mut params := []string{cap: node.args.posonlyargs.len + node.args.args.len +
+				node.args.kwonlyargs.len}
 			for param in node.args.posonlyargs {
 				params << param.arg
 			}
@@ -1174,10 +1184,11 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 			f.pop_scope()
 
 			func_qual_name := if prefix.len > 0 { '${prefix}.${node.name}' } else { node.name }
-			mut mutated_indices := []int{}
+			mut mutated_indices := []int{cap: f.current_params.len}
 			for i, p in f.current_params {
 				if p in f.mutated_params || p in f.reassigned_params {
-					add_unique_int(mut mutated_indices, i)
+					// ⚡ Bolt: Direct append since index i is unique.
+					mutated_indices << i
 					key := '${func_qual_name}.${p}'
 					mut info := f.mutability_map[key] or { MutabilityInfo{} }
 					if p in f.mutated_params {

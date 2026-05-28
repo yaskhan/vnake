@@ -2,9 +2,8 @@ module analyzer
 
 import ast
 import models
+import strings
 
-const mutating_methods = ['append', 'extend', 'insert', 'pop', 'remove', 'clear', 'update', 'workInAdd', 'deviceInAdd',
-	'setdefault', 'delete', 'add', 'discard']
 
 pub struct TypeInferenceVisitorMixin {
 	TypeInferenceUtilsMixin
@@ -114,7 +113,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 				mut attr := node.func
 				rec_type := t.guess_expr_type(attr.value)
 				if rec_type != 'Any' {
-					sig_key := rec_type.trim_left('?&') + '.' + attr.attr
+					sig_key := clean_v_type(rec_type) + '.' + attr.attr
 					if sig := t.get_call_signature(sig_key) {
 						return sig.return_type
 					}
@@ -125,7 +124,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 		ast.Attribute {
 			val_type := t.guess_expr_type(node.value)
 			if val_type != 'Any' && val_type != 'int' {
-				attr_type := t.get_type(val_type.trim_left('?&') + '.' + node.attr)
+				attr_type := t.get_type(clean_v_type(val_type) + '.' + node.attr)
 				if attr_type != 'Any' {
 					return attr_type
 				}
@@ -295,224 +294,349 @@ fn (mut t TypeInferenceVisitorMixin) get_base_node(node ast.Expression) ast.Expr
 	}
 }
 
+// expr_to_name returns dot-separated name for attributes.
+// ⚡ Bolt: Using strings.Builder and a recursive helper avoids repeated string interpolations.
 fn (t &TypeInferenceVisitorMixin) expr_to_name(node ast.Expression) string {
-	return match node {
+	mut sb := strings.new_builder(32)
+	t.expr_to_name_sb(node, mut sb)
+	return sb.str()
+}
+
+fn (t &TypeInferenceVisitorMixin) expr_to_name_sb(node ast.Expression, mut sb strings.Builder) {
+	match node {
 		ast.Name {
-			node.id
+			sb.write_string(node.id)
 		}
 		ast.Attribute {
-			base_name := t.expr_to_name(node.value)
-			if base_name.len > 0 {
-				'${base_name}.${node.attr}'
-			} else {
-				node.attr
+			old_len := sb.len
+			t.expr_to_name_sb(node.value, mut sb)
+			if sb.len > old_len {
+				sb.write_byte(`.`)
 			}
+			sb.write_string(node.attr)
 		}
-		else {
-			''
-		}
+		else {}
 	}
 }
 
+// expr_to_type_string converts AST node to a type string representation.
+// ⚡ Bolt: Using strings.Builder and a recursive helper avoids multiple intermediate
+// string allocations from .map().join() and interpolation.
 fn (mut t TypeInferenceVisitorMixin) expr_to_type_string(node ast.Expression) string {
-	return match node {
+	mut sb := strings.new_builder(32)
+	t.expr_to_type_string_sb(node, mut sb)
+	return sb.str()
+}
+
+fn (mut t TypeInferenceVisitorMixin) expr_to_type_string_sb(node ast.Expression, mut sb strings.Builder) {
+	match node {
 		ast.Name {
-			node.id
+			sb.write_string(node.id)
 		}
 		ast.Attribute {
-			base_name := t.expr_to_type_string(node.value)
-			if base_name.len > 0 {
-				'${base_name}.${node.attr}'
-			} else {
-				node.attr
+			old_len := sb.len
+			t.expr_to_type_string_sb(node.value, mut sb)
+			if sb.len > old_len {
+				sb.write_byte(`.`)
 			}
+			sb.write_string(node.attr)
 		}
 		ast.Subscript {
-			base_name := t.expr_to_type_string(node.value)
-			slice_name := match node.slice {
-				ast.Tuple { node.slice.elements.map(t.expr_to_type_string(it)).join(', ') }
-				else { t.expr_to_type_string(node.slice) }
+			mut base_sb := strings.new_builder(16)
+			t.expr_to_type_string_sb(node.value, mut base_sb)
+			base_name := base_sb.str()
+
+			mut slice_sb := strings.new_builder(16)
+			match node.slice {
+				ast.Tuple {
+					for i, elt in node.slice.elements {
+						if i > 0 {
+							slice_sb.write_string(', ')
+						}
+						t.expr_to_type_string_sb(elt, mut slice_sb)
+					}
+				}
+				else {
+					t.expr_to_type_string_sb(node.slice, mut slice_sb)
+				}
 			}
+			slice_name := slice_sb.str()
 			if slice_name.len > 0 {
-				'${base_name}[${slice_name}]'
+				sb.write_string(base_name)
+				sb.write_byte(`[`)
+				sb.write_string(slice_name)
+				sb.write_byte(`]`)
 			} else {
-				base_name
+				sb.write_string(base_name)
 			}
 		}
 		ast.Tuple {
-			node.elements.map(t.expr_to_type_string(it)).join(', ')
+			for i, elt in node.elements {
+				if i > 0 {
+					sb.write_string(', ')
+				}
+				t.expr_to_type_string_sb(elt, mut sb)
+			}
 		}
 		ast.List {
-			node.elements.map(t.expr_to_type_string(it)).join(', ')
+			for i, elt in node.elements {
+				if i > 0 {
+					sb.write_string(', ')
+				}
+				t.expr_to_type_string_sb(elt, mut sb)
+			}
 		}
 		ast.Constant {
-			node.value
+			sb.write_string(node.value)
 		}
 		ast.NoneExpr {
-			'None'
+			sb.write_string('None')
 		}
 		ast.Call {
-			t.expr_to_type_string(node.func)
+			t.expr_to_type_string_sb(node.func, mut sb)
 		}
 		ast.JoinedStr {
-			'LiteralString'
+			sb.write_string('LiteralString')
 		}
 		ast.FormattedValue {
-			t.expr_to_type_string(node.value)
+			t.expr_to_type_string_sb(node.value, mut sb)
 		}
 		ast.BinaryOp {
 			if node.op.value == '|' {
-				'${t.expr_to_type_string(node.left)} | ${t.expr_to_type_string(node.right)}'
+				t.expr_to_type_string_sb(node.left, mut sb)
+				sb.write_string(' | ')
+				t.expr_to_type_string_sb(node.right, mut sb)
 			} else {
-				t.expr_to_type_string(node.left)
+				t.expr_to_type_string_sb(node.left, mut sb)
 			}
 		}
 		ast.UnaryOp {
-			'${node.op.value}${t.expr_to_type_string(node.operand)}'
+			sb.write_string(node.op.value)
+			t.expr_to_type_string_sb(node.operand, mut sb)
 		}
 		ast.Starred {
-			t.expr_to_type_string(node.value)
+			t.expr_to_type_string_sb(node.value, mut sb)
 		}
 		ast.Slice {
-			mut parts := []string{}
+			mut first := true
 			if lower_expr := node.lower {
-				parts << t.expr_to_type_string(lower_expr)
+				t.expr_to_type_string_sb(lower_expr, mut sb)
+				first = false
 			}
 			if upper_expr := node.upper {
-				parts << t.expr_to_type_string(upper_expr)
+				if !first {
+					sb.write_byte(`:`)
+				}
+				t.expr_to_type_string_sb(upper_expr, mut sb)
+				first = false
 			}
 			if step_expr := node.step {
-				parts << t.expr_to_type_string(step_expr)
+				if !first {
+					sb.write_byte(`:`)
+				}
+				t.expr_to_type_string_sb(step_expr, mut sb)
 			}
-			parts.join(':')
 		}
-		else {
-			''
-		}
+		else {}
 	}
 }
 
+// render_expr renders AST node to a V string representation.
+// ⚡ Bolt: Using strings.Builder and a recursive helper avoids multiple intermediate
+// string allocations from .map().join() and interpolation.
 pub fn (t &TypeInferenceVisitorMixin) render_expr(node ast.Expression) string {
-	return match node {
+	mut sb := strings.new_builder(32)
+	t.render_expr_sb(node, mut sb)
+	return sb.str()
+}
+
+fn (t &TypeInferenceVisitorMixin) render_expr_sb(node ast.Expression, mut sb strings.Builder) {
+	match node {
 		ast.Name {
-			node.id
+			sb.write_string(node.id)
 		}
 		ast.NoneExpr {
-			'none'
+			sb.write_string('none')
 		}
 		ast.Constant {
 			if node.value == 'None' {
-				'none'
+				sb.write_string('none')
 			} else if node.value == 'True' {
-				'true'
+				sb.write_string('true')
 			} else if node.value == 'False' {
-				'false'
+				sb.write_string('false')
 			} else if node.token.typ == .number {
-				node.value
+				sb.write_string(node.value)
 			} else if node.token.typ == .string_tok || node.token.typ == .fstring_tok
 				|| node.token.typ == .tstring_tok {
 				if node.value.starts_with("'") || node.value.starts_with('"')
 					|| node.value.starts_with("t'") || node.value.starts_with('t"') {
-					node.value
+					sb.write_string(node.value)
 				} else {
-					"'${node.value}'"
+					sb.write_byte(`'`)
+					sb.write_string(node.value)
+					sb.write_byte(`'`)
 				}
 			} else {
-				node.value
+				sb.write_string(node.value)
 			}
 		}
 		ast.List {
-			'[' + node.elements.map(t.render_expr(it)).join(', ') + ']'
+			sb.write_byte(`[`)
+			for i, elt in node.elements {
+				if i > 0 {
+					sb.write_string(', ')
+				}
+				t.render_expr_sb(elt, mut sb)
+			}
+			sb.write_byte(`]`)
 		}
 		ast.Tuple {
-			node.elements.map(t.render_expr(it)).join(', ')
+			for i, elt in node.elements {
+				if i > 0 {
+					sb.write_string(', ')
+				}
+				t.render_expr_sb(elt, mut sb)
+			}
 		}
 		ast.Set {
-			'{' + node.elements.map(t.render_expr(it)).join(', ') + '}'
+			sb.write_byte(`{`)
+			for i, elt in node.elements {
+				if i > 0 {
+					sb.write_string(', ')
+				}
+				t.render_expr_sb(elt, mut sb)
+			}
+			sb.write_byte(`}`)
 		}
 		ast.Dict {
-			mut items := []string{}
+			sb.write_byte(`{`)
+			mut first := true
 			for i, key in node.keys {
 				if i >= node.values.len {
 					break
 				}
-				if key is ast.NoneExpr {
-					items << t.render_expr(node.values[i])
-				} else {
-					items << '${t.render_expr(key)}: ${t.render_expr(node.values[i])}'
+				if !first {
+					sb.write_string(', ')
 				}
+				if key is ast.NoneExpr {
+					t.render_expr_sb(node.values[i], mut sb)
+				} else {
+					t.render_expr_sb(key, mut sb)
+					sb.write_string(': ')
+					t.render_expr_sb(node.values[i], mut sb)
+				}
+				first = false
 			}
-			'{${items.join(', ')}}'
+			sb.write_byte(`}`)
 		}
 		ast.Attribute {
-			'${t.render_expr(node.value)}.${node.attr}'
+			old_len := sb.len
+			t.render_expr_sb(node.value, mut sb)
+			if sb.len > old_len {
+				sb.write_byte(`.`)
+			}
+			sb.write_string(node.attr)
 		}
 		ast.Subscript {
-			'${t.render_expr(node.value)}[${t.render_expr(node.slice)}]'
+			t.render_expr_sb(node.value, mut sb)
+			sb.write_byte(`[`)
+			t.render_expr_sb(node.slice, mut sb)
+			sb.write_byte(`]`)
 		}
 		ast.Call {
-			mut all_args := []string{}
+			t.render_expr_sb(node.func, mut sb)
+			sb.write_byte(`(`)
+			mut first := true
 			for arg in node.args {
-				all_args << t.render_expr(arg)
+				if !first {
+					sb.write_string(', ')
+				}
+				t.render_expr_sb(arg, mut sb)
+				first = false
 			}
 			for kw in node.keywords {
-				if kw.arg.len > 0 {
-					all_args << '${kw.arg}=${t.render_expr(kw.value)}'
-				} else {
-					all_args << t.render_expr(kw.value)
+				if !first {
+					sb.write_string(', ')
 				}
+				if kw.arg.len > 0 {
+					sb.write_string(kw.arg)
+					sb.write_byte(`=`)
+					t.render_expr_sb(kw.value, mut sb)
+				} else {
+					t.render_expr_sb(kw.value, mut sb)
+				}
+				first = false
 			}
-			'${t.render_expr(node.func)}(${all_args.join(', ')})'
+			sb.write_byte(`)`)
 		}
 		ast.BinaryOp {
-			'${t.render_expr(node.left)} ${node.op.value} ${t.render_expr(node.right)}'
+			t.render_expr_sb(node.left, mut sb)
+			sb.write_byte(` `)
+			sb.write_string(node.op.value)
+			sb.write_byte(` `)
+			t.render_expr_sb(node.right, mut sb)
 		}
 		ast.UnaryOp {
-			'${node.op.value}${t.render_expr(node.operand)}'
+			sb.write_string(node.op.value)
+			t.render_expr_sb(node.operand, mut sb)
 		}
 		ast.Compare {
-			mut parts := []string{}
+			mut parts := []string{cap: node.comparators.len + 1}
 			parts << t.render_expr(node.left)
 			for comp in node.comparators {
 				parts << t.render_expr(comp)
 			}
-			mut rendered := []string{}
 			for i, op in node.ops {
-				if i + 1 < parts.len {
-					rendered << '${parts[i]} ${op.value} ${parts[i + 1]}'
+				if i + 1 >= parts.len {
+					break
 				}
+				if i > 0 {
+					sb.write_string(' and ')
+				}
+				sb.write_string(parts[i])
+				sb.write_byte(` `)
+				sb.write_string(op.value)
+				sb.write_byte(` `)
+				sb.write_string(parts[i + 1])
 			}
-			rendered.join(' and ')
 		}
 		ast.JoinedStr {
-			node.values.map(t.render_expr(it)).join(' + ')
+			for i, val in node.values {
+				if i > 0 {
+					sb.write_string(' + ')
+				}
+				t.render_expr_sb(val, mut sb)
+			}
 		}
 		ast.FormattedValue {
-			t.render_expr(node.value)
+			t.render_expr_sb(node.value, mut sb)
 		}
 		ast.Slice {
-			mut lower := ''
 			if lower_expr := node.lower {
-				lower = t.render_expr(lower_expr)
+				t.render_expr_sb(lower_expr, mut sb)
 			}
-			mut upper := ''
+			sb.write_string('..')
 			if upper_expr := node.upper {
-				upper = t.render_expr(upper_expr)
+				t.render_expr_sb(upper_expr, mut sb)
 			}
 			if step_expr := node.step {
-				'${lower}..${upper};${t.render_expr(step_expr)}'
-			} else {
-				'${lower}..${upper}'
+				sb.write_byte(`;`)
+				t.render_expr_sb(step_expr, mut sb)
 			}
 		}
 		ast.Starred {
-			t.render_expr(node.value)
+			t.render_expr_sb(node.value, mut sb)
 		}
 		ast.NamedExpr {
-			'(${t.render_expr(node.target)} = ${t.render_expr(node.value)})'
+			sb.write_byte(`(`)
+			t.render_expr_sb(node.target, mut sb)
+			sb.write_string(' = ')
+			t.render_expr_sb(node.value, mut sb)
+			sb.write_byte(`)`)
 		}
 		else {
-			node.str()
+			sb.write_string(node.str())
 		}
 	}
 }
@@ -674,7 +798,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 	val_type := t.guess_expr_type(node.value)
 	if val_type != 'Any' && val_type != 'int' {
 		loc_key := '${node.token.line}:${node.token.column}'
-		t.location_map[loc_key] = val_type.trim_left('?&')
+		t.location_map[loc_key] = clean_v_type(val_type)
 	}
 
 	// TypedDict tracking for read access
@@ -1054,19 +1178,26 @@ fn (mut t TypeInferenceVisitorMixin) collect_return_types(stmts []ast.Statement,
 pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef) {
 	t.store_type(node.name, 'fn (...Any) Any')
 
-	mut combined_args := []ast.Parameter{}
+	// ⚡ Bolt: Pre-allocating combined_args array avoids reallocations.
+	mut combined_args := []ast.Parameter{cap: node.args.posonlyargs.len + node.args.args.len}
 	combined_args << node.args.posonlyargs
 	combined_args << node.args.args
-	mut signature_args := combined_args.clone()
-	if signature_args.len > 0 && signature_args[0].arg in ['self', 'cls'] {
-		s_arg := signature_args[0].arg
+
+	// ⚡ Bolt: Optimizing signature_args construction by avoiding redundant clones and pre-allocating.
+	mut signature_args := []ast.Parameter{cap: combined_args.len + node.args.kwonlyargs.len}
+	mut start_idx := 0
+	if combined_args.len > 0 && combined_args[0].arg in ['self', 'cls'] {
+		s_arg := combined_args[0].arg
 		if t.scope_names.len > 0 {
 			cls := t.scope_names[t.scope_names.len - 1]
 			if cls.len > 0 && cls[0].is_capital() {
 				t.store_type(s_arg, cls)
 			}
 		}
-		signature_args = signature_args[1..].clone()
+		start_idx = 1
+	}
+	if start_idx < combined_args.len {
+		signature_args << combined_args[start_idx..]
 	}
 	signature_args << node.args.kwonlyargs
 
@@ -1350,7 +1481,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 			ast.Attribute {
 				t.mark_mutated_expr(target)
 				mut obj_key := t.guess_expr_type(target.value)
-				obj_key = obj_key.trim_left('?&')
+				obj_key = clean_v_type(obj_key)
 				if obj_key in ['Any', 'int', 'unknown'] {
 					obj_key = t.render_expr(target.value)
 				}
@@ -1570,7 +1701,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_type_param(node ast.TypeParam) {
 pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 	if node.func is ast.Attribute {
 		attr := node.func
-		if attr.attr in mutating_methods {
+		if is_mutating_method(attr.attr) {
 			t.mark_mutated_expr(attr.value)
 		}
 		if attr.attr == 'append' && node.args.len == 1 {
@@ -1595,20 +1726,25 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 		}
 
 		// Check for method-based mutability if object is a parameter
+		// ⚡ Bolt: Direct map lookups with string interpolation avoid creating a temporary array and reduce heap allocations.
+		// Pre-calculating camelCase and avoiding redundant lookups if name is already camelCased.
 		obj_name := t.expr_to_name(attr.value)
 		if obj_name.len > 0 {
-			obj_type := t.guess_expr_type(attr.value).trim_left('?&')
-			mut_keys := [
-				'${obj_type}.${attr.attr}.self',
-				'${obj_type}.${to_camel_case(attr.attr)}.self',
-			]
-			for mk in mut_keys {
-				if m_info := t.mutability_map[mk] {
-					if m_info.is_mutated {
-						t.mark_mutated(obj_name)
-						break
+			obj_type := clean_v_type(t.guess_expr_type(attr.value))
+			mut is_mut := false
+			if m_info := t.mutability_map['${obj_type}.${attr.attr}.self'] {
+				is_mut = m_info.is_mutated
+			}
+			if !is_mut {
+				camel_attr := to_camel_case(attr.attr)
+				if camel_attr != attr.attr {
+					if m_info_cc := t.mutability_map['${obj_type}.${camel_attr}.self'] {
+						is_mut = m_info_cc.is_mutated
 					}
 				}
+			}
+			if is_mut {
+				t.mark_mutated(obj_name)
 			}
 		}
 	}

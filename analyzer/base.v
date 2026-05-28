@@ -112,6 +112,9 @@ pub fn (mut t TypeInferenceBase) set_type(name string, typ string) {
 	t.type_map[name] = typ
 }
 
+// get_type returns the type of a name, looking through scopes and inheritance.
+// ⚡ Bolt: Optimized hierarchy traversal with visited map to avoid O(2^N) diamond inheritance recursion.
+// Also pre-calculates to_camel_case(attr) once per top-level call to avoid redundant work.
 pub fn (t &TypeInferenceBase) get_type(name string) string {
 	if !name.contains('.') && t.scope_prefixes.len > 0 {
 		for i := t.scope_prefixes.len - 1; i >= 0; i-- {
@@ -129,44 +132,89 @@ pub fn (t &TypeInferenceBase) get_type(name string) string {
 	if name.contains('.') {
 		cls := name.all_before_last('.')
 		attr := name.all_after_last('.')
-		bases := t.get_class_bases(cls)
-		for b in bases {
-			if b == 'object' {
-				continue
-			}
-			mut res := t.get_type('${b}.${attr}')
-			if res != 'Any' {
-				return res
-			}
-			// Try CamelCase
-			res = t.get_type('${b}.${to_camel_case(attr)}')
-			if res != 'Any' {
-				return res
-			}
+		camel_attr := to_camel_case(attr)
+		has_camel := camel_attr != attr
+
+		mut visited := map[string]bool{}
+		return t.get_type_recursive(cls, attr, camel_attr, has_camel, mut visited)
+	}
+	return 'Any'
+}
+
+fn (t &TypeInferenceBase) get_type_recursive(cls string, attr string, camel_attr string, has_camel bool, mut visited map[string]bool) string {
+	if cls in visited {
+		return 'Any'
+	}
+	visited[cls] = true
+
+	key := cls + '.' + attr
+	if res := t.type_map[key] {
+		return res
+	}
+
+	if has_camel {
+		key_camel := cls + '.' + camel_attr
+		if res := t.type_map[key_camel] {
+			return res
+		}
+	}
+
+	for b in t.get_class_bases(cls) {
+		if b == 'object' {
+			continue
+		}
+		res := t.get_type_recursive(b, attr, camel_attr, has_camel, mut visited)
+		if res != 'Any' {
+			return res
 		}
 	}
 	return 'Any'
 }
 
+// get_call_signature returns the call signature of a function or method.
+// ⚡ Bolt: Optimized hierarchy traversal with visited map to avoid O(2^N) diamond inheritance recursion.
+// Also pre-calculates to_camel_case(attr) once per top-level call to avoid redundant work.
 pub fn (t &TypeInferenceBase) get_call_signature(name string) ?CallSignature {
 	if res := t.call_signatures[name] {
 		return res
 	}
+
 	if name.contains('.') {
 		cls := name.all_before_last('.')
 		attr := name.all_after_last('.')
-		bases := t.get_class_bases(cls)
-		for b in bases {
-			if b == 'object' {
-				continue
-			}
-			if res := t.get_call_signature('${b}.${attr}') {
-				return res
-			}
-			// Try CamelCase
-			if res := t.get_call_signature('${b}.${to_camel_case(attr)}') {
-				return res
-			}
+		camel_attr := to_camel_case(attr)
+		has_camel := camel_attr != attr
+
+		mut visited := map[string]bool{}
+		return t.get_call_signature_recursive(cls, attr, camel_attr, has_camel, mut visited)
+	}
+	return none
+}
+
+fn (t &TypeInferenceBase) get_call_signature_recursive(cls string, attr string, camel_attr string, has_camel bool, mut visited map[string]bool) ?CallSignature {
+	if cls in visited {
+		return none
+	}
+	visited[cls] = true
+
+	key := cls + '.' + attr
+	if res := t.call_signatures[key] {
+		return res
+	}
+
+	if has_camel {
+		key_camel := cls + '.' + camel_attr
+		if res := t.call_signatures[key_camel] {
+			return res
+		}
+	}
+
+	for b in t.get_class_bases(cls) {
+		if b == 'object' {
+			continue
+		}
+		if res := t.get_call_signature_recursive(b, attr, camel_attr, has_camel, mut visited) {
+			return res
 		}
 	}
 	return none

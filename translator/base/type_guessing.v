@@ -21,9 +21,9 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 
 	if use_location {
 		loc_key := '${node.get_token().line}:${node.get_token().column}'
-		if loc_key in ctx.location_map {
-			res := ctx.location_map[loc_key]
+		if res := ctx.location_map[loc_key] {
 			if res != 'none' && res != 'Any' && res != 'unknown' {
+				return res
 			}
 		}
 		if ctx.analyzer != unsafe { nil } {
@@ -119,11 +119,10 @@ fn guess_constant_type(node ast.Constant) string {
 		return 'int'
 	}
 	if tok.typ == .keyword {
-		if node.value in ['True', 'False'] {
-			return 'bool'
-		}
-		if node.value == 'None' {
-			return 'none'
+		return match node.value {
+			'True', 'False' { 'bool' }
+			'None' { 'none' }
+			else { 'Any' }
 		}
 	}
 	return 'Any'
@@ -132,9 +131,9 @@ fn guess_constant_type(node ast.Constant) string {
 fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) string {
 	if use_location {
 		loc_key := '${node.get_token().line}:${node.get_token().column}'
-		if loc_key in ctx.location_map {
-			res := ctx.location_map[loc_key]
+		if res := ctx.location_map[loc_key] {
 			if res != 'none' && res != 'Any' && res != 'unknown' {
+				return res
 			}
 		}
 	}
@@ -556,16 +555,21 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 	}
 
 	val_type := guess_type(node.value, ctx, false)
-	base_type := val_type.trim_left('?&')
+	// ⚡ Bolt: Fast-path for trim_left allocation.
+	base_type := if val_type.len > 0 && (val_type[0] == `?` || val_type[0] == `&`) {
+		val_type.trim_left('?&')
+	} else {
+		val_type
+	}
 	if base_type != 'Any' && base_type != 'int' {
 		mut attr_name := '${base_type}.${node.attr}'
-		if attr_name in ctx.type_map {
-			return ctx.type_map[attr_name]
+		if res := ctx.type_map[attr_name] {
+			return res
 		}
 		// Try sanitized name
 		attr_name = '${base_type}.${to_snake_case(node.attr).to_lower()}'
-		if attr_name in ctx.type_map {
-			return ctx.type_map[attr_name]
+		if res := ctx.type_map[attr_name] {
+			return res
 		}
 		if ctx.analyzer != unsafe { nil } {
 			a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
