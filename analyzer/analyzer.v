@@ -38,7 +38,8 @@ pub fn (mut a Analyzer) analyze(node ast.Module) {
 
 	mut fms := new_function_mutability_scanner(a)
 	fms.analyze(node, mut a.mutability_map)
-	a.func_param_mutability = fms.func_param_mutability.clone()
+	// ⚡ Bolt: Using .move() avoids an expensive deep clone of the mutability map.
+	a.func_param_mutability = fms.func_param_mutability.move()
 }
 
 // get_type returns variable type.
