@@ -547,6 +547,7 @@ pub mut:
 	is_abc          map[string]bool
 	static_methods  map[string][]string
 	class_methods   map[string][]string
+	class_defs      map[string]ast.ClassDef
 }
 
 pub fn new_mixin_inferer() MixinInferer {
@@ -558,6 +559,7 @@ pub fn new_mixin_inferer() MixinInferer {
 		is_abc:          map[string]bool{}
 		static_methods:  map[string][]string{}
 		class_methods:   map[string][]string{}
+		class_defs:      map[string]ast.ClassDef{}
 	}
 }
 
@@ -591,6 +593,7 @@ fn expr_to_class_name(node ast.Expression) string {
 fn (mut m MixinInferer) collect_class_info(stmt ast.Statement) {
 	match stmt {
 		ast.ClassDef {
+			m.class_defs[stmt.name] = stmt
 			m.mixin_nodes[stmt.name] = stmt.name
 			m.is_abc[stmt.name] = false
 			m.static_methods[stmt.name] = []string{}
@@ -715,29 +718,27 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 	mut explicit_abcs := map[string]bool{}
 	mut mixin_templates := map[string]bool{}
 
+	// ⚡ Bolt: Using pre-collected class_defs map avoids O(N^2) nested loop over tree.body.
 	for cls_name, _ in m.mixin_nodes {
 		bases := m.class_hierarchy[cls_name] or { []string{} }
 		mut has_abstract := false
 		mut has_concrete := false
-		for stmt in tree.body {
-			if stmt is ast.ClassDef && stmt.name == cls_name {
-				for child in stmt.body {
-					if child is ast.FunctionDef {
-						mut is_abstract_stmt := false
-						for dec in child.decorator_list {
-							if dec is ast.Name && (dec as ast.Name).id == 'abstractmethod' {
-								has_abstract = true
-								is_abstract_stmt = true
-							}
-							if dec is ast.Attribute
-								&& (dec as ast.Attribute).attr == 'abstractmethod' {
-								has_abstract = true
-								is_abstract_stmt = true
-							}
+		if stmt := m.class_defs[cls_name] {
+			for child in stmt.body {
+				if child is ast.FunctionDef {
+					mut is_abstract_stmt := false
+					for dec in child.decorator_list {
+						if dec is ast.Name && (dec as ast.Name).id == 'abstractmethod' {
+							has_abstract = true
+							is_abstract_stmt = true
 						}
-						if !is_abstract_stmt {
-							has_concrete = true
+						if dec is ast.Attribute && (dec as ast.Attribute).attr == 'abstractmethod' {
+							has_abstract = true
+							is_abstract_stmt = true
 						}
+					}
+					if !is_abstract_stmt {
+						has_concrete = true
 					}
 				}
 			}
@@ -775,13 +776,11 @@ pub fn (mut m MixinInferer) analyze(tree ast.Module) {
 					}
 				}
 				mut node_has_concrete := false
-				for stmt in tree.body {
-					if stmt is ast.ClassDef && stmt.name == cls_name {
-						for child in stmt.body {
-							if child is ast.FunctionDef {
-								node_has_concrete = true
-								break
-							}
+				if stmt := m.class_defs[cls_name] {
+					for child in stmt.body {
+						if child is ast.FunctionDef {
+							node_has_concrete = true
+							break
 						}
 					}
 				}
@@ -1141,10 +1140,11 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 		}
 		ast.FunctionDef {
 			old_func := f.current_func
+			// ⚡ Bolt: Using .move() to save state avoids expensive deep clones of maps.
 			old_params := f.current_params.clone()
-			old_mutated := f.mutated_params.clone()
-			old_reassigned := f.reassigned_params.clone()
-			old_seen := f.seen_in_scope.clone()
+			mut old_mutated := f.mutated_params.move()
+			mut old_reassigned := f.reassigned_params.move()
+			mut old_seen := f.seen_in_scope.move()
 
 			f.current_func = node.name
 			f.push_scope(node.name)
@@ -1225,11 +1225,12 @@ fn (mut f FunctionMutabilityScanner) visit_stmt(node ast.Statement) {
 				info.is_reassigned = true
 				f.mutability_map[name] = info
 			}
-			f.seen_in_scope = old_seen.clone()
+			// ⚡ Bolt: Restoring state using .move() avoids redundant clones.
+			f.seen_in_scope = old_seen.move()
 			f.current_func = old_func
 			f.current_params = old_params
-			f.mutated_params = old_mutated.clone()
-			f.reassigned_params = old_reassigned.clone()
+			f.mutated_params = old_mutated.move()
+			f.reassigned_params = old_reassigned.move()
 		}
 		ast.Assign {
 			for target in node.targets {
@@ -1465,13 +1466,12 @@ fn (mut f FunctionMutabilityScanner) visit_pattern(node ast.Pattern) {
 }
 
 pub fn (mut f FunctionMutabilityScanner) analyze(tree ast.Module, mut mutability_map map[string]MutabilityInfo) map[string][]int {
-	f.mutability_map = mutability_map.clone()
+	// ⚡ Bolt: Working on the map directly via handle move avoids an expensive clone and copy-back loop.
+	f.mutability_map = mutability_map.move()
 	for stmt in tree.body {
 		f.visit_stmt(stmt)
 	}
-	for k, v in f.mutability_map {
-		mutability_map[k] = v
-	}
+	mutability_map = f.mutability_map.move()
 	return f.func_param_mutability
 }
 
