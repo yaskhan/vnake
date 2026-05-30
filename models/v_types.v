@@ -16,6 +16,17 @@ pub enum VType {
 	unknown
 }
 
+// fast_trim_space avoids heap allocation in V 0.5.1 if no characters need trimming.
+fn fast_trim_space(s string) string {
+	if s.len == 0 {
+		return s
+	}
+	if s[0].is_space() || s[s.len - 1].is_space() {
+		return s.trim_space()
+	}
+	return s
+}
+
 // get_tuple_struct_name generates struct name for Python Tuple.
 // ⚡ Bolt: Using strings.Builder and a single-pass byte transformation avoids multiple
 // intermediate string allocations from .replace(), .trim_space(), and .capitalize() calls.
@@ -30,7 +41,7 @@ pub fn get_tuple_struct_name(types_str string) string {
 
 	parts := types_str.split(',')
 	for p in parts {
-		t := p.trim_space()
+		t := fast_trim_space(p)
 		if t.len == 0 {
 			sb.write_string('Any')
 			continue
@@ -140,7 +151,7 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 				bracket_idx
 			}
 			if end_idx >= 0 {
-				fb_type = fb_part[..end_idx].trim_space()
+				fb_type = fast_trim_space(fb_part[..end_idx])
 			}
 		}
 		// If fallback is specific and not object, use it
@@ -182,7 +193,7 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 
 	// Handle Python 3.10+ union types: int | str
 	if clean_type.contains('|') && !clean_type.contains('[') {
-		parts := clean_type.split('|').map(it.trim_space())
+		parts := clean_type.split('|').map(fast_trim_space(it))
 		mut v_parts := []string{}
 		for p in parts {
 			v_parts << map_python_type_to_v(p, self_name, allow_union, generic_map,
@@ -246,8 +257,8 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 // map_complex_type handles complex types like List[int], Dict[str, Any]
 fn map_complex_type(py_type string, self_name string, allow_union bool, generic_map map[string]string, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
 	bracket_idx := py_type.index('[') or { return map_basic_type(py_type) }
-	base_type := py_type[..bracket_idx].trim_space()
-	mut args_str := py_type[bracket_idx + 1..py_type.len - 1].trim_space()
+	base_type := fast_trim_space(py_type[..bracket_idx])
+	mut args_str := fast_trim_space(py_type[bracket_idx + 1..py_type.len - 1])
 
 	match base_type {
 		'List', 'list', 'typing.List', 'typing.Sequence', 'typing.Iterable', 'Sequence',
@@ -267,12 +278,12 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			if args_str.len > 0 {
 				parts := split_generic_args(args_str)
 				if parts.len >= 2 {
-					key_type = map_python_type_to_v(parts[0].trim_space(), self_name, allow_union,
+					key_type = map_python_type_to_v(fast_trim_space(parts[0]), self_name, allow_union,
 						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
-					val_type = map_python_type_to_v(parts[1].trim_space(), self_name, allow_union,
+					val_type = map_python_type_to_v(fast_trim_space(parts[1]), self_name, allow_union,
 						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
 				} else if parts.len == 1 {
-					val_type = map_python_type_to_v(parts[0].trim_space(), self_name, allow_union,
+					val_type = map_python_type_to_v(fast_trim_space(parts[0]), self_name, allow_union,
 						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
 				}
 			}
@@ -300,7 +311,7 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			if parts.len > 0 {
 				mut v_parts := []string{}
 				for p in parts {
-					v_parts << map_python_type_to_v(p.trim_space(), self_name, allow_union,
+					v_parts << map_python_type_to_v(fast_trim_space(p), self_name, allow_union,
 						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
 				}
 				tuple_res := tuple_registrar(v_parts.join(', '))
@@ -331,7 +342,7 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			parts := split_generic_args(args_str)
 			mut v_parts := []string{}
 			for p in parts {
-				v_parts << map_python_type_to_v(p.trim_space(), self_name, allow_union,
+				v_parts << map_python_type_to_v(fast_trim_space(p), self_name, allow_union,
 					generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
 			}
 
@@ -373,13 +384,13 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 				parts := split_generic_args(args_str)
 				if parts.len >= 2 {
 					mut arg_types := []string{}
-					args_part := parts[0].trim_space()
+					args_part := fast_trim_space(parts[0])
 					if args_part.starts_with('[') && args_part.ends_with(']') {
-						inner_args := args_part[1..args_part.len - 1].trim_space()
+						inner_args := fast_trim_space(args_part[1..args_part.len - 1])
 						if inner_args.len > 0 {
 							arg_parts := split_generic_args(inner_args)
 							for p in arg_parts {
-								arg_types << map_python_type_to_v(p.trim_space(), self_name,
+								arg_types << map_python_type_to_v(fast_trim_space(p), self_name,
 									allow_union, generic_map, sum_type_registrar,
 									literal_registrar, tuple_registrar)
 							}
@@ -391,7 +402,7 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 							generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
 					}
 
-					ret_type := map_python_type_to_v(parts[1].trim_space(), self_name, allow_union,
+					ret_type := map_python_type_to_v(fast_trim_space(parts[1]), self_name, allow_union,
 						generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
 					if ret_type == 'none' || ret_type == 'void' {
 						return 'fn (${arg_types.join(', ')})'
@@ -412,7 +423,7 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 		'typing.NotRequired', 'typing.ReadOnly' {
 			if args_str.len > 0 {
 				parts := split_generic_args(args_str)
-				inner := map_python_type_to_v(parts[0].trim_space(), self_name, allow_union,
+				inner := map_python_type_to_v(fast_trim_space(parts[0]), self_name, allow_union,
 					generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
 				if base_type in ['NotRequired', 'typing.NotRequired'] && !inner.starts_with('?') {
 					return '?${inner}'
@@ -429,7 +440,7 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 		mut v_args := []string{}
 		parts := split_generic_args(args_str)
 		for p in parts {
-			v_args << map_python_type_to_v(p.trim_space(), self_name, allow_union, generic_map,
+			v_args << map_python_type_to_v(fast_trim_space(p), self_name, allow_union, generic_map,
 				sum_type_registrar, literal_registrar, tuple_registrar)
 		}
 		return '${res}[${v_args.join(', ')}]'
@@ -518,9 +529,7 @@ fn map_basic_type(name string) string {
 
 	// ⚡ Bolt: Conditional trim_space avoids heap allocation when no characters need trimming.
 	// Measured ~16x speedup on this path in V 0.5.1.
-	if clean_name.len > 0 && (clean_name[0].is_space() || clean_name[clean_name.len - 1].is_space()) {
-		clean_name = clean_name.trim_space()
-	}
+	clean_name = fast_trim_space(clean_name)
 
 	return match clean_name {
 		'int' {
