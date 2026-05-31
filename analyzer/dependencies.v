@@ -47,7 +47,7 @@ pub fn (mut d DependencyAnalyzer) analyze_file(file_path string) []string {
 }
 
 fn parse_import_line(line string, mut dependencies []string) {
-	trimmed := line.trim_space()
+	trimmed := fast_trim_space(line)
 	if trimmed.len == 0 || trimmed.starts_with('#') {
 		return
 	}
@@ -55,12 +55,12 @@ fn parse_import_line(line string, mut dependencies []string) {
 	if trimmed.starts_with('import ') {
 		rest := trimmed[7..]
 		for part in rest.split(',') {
-			mut name := part.trim_space()
+			mut name := fast_trim_space(part)
 			if name.len == 0 {
 				continue
 			}
 			if name.contains(' as ') {
-				name = name.split(' as ')[0].trim_space()
+				name = fast_trim_space(name.all_before(' as '))
 			}
 			if name.len > 0 {
 				dependencies << name
@@ -72,7 +72,7 @@ fn parse_import_line(line string, mut dependencies []string) {
 	if trimmed.starts_with('from ') && trimmed.contains(' import ') {
 		after_from := trimmed[5..]
 		idx := after_from.index(' import ') or { return }
-		module_name := after_from[..idx].trim_space()
+		module_name := fast_trim_space(after_from[..idx])
 		if module_name.len > 0 {
 			dependencies << module_name
 		}
@@ -80,7 +80,7 @@ fn parse_import_line(line string, mut dependencies []string) {
 }
 
 pub fn (d DependencyAnalyzer) resolve_module_to_path(module_name string, root_path string, current_file_path string) ?string {
-	mod_name := module_name.trim_space().trim_left('.')
+	mod_name := fast_trim_space(module_name).trim_left('.')
 	if mod_name.len == 0 {
 		return none
 	}
