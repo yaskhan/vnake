@@ -164,98 +164,102 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		if fid.starts_with('new_') {
 			return '&' + sanitize_name(fid[4..], true, map[string]bool{}, '', map[string]bool{})
 		}
-		if fid == 'str' {
-			if node.args.len > 0 && is_literal_string_expr(node.args[0], ctx) {
-				return 'LiteralString'
+		match fid {
+			'str' {
+				if node.args.len > 0 && is_literal_string_expr(node.args[0], ctx) {
+					return 'LiteralString'
+				}
+				return 'string'
 			}
-			return 'string'
-		}
-		if fid in ['int', 'len'] {
-			return 'int'
-		}
-		if fid == 'float' {
-			return 'f64'
-		}
-		if fid in ['bool', 'isinstance', 'hasattr', 'getattr', 'setattr'] {
-			return 'bool'
-		}
-		if fid == 'print' {
-			return 'None'
-		}
-		if fid == 'input' {
-			return 'string'
-		}
-		if fid == 'open' {
-			return 'os.File'
-		}
-		if fid in ['bytearray', 'memoryview', 'bytes'] {
-			return '[]u8'
-		}
-		if fid in ['set', 'frozenset'] {
-			if node.args.len > 0 {
-				arg_type := guess_type(node.args[0], ctx, true)
-				if arg_type.starts_with('[]') {
-					return 'datatypes.Set[${arg_type[2..]}]'
+			'int', 'len' {
+				return 'int'
+			}
+			'float' {
+				return 'f64'
+			}
+			'bool', 'isinstance', 'hasattr', 'getattr', 'setattr', 'any', 'all', 'py_any',
+			'py_all' {
+				return 'bool'
+			}
+			'print' {
+				return 'None'
+			}
+			'input' {
+				return 'string'
+			}
+			'open' {
+				return 'os.File'
+			}
+			'bytearray', 'memoryview', 'bytes' {
+				return '[]u8'
+			}
+			'set', 'frozenset' {
+				if node.args.len > 0 {
+					arg_type := guess_type(node.args[0], ctx, true)
+					if arg_type.starts_with('[]') {
+						return 'datatypes.Set[${arg_type[2..]}]'
+					}
+				}
+				return 'datatypes.Set[string]'
+			}
+			'Counter' {
+				return 'map[string]int'
+			}
+			'defaultdict' {
+				if node.args.len > 0 {
+					mut d_type := 'Any'
+					if node.args[0] is ast.Name {
+						id := (node.args[0] as ast.Name).id
+						if id == 'int' {
+							d_type = 'int'
+						} else if id == 'list' {
+							d_type = '[]int'
+						} else if id == 'dict' {
+							d_type = 'map[string]Any'
+						}
+					}
+					return 'map[string]' + d_type
 				}
 			}
-			return 'datatypes.Set[string]'
-		}
-		if fid == 'Counter' {
-			return 'map[string]int'
-		}
-		if fid == 'defaultdict' && node.args.len > 0 {
-			mut d_type := 'Any'
-			if node.args[0] is ast.Name {
-				id := (node.args[0] as ast.Name).id
-				if id == 'int' {
-					d_type = 'int'
-				} else if id == 'list' {
-					d_type = '[]int'
-				} else if id == 'dict' {
-					d_type = 'map[string]Any'
+			'sum', 'py_sum' {
+				return 'Any'
+			}
+			'range', 'py_range' {
+				return '[]int'
+			}
+			'py_sorted', 'py_reversed', 'sorted', 'reversed' {
+				if node.args.len > 0 {
+					return guess_type(node.args[0], ctx, true)
+				}
+				return '[]Any'
+			}
+			'py_zip', 'zip' {
+				return '[]PyZipItem'
+			}
+			'py_enumerate', 'enumerate' {
+				return '[]PyEnumerateItem'
+			}
+			'py_divmod' {
+				if node.args.len > 0 {
+					return '[]${guess_type(node.args[0], ctx, true)}'
+				}
+				return '[]Any'
+			}
+			'py_os_path_split', 'py_os_path_splitext' {
+				return '[]string'
+			}
+			'py_complex' {
+				return 'PyComplex'
+			}
+			'py_path_new' {
+				return 'PyPath'
+			}
+			'cast' {
+				if node.args.len >= 2 {
+					return guess_type(node.args[0], ctx, true)
 				}
 			}
-			return 'map[string]' + d_type
-		}
-		if fid in ['sum', 'py_sum'] {
-			return 'Any'
-		}
-		if fid in ['any', 'all', 'py_any', 'py_all'] {
-			return 'bool'
-		}
-		if fid in ['range', 'py_range'] {
-			return '[]int'
-		}
-		if fid in ['py_sorted', 'py_reversed', 'sorted', 'reversed'] {
-			if node.args.len > 0 {
-				return guess_type(node.args[0], ctx, true)
-			}
-			return '[]Any'
-		}
-		if fid in ['py_zip', 'zip'] {
-			return '[]PyZipItem'
-		}
-		if fid in ['py_enumerate', 'enumerate'] {
-			return '[]PyEnumerateItem'
-		}
-		if fid == 'py_divmod' {
-			if node.args.len > 0 {
-				return '[]${guess_type(node.args[0], ctx, true)}'
-			}
-			return '[]Any'
-		}
-		if fid in ['py_os_path_split', 'py_os_path_splitext'] {
-			return '[]string'
-		}
-
-		if fid == 'py_complex' {
-			return 'PyComplex'
-		}
-		if fid == 'py_path_new' {
-			return 'PyPath'
-		}
-		if fid == 'cast' && node.args.len >= 2 {
-			return guess_type(node.args[0], ctx, true)
+			else {}
 		}
 		ret_key := '${fid}@return'
 		if ret_key in ctx.type_map {
@@ -264,12 +268,14 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 	}
 	f := node.func
 	if f is ast.Attribute {
-		if f.attr == 'join' || f.attr == 'split' || f.attr == 'upper' || f.attr == 'lower'
-			|| f.attr == 'strip' {
-			return 'string'
-		}
-		if f.attr in ['append', 'extend', 'add', 'update', 'remove', 'pop', 'clear'] {
-			return 'none'
+		match f.attr {
+			'join', 'split', 'upper', 'lower', 'strip' {
+				return 'string'
+			}
+			'append', 'extend', 'add', 'update', 'remove', 'pop', 'clear' {
+				return 'none'
+			}
+			else {}
 		}
 		rec_type := guess_type(f.value, ctx, false)
 		if rec_type != 'Any' {
@@ -349,7 +355,7 @@ fn guess_type_elements(elements []ast.Expression, ctx TypeGuessingContext) strin
 		if elt is ast.Starred {
 			current_type = 'Any'
 		} else if (elt is ast.Constant && elt.value == 'None')
-			|| (elt is ast.Name && elt.id in ['None', 'none']) {
+			|| (elt is ast.Name && (elt.id == 'None' || elt.id == 'none')) {
 			has_none = true
 			continue
 		} else {
@@ -364,35 +370,42 @@ fn guess_type_elements(elements []ast.Expression, ctx TypeGuessingContext) strin
 		}
 	}
 
-	mut lcs := if has_elements && all_same { first_type } else { 'Any' }
 	if has_none {
-		return '[]?${lcs}'
+		if has_elements && all_same && first_type != 'Any' {
+			return '[]?${first_type}'
+		}
+		return '[]?Any'
 	}
-	return '[]${lcs}'
+	if has_elements && all_same && first_type != 'Any' {
+		return '[]${first_type}'
+	}
+	return '[]Any'
 }
 
 fn guess_type_set(node ast.Set, ctx TypeGuessingContext) string {
 	if node.elements.len == 0 {
 		return 'datatypes.Set[string]'
 	}
-	mut element_types := map[string]bool{}
+
+	mut first_type := ''
+	mut all_same := true
+
 	for elt in node.elements {
-		if elt is ast.Starred {
-			element_types['Any'] = true
+		mut current_type := if elt is ast.Starred {
+			'Any'
 		} else {
-			element_types[guess_type(elt, ctx, true)] = true
+			guess_type(elt, ctx, true)
+		}
+
+		if first_type == '' {
+			first_type = current_type
+		} else if all_same && current_type != first_type {
+			all_same = false
 		}
 	}
-	if element_types.len == 1 {
-		mut t := ''
-		for k, _ in element_types {
-			t = k
-			break
-		}
-		if t == 'Any' {
-			return 'datatypes.Set[string]'
-		}
-		return 'datatypes.Set[${t}]'
+
+	if all_same && first_type != 'Any' {
+		return 'datatypes.Set[${first_type}]'
 	}
 	return 'datatypes.Set[string]'
 }
@@ -660,7 +673,7 @@ fn guess_type_listcomp(node ast.Expression, ctx TypeGuessingContext) string {
 	} else if node is ast.GeneratorExp {
 		elt_type = guess_type(node.elt, ctx, true)
 	}
-	if elt_type in ['Any', 'unknown'] {
+	if elt_type == 'Any' || elt_type == 'unknown' {
 		return '[]Any'
 	}
 	return '[]${elt_type}'
@@ -668,7 +681,7 @@ fn guess_type_listcomp(node ast.Expression, ctx TypeGuessingContext) string {
 
 fn guess_type_setcomp(node ast.SetComp, ctx TypeGuessingContext) string {
 	elt_type := guess_type(node.elt, ctx, true)
-	if elt_type in ['Any', 'unknown'] {
+	if elt_type == 'Any' || elt_type == 'unknown' {
 		return 'datatypes.Set[string]'
 	}
 	return 'datatypes.Set[${elt_type}]'
@@ -677,7 +690,7 @@ fn guess_type_setcomp(node ast.SetComp, ctx TypeGuessingContext) string {
 fn guess_type_dictcomp(node ast.DictComp, ctx TypeGuessingContext) string {
 	mut key_type := guess_type(node.key, ctx, true)
 	mut val_type := guess_type(node.value, ctx, true)
-	if key_type in ['Any', 'unknown'] {
+	if key_type == 'Any' || key_type == 'unknown' {
 		key_type = 'string'
 	}
 	if val_type == 'unknown' {
@@ -706,7 +719,7 @@ fn guess_type_lambda(node ast.Lambda, ctx TypeGuessingContext) string {
 		local_ctx.type_map[arg.arg] = typ
 	}
 	mut ret_type := guess_type(node.body, local_ctx, true)
-	if ret_type in ['void', 'Any', 'unknown'] {
+	if ret_type == 'void' || ret_type == 'Any' || ret_type == 'unknown' {
 		ret_type = 'Any'
 	}
 	return 'fn(${param_types.join(', ')}) ${ret_type}'
