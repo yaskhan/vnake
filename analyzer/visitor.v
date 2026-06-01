@@ -50,7 +50,7 @@ fn (mut t TypeInferenceVisitorMixin) guess_expr_type(node ast.Expression) string
 				return if node.value.contains('.') { 'f64' } else { 'int' }
 			}
 			if tok.typ == .keyword {
-				if node.value in ['True', 'False'] {
+				if node.value == 'True' || node.value == 'False' {
 					return 'bool'
 				}
 				if node.value == 'None' {
@@ -1186,7 +1186,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 	// ⚡ Bolt: Optimizing signature_args construction by avoiding redundant clones and pre-allocating.
 	mut signature_args := []ast.Parameter{cap: combined_args.len + node.args.kwonlyargs.len}
 	mut start_idx := 0
-	if combined_args.len > 0 && combined_args[0].arg in ['self', 'cls'] {
+	if combined_args.len > 0 && (combined_args[0].arg == 'self' || combined_args[0].arg == 'cls') {
 		s_arg := combined_args[0].arg
 		if t.scope_names.len > 0 {
 			cls := t.scope_names[t.scope_names.len - 1]
@@ -1254,7 +1254,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 	}
 	// Self type is already stored in store_type calls in our previous chunk if we were careful
 	// but let's re-store it in the new scope specifically.
-	if node.args.args.len > 0 && node.args.args[0].arg in ['self', 'cls'] {
+	if node.args.args.len > 0 && (node.args.args[0].arg == 'self' || node.args.args[0].arg == 'cls') {
 		s_arg := node.args.args[0].arg
 		if t.scope_names.len > 1 {
 			cls := t.scope_names[t.scope_names.len - 2]
@@ -1295,7 +1295,8 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 				return_type = map_python_type_to_v(py_return)
 			}
 		}
-	} else if node.name !in ['__init__', '__post_init__', 'setUp', 'tearDown'] {
+	} else if node.name != '__init__' && node.name != '__post_init__' && node.name != 'setUp'
+		&& node.name != 'tearDown' {
 		return_type = t.infer_return_type(node.body)
 	}
 	if return_type == 'LiteralString' {
@@ -1482,7 +1483,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 				t.mark_mutated_expr(target)
 				mut obj_key := t.guess_expr_type(target.value)
 				obj_key = clean_v_type(obj_key)
-				if obj_key in ['Any', 'int', 'unknown'] {
+				if obj_key == 'Any' || obj_key == 'int' || obj_key == 'unknown' {
 					obj_key = t.render_expr(target.value)
 				}
 				attr_name := target.attr
@@ -1758,7 +1759,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 			}
 		}
 		is_cap := func_name.len > 0 && func_name[0].is_capital()
-		if !is_cap && func_name !in ['list', 'set', 'dict']
+		if !is_cap && func_name != 'list' && func_name != 'set' && func_name != 'dict'
 			&& (!t.has_type(func_name) || t.get_type(func_name) == 'Any') {
 			t.store_type(func_name, 'fn (...Any) Any')
 		}
