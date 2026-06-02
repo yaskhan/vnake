@@ -79,8 +79,8 @@ pub fn is_collection_type(v_type string) bool {
 		return false
 	}
 	return match v_type[0] {
-		`[` { v_type.starts_with('[]') }
-		`m` { v_type.starts_with('map[') }
+		`[` { v_type[1] == `]` }
+		`m` { v_type.len >= 4 && v_type[1] == `a` && v_type[2] == `p` && v_type[3] == `[` }
 		`d` { v_type.starts_with('datatypes.Set[') }
 		`s` { v_type == 'string' }
 		`L` { v_type == 'LiteralString' }
@@ -93,8 +93,8 @@ pub fn is_clonable_collection(v_type string) bool {
 		return false
 	}
 	return match v_type[0] {
-		`[` { v_type.starts_with('[]') }
-		`m` { v_type.starts_with('map[') }
+		`[` { v_type[1] == `]` }
+		`m` { v_type.len >= 4 && v_type[1] == `a` && v_type[2] == `p` && v_type[3] == `[` }
 		else { false }
 	}
 }
@@ -273,11 +273,10 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 		return res
 	}
 
-	if v_type.contains('.') {
-		// ⚡ Bolt: Using all_before_last/all_after_last avoids redundant array allocations from split/join.
-		// Measured ~5.4x speedup (1077ms -> 200ms per 1M calls).
-		module_prefix := v_type.all_before_last('.')
-		typename := v_type.all_after_last('.')
+	if dot_idx := v_type.last_index('.') {
+		// ⚡ Bolt: Using last_index and slicing avoids multiple string scans and redundant work.
+		module_prefix := v_type[..dot_idx]
+		typename := v_type[dot_idx + 1..]
 
 		// Handle Nested Classes: Outer.Inner -> Outer_Inner
 		nested_name := v_type.replace('.', '_')
@@ -292,8 +291,8 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 			if prefix := ctx.scc_prefixes[current_prefix] {
 				return '${prefix}__${typename}'
 			}
-			dot_idx := current_prefix.index('.') or { break }
-			current_prefix = current_prefix[dot_idx + 1..]
+			idx := current_prefix.index('.') or { break }
+			current_prefix = current_prefix[idx + 1..]
 		}
 	}
 
@@ -349,8 +348,7 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 	}
 
 	// Important: Check for Union before capital letter to correctly handle 'MyType | None'
-	if v_type.contains('|') {
-		idx := v_type.index('|') or { return 'none' }
+	if idx := v_type.index('|') {
 		first_variant := fast_trim_space(v_type[..idx])
 		return get_v_default_value(first_variant, active_v_generics)
 	}
