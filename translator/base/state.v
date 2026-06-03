@@ -381,11 +381,11 @@ pub fn (s &TranslatorState) is_v_class_type(v_type string) bool {
 	if v_type.len == 0 {
 		return false
 	}
-	clean := if v_type[0] == `?` || v_type[0] == `&` {
-		v_type.trim_left('?&')
-	} else {
-		v_type
+	mut start := 0
+	for start < v_type.len && (v_type[start] == `?` || v_type[start] == `&`) {
+		start++
 	}
+	clean := if start > 0 { v_type[start..] } else { v_type }
 	if clean.len == 0 || !clean[0].is_capital() {
 		return false
 	}
