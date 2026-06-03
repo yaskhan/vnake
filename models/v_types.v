@@ -97,12 +97,12 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	if py_type.len >= 2 {
 		match py_type[0] {
 			`[` {
-				if py_type.starts_with('[]') {
+				if py_type[1] == `]` {
 					return py_type
 				}
 			}
 			`m` {
-				if py_type.starts_with('map[') {
+				if py_type.len >= 4 && py_type[1] == `a` && py_type[2] == `p` && py_type[3] == `[` {
 					return py_type
 				}
 			}

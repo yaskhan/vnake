@@ -79,8 +79,8 @@ pub fn is_collection_type(v_type string) bool {
 		return false
 	}
 	return match v_type[0] {
-		`[` { v_type.starts_with('[]') }
-		`m` { v_type.starts_with('map[') }
+		`[` { v_type[1] == `]` }
+		`m` { v_type.len >= 4 && v_type[1] == `a` && v_type[2] == `p` && v_type[3] == `[` }
 		`d` { v_type.starts_with('datatypes.Set[') }
 		`s` { v_type == 'string' }
 		`L` { v_type == 'LiteralString' }
@@ -93,8 +93,8 @@ pub fn is_clonable_collection(v_type string) bool {
 		return false
 	}
 	return match v_type[0] {
-		`[` { v_type.starts_with('[]') }
-		`m` { v_type.starts_with('map[') }
+		`[` { v_type[1] == `]` }
+		`m` { v_type.len >= 4 && v_type[1] == `a` && v_type[2] == `p` && v_type[3] == `[` }
 		else { false }
 	}
 }
@@ -292,8 +292,8 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 			if prefix := ctx.scc_prefixes[current_prefix] {
 				return '${prefix}__${typename}'
 			}
-			dot_idx := current_prefix.index('.') or { break }
-			current_prefix = current_prefix[dot_idx + 1..]
+			idx := current_prefix.index('.') or { break }
+			current_prefix = current_prefix[idx + 1..]
 		}
 	}
 
@@ -349,8 +349,7 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 	}
 
 	// Important: Check for Union before capital letter to correctly handle 'MyType | None'
-	if v_type.contains('|') {
-		idx := v_type.index('|') or { return 'none' }
+	if idx := v_type.index('|') {
 		first_variant := fast_trim_space(v_type[..idx])
 		return get_v_default_value(first_variant, active_v_generics)
 	}
