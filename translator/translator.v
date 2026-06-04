@@ -2,6 +2,7 @@ module translator
 
 // VERIFY: 12345
 import analyzer
+import strings
 import ast
 import base
 import expressions
@@ -827,39 +828,19 @@ fn main() { richards() }
 	}
 
 	// Cleanup unused imports
-	mut imports_to_add := []string{}
+	// ⚡ Bolt: Single-pass collection of non-import lines into a search buffer avoids O(N*M) nested loops.
+	// This reduces complexity from O(M * N) to O(M + N) where M is imports and N is code lines.
+	mut search_buffer := strings.new_builder(t.state.output.len * 32)
+	mut potential_imports := []string{}
+
 	for line in t.state.output {
 		trimmed := line.trim_space()
 		if trimmed.starts_with('import ') {
-			imp_name := trimmed['import '.len..].trim_space()
-			// Check if this import is actually used
-			mut is_used := false
-			// Check if any used_builtins starts with this module name
-			for k, v in t.state.used_builtins {
-				if v && k.starts_with('${imp_name}.') {
-					is_used = true
-					break
-				}
-			}
-			// Also check if the module name appears in output code
-			if !is_used {
-				short_name := if imp_name.contains('.') {
-					imp_name.all_after_last('.')
-				} else {
-					imp_name
-				}
-				for code_line in t.state.output {
-					if (code_line.contains('${imp_name}.') || code_line.contains('${short_name}.'))
-						&& !code_line.trim_space().starts_with('import ') {
-						is_used = true
-						break
-					}
-				}
-			}
-			if is_used {
-				imports_to_add << imp_name
-			}
-		} else if trimmed.starts_with('const ') || trimmed.starts_with('pub const ') {
+			potential_imports << trimmed[7..].trim_space()
+			continue
+		}
+
+		if trimmed.starts_with('const ') || trimmed.starts_with('pub const ') {
 			e.add_constant(trimmed)
 		} else if trimmed.starts_with('__global ') {
 			e.add_global(trimmed)
@@ -868,10 +849,39 @@ fn main() { richards() }
 		} else if trimmed.len > 0 {
 			e.add_main_statement(line)
 		}
+
+		// Add to search buffer if it might contain a module reference (usually has a dot)
+		if line.contains('.') {
+			search_buffer.write_string(line)
+			search_buffer.write_byte(`\n`)
+		}
 	}
-	// Add only used imports
-	for imp in imports_to_add {
-		e.add_import(imp)
+
+	search_str := search_buffer.str()
+	for imp_name in potential_imports {
+		mut is_used := false
+		// Check if any used_builtins starts with this module name
+		for k, v in t.state.used_builtins {
+			if v && k.starts_with(imp_name + '.') {
+				is_used = true
+				break
+			}
+		}
+		// Also check if the module name appears in output code
+		if !is_used {
+			short_name := if idx := imp_name.last_index('.') {
+				imp_name[idx + 1..]
+			} else {
+				imp_name
+			}
+			// Search for 'module.' or 'short_name.' patterns
+			if search_str.contains(imp_name + '.') || search_str.contains(short_name + '.') {
+				is_used = true
+			}
+		}
+		if is_used {
+			e.add_import(imp_name)
+		}
 	}
 	res := if t.state.is_full_module { e.emit() } else { e.raw_emit() }
 	return res
