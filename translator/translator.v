@@ -200,14 +200,17 @@ fn (mut t Translator) map_annotation_internal(node ast.Expression) string {
 					if node.id in t.state.paramspec_vars {
 						return '...Any'
 					}
-					if full_sym in ['str', 'builtins.str', 'typing.LiteralString',
-						'typing_extensions.LiteralString'] {
-						return 'string'
+					return match full_sym {
+						'str', 'builtins.str', 'typing.LiteralString', 'typing_extensions.LiteralString' {
+							'string'
+						}
+						'float', 'builtins.float' {
+							'f64'
+						}
+						else {
+							full_sym
+						}
 					}
-					if full_sym in ['float', 'builtins.float'] {
-						return 'f64'
-					}
-					full_sym
 				}
 			}
 			// Check generic scopes first
@@ -243,158 +246,172 @@ fn (mut t Translator) map_annotation_internal(node ast.Expression) string {
 				return '&${t.state.current_class}${gen_s}'
 			}
 			full_name := t.annotation_raw_name(node)
-			if full_name in ['NoReturn', 'typing.NoReturn'] {
-				return 'noreturn'
-			}
-			if full_name in ['Any', 'typing.Any'] {
-				return 'Any'
-			}
-			if full_name in ['LiteralString', 'typing.LiteralString',
-				'typing_extensions.LiteralString'] {
-				return 'string'
-			}
-			if full_name in ['Self', 'typing.Self'] {
-				gen_s := if t.state.current_class_generics.len > 0 {
-					'[${t.state.current_class_generics.join(', ')}]'
-				} else {
-					''
+			return match full_name {
+				'NoReturn', 'typing.NoReturn' {
+					'noreturn'
 				}
-				return '&${t.state.current_class}${gen_s}'
+				'Any', 'typing.Any' {
+					'Any'
+				}
+				'LiteralString', 'typing.LiteralString', 'typing_extensions.LiteralString' {
+					'string'
+				}
+				'Self', 'typing.Self' {
+					gen_s := if t.state.current_class_generics.len > 0 {
+						'[${t.state.current_class_generics.join(', ')}]'
+					} else {
+						''
+					}
+					'&${t.state.current_class}${gen_s}'
+				}
+				else {
+					t.map_annotation_str(full_name, t.state.current_class, true, true, false)
+				}
 			}
-			return t.map_annotation_str(full_name, t.state.current_class, true, true,
-				false)
 		}
 		ast.Subscript {
 			base_raw := t.annotation_raw_name(node.value)
-			if base_raw in ['TypeGuard', 'typing.TypeGuard', 'TypeIs', 'typing.TypeIs'] {
-				narrowed := t.map_annotation(node.slice)
-				if t.current_function_name.len > 0 {
-					t.state.type_guards[t.current_function_name] = base.TypeGuardInfo{
-						narrowed_type: narrowed
-						is_type_is:    base_raw.contains('TypeIs')
-					}
-				}
-				return 'bool'
-			}
-			if base_raw in ['Optional', 'typing.Optional'] {
-				return '?${t.map_annotation(node.slice)}'
-			}
-			if base_raw in ['Union', 'typing.Union'] {
-				if node.slice is ast.Tuple {
-					mut parts := []string{}
-					for elt in node.slice.elements {
-						parts << t.map_annotation(elt)
-					}
-					mut res_parts := []string{}
-					mut contains_none := false
-					for p in parts {
-						if p != '' {
-							res_parts << p
-						} else {
-							contains_none = true
+			return match base_raw {
+				'TypeGuard', 'typing.TypeGuard', 'TypeIs', 'typing.TypeIs' {
+					narrowed := t.map_annotation(node.slice)
+					if t.current_function_name.len > 0 {
+						t.state.type_guards[t.current_function_name] = base.TypeGuardInfo{
+							narrowed_type: narrowed
+							is_type_is:    base_raw.contains('TypeIs')
 						}
 					}
-					res_type := res_parts.join(' | ')
-					if contains_none {
-						return if res_type.len > 0 {
-							t.map_annotation_str('?${res_type}', '', false, true, false)
-						} else {
-							'none'
+					'bool'
+				}
+				'Optional', 'typing.Optional' {
+					'?${t.map_annotation(node.slice)}'
+				}
+				'Union', 'typing.Union' {
+					if node.slice is ast.Tuple {
+						mut parts := []string{}
+						for elt in node.slice.elements {
+							parts << t.map_annotation(elt)
 						}
-					}
-					return t.map_annotation_str(res_type, '', false, true, false)
-				}
-				return t.map_annotation(node.slice)
-			}
-			if base_raw in ['List', 'typing.List', 'list'] {
-				return '[]${t.map_annotation(node.slice)}'
-			}
-			if base_raw in ['Tuple', 'typing.Tuple', 'tuple'] {
-				if node.slice is ast.Tuple {
-					mut parts := []string{}
-					for elt in node.slice.elements {
-						parts << t.map_annotation(elt)
-					}
-					types_str := parts.join(', ')
-					struct_name := models.get_tuple_struct_name(types_str)
-					t.state.generated_tuple_structs[struct_name] = types_str
-					return struct_name
-				}
-				inner := t.map_annotation(node.slice)
-				if inner.contains(',') {
-					struct_name := models.get_tuple_struct_name(inner)
-					t.state.generated_tuple_structs[struct_name] = inner
-					return struct_name
-				}
-				return '[]' + inner
-			}
-			if base_raw in ['Dict', 'typing.Dict', 'dict'] {
-				if node.slice is ast.Tuple {
-					mut parts := []string{}
-					for elt in node.slice.elements {
-						parts << t.map_annotation(elt)
-					}
-					if parts.len >= 2 {
-						return 'map[${parts[0]}]${parts[1]}'
-					}
-				}
-				return 'map[string]Any'
-			}
-			if base_raw in ['Set', 'typing.Set', 'set'] {
-				return 'datatypes.Set[${t.map_annotation(node.slice)}]'
-			}
-			if base_raw in ['TypeForm', 'typing.TypeForm', 'typing_extensions.TypeForm'] {
-				return 'string'
-			}
-			if base_raw in ['Required', 'typing.Required', 'NotRequired', 'typing.NotRequired',
-				'Final', 'typing.Final', 'ClassVar', 'typing.ClassVar', 'ReadOnly', 'typing.ReadOnly',
-				'Annotated', 'typing.Annotated'] {
-				if base_raw.contains('NotRequired') {
-					inner := t.map_annotation(node.slice)
-					return if inner.starts_with('?') { inner } else { '?${inner}' }
-				}
-				if node.slice is ast.Tuple {
-					return t.map_annotation(node.slice.elements[0])
-				}
-				return t.map_annotation(node.slice)
-			}
-			if base_raw in ['Literal', 'typing.Literal'] {
-				t.state.used_builtins['LiteralEnum_'] = true
-				return 'LiteralEnum_'
-			}
-			if base_raw in ['Callable', 'typing.Callable', 'collections.abc.Callable', 'callable'] {
-				mut arg_types := []string{}
-				mut ret_type := 'Any'
-				if node.slice is ast.Tuple {
-					tuple_node := node.slice
-					if tuple_node.elements.len >= 2 {
-						args_spec := tuple_node.elements[0]
-						if args_spec is ast.List {
-							for elt in args_spec.elements {
-								arg_types << t.map_annotation(elt)
-							}
-						} else if (args_spec is ast.Constant && args_spec.value == '...')
-							|| (args_spec is ast.Name && (args_spec as ast.Name).id == '...') {
-							arg_types << '...Any'
-						} else {
-							arg_spec_str := t.map_annotation(args_spec)
-							if arg_spec_str.len > 0 {
-								arg_types << arg_spec_str
+						mut res_parts := []string{}
+						mut contains_none := false
+						for p in parts {
+							if p != '' {
+								res_parts << p
+							} else {
+								contains_none = true
 							}
 						}
-						ret_type = t.map_annotation(tuple_node.elements[1])
+						res_type := res_parts.join(' | ')
+						if contains_none {
+							if res_type.len > 0 {
+								t.map_annotation_str('?${res_type}', '', false, true, false)
+							} else {
+								'none'
+							}
+						} else {
+							t.map_annotation_str(res_type, '', false, true, false)
+						}
+					} else {
+						t.map_annotation(node.slice)
 					}
-				} else {
-					// Handle Callable[..., Ret]
-					ret_type = t.map_annotation(node.slice)
-					return 'fn (...Any) ${ret_type}'
 				}
-				if ret_type == '' || ret_type == 'void' || ret_type == 'none' {
-					return 'fn (${arg_types.join(', ')})'
+				'List', 'typing.List', 'list' {
+					'[]${t.map_annotation(node.slice)}'
 				}
-				return 'fn (${arg_types.join(', ')}) ${ret_type}'
+				'Tuple', 'typing.Tuple', 'tuple' {
+					if node.slice is ast.Tuple {
+						mut parts := []string{}
+						for elt in node.slice.elements {
+							parts << t.map_annotation(elt)
+						}
+						types_str := parts.join(', ')
+						struct_name := models.get_tuple_struct_name(types_str)
+						t.state.generated_tuple_structs[struct_name] = types_str
+						struct_name
+					} else {
+						inner := t.map_annotation(node.slice)
+						if inner.contains(',') {
+							struct_name := models.get_tuple_struct_name(inner)
+							t.state.generated_tuple_structs[struct_name] = inner
+							struct_name
+						} else {
+							'[]' + inner
+						}
+					}
+				}
+				'Dict', 'typing.Dict', 'dict' {
+					if node.slice is ast.Tuple {
+						mut parts := []string{}
+						for elt in node.slice.elements {
+							parts << t.map_annotation(elt)
+						}
+						if parts.len >= 2 {
+							'map[${parts[0]}]${parts[1]}'
+						} else {
+							'map[string]Any'
+						}
+					} else {
+						'map[string]Any'
+					}
+				}
+				'Set', 'typing.Set', 'set' {
+					'datatypes.Set[${t.map_annotation(node.slice)}]'
+				}
+				'TypeForm', 'typing.TypeForm', 'typing_extensions.TypeForm' {
+					'string'
+				}
+				'Required', 'typing.Required', 'NotRequired', 'typing.NotRequired', 'Final',
+				'typing.Final', 'ClassVar', 'typing.ClassVar', 'ReadOnly', 'typing.ReadOnly',
+				'Annotated', 'typing.Annotated' {
+					if base_raw.contains('NotRequired') {
+						inner := t.map_annotation(node.slice)
+						if inner.starts_with('?') { inner } else { '?${inner}' }
+					} else if node.slice is ast.Tuple {
+						t.map_annotation(node.slice.elements[0])
+					} else {
+						t.map_annotation(node.slice)
+					}
+				}
+				'Literal', 'typing.Literal' {
+					t.state.used_builtins['LiteralEnum_'] = true
+					'LiteralEnum_'
+				}
+				'Callable', 'typing.Callable', 'collections.abc.Callable', 'callable' {
+					mut arg_types := []string{}
+					mut ret_type := 'Any'
+					if node.slice is ast.Tuple {
+						tuple_node := node.slice
+						if tuple_node.elements.len >= 2 {
+							args_spec := tuple_node.elements[0]
+							if args_spec is ast.List {
+								for elt in args_spec.elements {
+									arg_types << t.map_annotation(elt)
+								}
+							} else if (args_spec is ast.Constant && args_spec.value == '...')
+								|| (args_spec is ast.Name && (args_spec as ast.Name).id == '...') {
+								arg_types << '...Any'
+							} else {
+								arg_spec_str := t.map_annotation(args_spec)
+								if arg_spec_str.len > 0 {
+									arg_types << arg_spec_str
+								}
+							}
+							ret_type = t.map_annotation(tuple_node.elements[1])
+						}
+					} else {
+						// Handle Callable[..., Ret]
+						ret_type = t.map_annotation(node.slice)
+						return 'fn (...Any) ${ret_type}'
+					}
+					if ret_type == '' || ret_type == 'void' || ret_type == 'none' {
+						'fn (${arg_types.join(', ')})'
+					} else {
+						'fn (${arg_types.join(', ')}) ${ret_type}'
+					}
+				}
+				else {
+					t.map_annotation(node.value) + '[${t.map_annotation(node.slice)}]'
+				}
 			}
-			return t.map_annotation(node.value) + '[${t.map_annotation(node.slice)}]'
 		}
 		ast.Tuple {
 			mut parts := []string{}
