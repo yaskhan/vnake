@@ -92,6 +92,9 @@ const keywords = [
 	'yield',
 ]
 
+// is_keyword checks if the string is a Python keyword.
+// ⚡ Bolt: Using a match expression with a length-based fast path is faster than
+// linear search in an array literal in V 0.5.1.
 fn is_keyword(s string) bool {
 	// ⚡ Bolt: Optimized string set membership check.
 	// Using a `match` expression for constant string sets is significantly faster (~23% in -prod)
@@ -102,9 +105,9 @@ fn is_keyword(s string) bool {
 	}
 	return match s {
 		'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class',
-		'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global',
-		'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return',
-		'try', 'while', 'with', 'yield' {
+		'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from',
+		'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass',
+		'raise', 'return', 'try', 'while', 'with', 'yield' {
 			true
 		}
 		else {
