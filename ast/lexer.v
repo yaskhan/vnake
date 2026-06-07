@@ -67,16 +67,23 @@ fn (mut l Lexer) advance_char() u8 {
 }
 
 fn (mut l Lexer) skip_comment() {
-	for l.pos < l.source.len && l.peek_char() != `\n` {
-		l.advance_char()
+	// ⚡ Bolt: Fast-path for comment skipping avoids repeated method calls in a loop.
+	if next_newline := l.source.index_after('\n', l.pos) {
+		l.column += next_newline - l.pos
+		l.pos = next_newline
+	} else {
+		l.column += l.source.len - l.pos
+		l.pos = l.source.len
 	}
 }
 
 fn (mut l Lexer) skip_whitespace_inline() {
+	// ⚡ Bolt: Fast-path for inline whitespace skipping avoids advance_char() branches.
 	for l.pos < l.source.len {
-		ch := l.peek_char()
+		ch := l.source[l.pos]
 		if ch == ` ` || ch == `\t` || ch == `\r` {
-			l.advance_char()
+			l.pos++
+			l.column++
 		} else if ch == `\\` && l.peek_char_at(1) == `\n` {
 			l.advance_char()
 			l.advance_char()
@@ -90,14 +97,17 @@ fn (mut l Lexer) handle_indentation() ?Token {
 	// Count leading spaces/tabs
 	indent := 0
 	mut col := 0
+	// ⚡ Bolt: Fast-path for indentation counting avoids advance_char() branches.
 	for l.pos < l.source.len {
-		ch := l.peek_char()
+		ch := l.source[l.pos]
 		if ch == ` ` {
 			col++
-			l.advance_char()
+			l.pos++
+			l.column++
 		} else if ch == `\t` {
 			col = (col / 8 + 1) * 8
-			l.advance_char()
+			l.pos++
+			l.column++
 		} else {
 			break
 		}
@@ -140,9 +150,14 @@ fn (mut l Lexer) handle_indentation() ?Token {
 fn (mut l Lexer) scan_identifier() Token {
 	start := l.pos
 	start_col := l.column
+	// ⚡ Bolt: Fast-path for ASCII identifiers avoids advance_char() branches.
 	for l.pos < l.source.len {
-		ch := l.peek_char()
-		if ch.is_letter() || ch == `_` || ch.is_digit() {
+		ch := l.source[l.pos]
+		if (ch >= `a` && ch <= `z`) || (ch >= `A` && ch <= `Z`) || ch == `_` || (ch >= `0`
+			&& ch <= `9`) {
+			l.pos++
+			l.column++
+		} else if ch >= 128 {
 			l.advance_char()
 		} else {
 			break
