@@ -45,3 +45,7 @@
 ## 2025-02-13 - [V-Lang trim_space Allocation Avoidance]
 **Learning:** In V 0.5.1, the `trim_space()` method performs a heap allocation even if the string has no leading or trailing whitespace. In high-traffic code (like type parsing and AST traversal), this creates significant memory pressure. A "fast-path" check like `if s.len > 0 && (s[0].is_space() || s[s.len-1].is_space()) { s = s.trim_space() }` avoids this allocation, providing a measured ~7x speedup for strings that are already trimmed.
 **Action:** Implement a `fast_trim_space` helper or use the conditional check pattern in all performance-critical string processing paths.
+
+## 2025-02-14 - [V-Lang String Prefix Optimization]
+**Learning:** In V 0.5.1, calling `.to_lower()` on short identifiers or string prefixes (like 'f', 'r', 'rb') creates unnecessary heap allocations. Using byte-level bitwise operations (e.g., `prefix[i] | 32` for ASCII) and pre-calculating boolean flags once per string scanning operation eliminates these allocations in the lexer's hot path.
+**Action:** Use byte-level case-insensitive comparisons and pre-calculate flags outside of character loops for hot string processing logic.
