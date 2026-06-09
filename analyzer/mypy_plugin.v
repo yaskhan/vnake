@@ -581,21 +581,25 @@ pub fn run_mypy_analysis(source string, filename string) MypyPluginStore {
 	// Bulk import persistent types
 	for pkey, t in tc.persistent_type_map {
 		// pkey is "line:col:expr_str"
-		parts := pkey.split(':')
-		if parts.len >= 3 {
-			loc := '${parts[0]}:${parts[1]}'
-			expr_str := parts[2..].join(':')
-			t_str := t.type_str()
-			a.store.collect_type(expr_str, loc, t_str)
-			a.store.collect_type('@', loc, t_str)
+		// ⚡ Bolt: Using index-based slicing instead of split/join avoids redundant allocations.
+		first_colon := pkey.index(':') or { -1 }
+		if first_colon == -1 {
+			continue
+		}
+		second_colon := pkey.index_after(':', first_colon + 1) or { -1 }
+		if second_colon == -1 {
+			continue
+		}
 
-			if expr_str.contains('.') {
-				p_parts := expr_str.split('.')
-				if p_parts.len > 0 {
-					last_p := p_parts[p_parts.len - 1]
-					a.store.collect_type(last_p, loc, t_str)
-				}
-			}
+		loc := pkey[..second_colon]
+		expr_str := pkey[second_colon + 1..]
+		t_str := t.type_str()
+		a.store.collect_type(expr_str, loc, t_str)
+		a.store.collect_type('@', loc, t_str)
+
+		if dot_idx := expr_str.last_index('.') {
+			last_p := expr_str[dot_idx + 1..]
+			a.store.collect_type(last_p, loc, t_str)
 		}
 	}
 
@@ -621,16 +625,14 @@ fn (mut a MypyPluginAnalyzer) record_checker_type(expr mypy.Expression) {
 			ctx := expr.get_context()
 			key := '${ctx.line}:${ctx.column}'
 			t_str := t.type_str()
-			a.store.collect_type(expr.str(), key, t_str)
+			expr_str := expr.str()
+			a.store.collect_type(expr_str, key, t_str)
 			a.store.collect_type('@', key, t_str)
 
-			expr_str := expr.str()
-			if expr_str.contains('.') {
-				p_parts := expr_str.split('.')
-				if p_parts.len > 0 {
-					last_p := p_parts[p_parts.len - 1]
-					a.store.collect_type(last_p, key, t_str)
-				}
+			// ⚡ Bolt: Using last_index instead of split('.') avoids array allocation.
+			if dot_idx := expr_str.last_index('.') {
+				last_p := expr_str[dot_idx + 1..]
+				a.store.collect_type(last_p, key, t_str)
 			}
 		}
 	}
