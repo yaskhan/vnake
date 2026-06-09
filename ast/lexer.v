@@ -256,13 +256,27 @@ fn (mut l Lexer) scan_number() Token {
 fn (mut l Lexer) scan_string(prefix string) Token {
 	start_col := l.column - prefix.len
 	quote := l.peek_char()
-	mut typ := if prefix.to_lower().contains('f') {
-		TokenType.fstring_tok
-	} else if prefix.to_lower().contains('t') {
-		TokenType.tstring_tok
-	} else {
-		TokenType.string_tok
+
+	// ⚡ Bolt: Pre-calculating token type and newline allowance using byte-level prefix checks
+	// avoids redundant to_lower() and contains() allocations in the hot scanning loop.
+	mut typ := TokenType.string_tok
+	mut has_f := false
+	mut has_t := false
+	for i := 0; i < prefix.len; i++ {
+		ch_low := prefix[i] | 32
+		if ch_low == `f` {
+			has_f = true
+		} else if ch_low == `t` {
+			has_t = true
+		}
 	}
+	if has_f {
+		typ = .fstring_tok
+	} else if has_t {
+		typ = .tstring_tok
+	}
+
+	mut allows_newline := prefix.len == 1 && (prefix[0] | 32 == `f` || prefix[0] | 32 == `r`)
 
 	// Check for triple quote
 	if l.pos + 2 < l.source.len && l.peek_char() == quote && l.peek_char_at(1) == quote
@@ -308,7 +322,7 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 		if ch == `\\` {
 			l.advance_char()
 		}
-		if ch == `\n` && (prefix.to_lower() != 'f' && prefix.to_lower() != 'r') {
+		if ch == `\n` && !allows_newline {
 			// Actually Python strings can't have raw newlines unless triple quoted
 			break
 		}
