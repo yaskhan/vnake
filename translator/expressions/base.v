@@ -323,12 +323,38 @@ fn (eg &ExprGen) quote_string_content(value string, is_raw bool) string {
 		return "r'${value}'"
 	}
 
-	mut escaped := value.replace('$', '\\$')
-	escaped = escaped.replace("'", "\\'")
-	escaped = escaped.replace('\n', '\\n')
-	escaped = escaped.replace('\r', '\\r')
-	escaped = escaped.replace('\t', '\\t')
-	return "'${escaped}'"
+	// ⚡ Bolt: Fast-path for strings that don't need escaping.
+	// This avoids creating a strings.Builder and redundant scans.
+	mut needs_escape := false
+	for i := 0; i < value.len; i++ {
+		ch := value[i]
+		if ch == `$` || ch == `'` || ch == `\n` || ch == `\r` || ch == `\t` {
+			needs_escape = true
+			break
+		}
+	}
+
+	if !needs_escape {
+		return "'${value}'"
+	}
+
+	// ⚡ Bolt: Single-pass escaping using strings.Builder avoids multiple intermediate string
+	// allocations and scans from sequential .replace() calls.
+	mut sb := strings.new_builder(value.len + 8)
+	sb.write_byte(`'`)
+	for i := 0; i < value.len; i++ {
+		ch := value[i]
+		match ch {
+			`$` { sb.write_string('\\$') }
+			`'` { sb.write_string("\\'") }
+			`\n` { sb.write_string('\\n') }
+			`\r` { sb.write_string('\\r') }
+			`\t` { sb.write_string('\\t') }
+			else { sb.write_byte(ch) }
+		}
+	}
+	sb.write_byte(`'`)
+	return sb.str()
 }
 
 fn (mut eg ExprGen) translate_tstring(values []ast.Expression) string {
