@@ -186,15 +186,17 @@ fn (mut l Lexer) scan_number() Token {
 	start := l.pos
 	start_col := l.column
 	// Hex, octal, binary
-	if l.peek_char() == `0` && l.pos + 1 < l.source.len {
-		next := l.peek_char_at(1)
+	if l.pos + 1 < l.source.len && l.source[l.pos] == `0` {
+		next := l.source[l.pos + 1]
 		if next == `x` || next == `X` || next == `o` || next == `O` || next == `b` || next == `B` {
-			l.advance_char()
-			l.advance_char()
+			l.pos += 2
+			l.column += 2
 			for l.pos < l.source.len {
-				ch := l.peek_char()
-				if ch.is_hex_digit() || ch == `_` {
-					l.advance_char()
+				ch := l.source[l.pos]
+				if (ch >= `0` && ch <= `9`) || (ch >= `a` && ch <= `f`) || (ch >= `A` && ch <= `F`)
+					|| ch == `_` {
+					l.pos++
+					l.column++
 				} else {
 					break
 				}
@@ -208,41 +210,63 @@ fn (mut l Lexer) scan_number() Token {
 			}
 		}
 	}
+	// ⚡ Bolt: Fast-path for number scanning avoids advance_char() branches.
 	for l.pos < l.source.len {
-		ch := l.peek_char()
-		if ch.is_digit() || ch == `_` {
-			l.advance_char()
+		ch := l.source[l.pos]
+		if (ch >= `0` && ch <= `9`) || ch == `_` {
+			l.pos++
+			l.column++
 		} else {
 			break
 		}
 	}
-	if l.pos < l.source.len && l.peek_char() == `.` && l.peek_char_at(1).is_digit() {
-		l.advance_char()
-		for l.pos < l.source.len {
-			ch := l.peek_char()
-			if ch.is_digit() || ch == `_` {
-				l.advance_char()
-			} else {
-				break
+	if l.pos + 1 < l.source.len && l.source[l.pos] == `.` {
+		next := l.source[l.pos + 1]
+		if next >= `0` && next <= `9` {
+			l.pos++
+			l.column++
+			for l.pos < l.source.len {
+				ch := l.source[l.pos]
+				if (ch >= `0` && ch <= `9`) || ch == `_` {
+					l.pos++
+					l.column++
+				} else {
+					break
+				}
 			}
 		}
 	}
 	// Exponent
 	if l.pos < l.source.len {
-		ch := l.peek_char()
+		ch := l.source[l.pos]
 		if ch == `e` || ch == `E` {
-			l.advance_char()
-			if l.pos < l.source.len && (l.peek_char() == `+` || l.peek_char() == `-`) {
-				l.advance_char()
+			l.pos++
+			l.column++
+			if l.pos < l.source.len {
+				next := l.source[l.pos]
+				if next == `+` || next == `-` {
+					l.pos++
+					l.column++
+				}
 			}
-			for l.pos < l.source.len && l.peek_char().is_digit() {
-				l.advance_char()
+			for l.pos < l.source.len {
+				ch_exp := l.source[l.pos]
+				if ch_exp >= `0` && ch_exp <= `9` {
+					l.pos++
+					l.column++
+				} else {
+					break
+				}
 			}
 		}
 	}
 	// Complex
-	if l.pos < l.source.len && (l.peek_char() == `j` || l.peek_char() == `J`) {
-		l.advance_char()
+	if l.pos < l.source.len {
+		ch := l.source[l.pos]
+		if ch == `j` || ch == `J` {
+			l.pos++
+			l.column++
+		}
 	}
 	return Token{
 		typ:      .number
@@ -601,62 +625,72 @@ fn (mut l Lexer) next_token() Token {
 		}
 
 		// Single-char tokens
+		// ⚡ Bolt: Fast-path for single-char tokens avoids advance_char() branches.
 		match ch {
 			`(` {
 				l.grouping_level++
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.lparen, '(')
 			}
 			`)` {
 				l.grouping_level--
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.rparen, ')')
 			}
 			`[` {
 				l.grouping_level++
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.lbracket, '[')
 			}
 			`]` {
 				l.grouping_level--
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.rbracket, ']')
 			}
 			`{` {
 				l.grouping_level++
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.lbrace, '{')
 			}
 			`}` {
 				l.grouping_level--
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.rbrace, '}')
 			}
 			`:` {
 				if l.peek_char_at(1) == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.walrus, ':=')
 				}
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.colon, ':')
 			}
 			`,` {
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.comma, ',')
 			}
 			`.` {
 				if l.peek_char_at(1) == `.` && l.peek_char_at(2) == `.` {
-					l.advance_char()
-					l.advance_char()
-					l.advance_char()
+					l.pos += 3
+					l.column += 3
 					return l.make_token(.ellipsis, '...')
 				}
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.dot, '.')
 			}
 			`;` {
-				l.advance_char()
+				l.pos++
+				l.column++
 				return l.make_token(.semicolon, ';')
 			}
 			else {
