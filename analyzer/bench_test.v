@@ -46,3 +46,61 @@ fn test_ancestors_deduplication() {
 	assert 'C' in ancestors
 	assert 'A' in ancestors
 }
+
+fn test_bench_expr_to_type_string() {
+    mut mixin := new_type_inference_visitor_mixin()
+
+    expr := ast.Subscript{
+        value: ast.Name{id: "List"}
+        slice: ast.Subscript{
+            value: ast.Name{id: "Dict"}
+            slice: ast.Tuple{
+                elements: [
+                    ast.Expression(ast.Name{id: "str"}),
+                    ast.Expression(ast.Subscript{
+                        value: ast.Name{id: "Tuple"},
+                        slice: ast.Tuple{
+                            elements: [
+                                ast.Expression(ast.Name{id: "int"}),
+                                ast.Expression(ast.Name{id: "float"})
+                            ]
+                        }
+                    })
+                ]
+            }
+        }
+    }
+
+    iters := 100000
+
+    println("Benchmarking expr_to_type_string...")
+    sw := time.new_stopwatch()
+    for _ in 0 .. iters {
+        _ = mixin.expr_to_type_string(expr)
+    }
+    println("expr_to_type_string took ${sw.elapsed().milliseconds()}ms for ${iters} iterations")
+}
+
+fn test_bench_string_ops() {
+    s := "some.very.long.module.path.ClassName"
+    iters := 100000
+    println("\nBenchmarking string split vs last_index...")
+
+    sw_split := time.new_stopwatch()
+    for _ in 0 .. iters {
+        if s.contains('.') {
+            _ = s.all_before_last('.')
+            _ = s.all_after_last('.')
+        }
+    }
+    println("contains + all_before/after took ${sw_split.elapsed().milliseconds()}ms")
+
+    sw_last := time.new_stopwatch()
+    for _ in 0 .. iters {
+        if idx := s.last_index('.') {
+            _ = s[..idx]
+            _ = s[idx+1..]
+        }
+    }
+    println("last_index + slicing took ${sw_last.elapsed().milliseconds()}ms")
+}

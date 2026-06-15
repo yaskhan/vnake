@@ -129,9 +129,9 @@ pub fn (t &TypeInferenceBase) get_type(name string) string {
 		return res
 	}
 
-	if name.contains('.') {
-		cls := name.all_before_last('.')
-		attr := name.all_after_last('.')
+	if dot_idx := name.last_index('.') {
+		cls := name[..dot_idx]
+		attr := name[dot_idx + 1..]
 		camel_attr := to_camel_case(attr)
 		has_camel := camel_attr != attr
 
@@ -179,9 +179,9 @@ pub fn (t &TypeInferenceBase) get_call_signature(name string) ?CallSignature {
 		return res
 	}
 
-	if name.contains('.') {
-		cls := name.all_before_last('.')
-		attr := name.all_after_last('.')
+	if dot_idx := name.last_index('.') {
+		cls := name[..dot_idx]
+		attr := name[dot_idx + 1..]
 		camel_attr := to_camel_case(attr)
 		has_camel := camel_attr != attr
 
@@ -252,9 +252,9 @@ fn (t &TypeInferenceBase) get_mutability_recursive(name string, mut visited map[
 		return res
 	}
 
-	if name.contains('.') {
-		cls := name.all_before_last('.')
-		meth_arg := name.all_after_last('.')
+	if dot_idx := name.last_index('.') {
+		cls := name[..dot_idx]
+		meth_arg := name[dot_idx + 1..]
 
 		// 1. Look UP (inheritance)
 		bases := t.get_class_bases(cls)
