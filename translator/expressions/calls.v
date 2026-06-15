@@ -143,11 +143,12 @@ pub fn (mut eg ExprGen) extract_func_info(node ast.Call) (string, string) {
 }
 
 pub fn (mut eg ExprGen) get_call_signature(func_name_str string, loc_key string) ?analyzer.CallSignature {
-	potential_keys := [loc_key, '${func_name_str}@${loc_key}']
-	for key in potential_keys {
-		if key in eg.analyzer.call_signatures {
-			return eg.analyzer.call_signatures[key]
-		}
+	// ⚡ Bolt: Direct map lookups avoid temporary array allocation for potential_keys.
+	if sig := eg.analyzer.call_signatures[loc_key] {
+		return sig
+	}
+	if sig := eg.analyzer.call_signatures['${func_name_str}@${loc_key}'] {
+		return sig
 	}
 
 	// Try mapping from current scope
@@ -1864,7 +1865,7 @@ pub fn (mut eg ExprGen) handle_dynamic_access(node ast.Call, func_name_str strin
 					return 'false'
 				}
 
-				if obj_type in ['int', 'f64', 'bool', 'string', '[]u8'] {
+				if obj_type == 'int' || obj_type == 'f64' || obj_type == 'bool' || obj_type == 'string' || obj_type == '[]u8' {
 					return 'false'
 				}
 
@@ -1928,7 +1929,7 @@ pub fn (mut eg ExprGen) process_factory_args(func_name string, args []string, ke
 	for key, csig in eg.analyzer.call_signatures {
 		if key.starts_with('${func_name}@') {
 			arg_names = csig.arg_names.clone()
-			if arg_names.len > 0 && arg_names[0] in ['self', 'cls'] {
+			if arg_names.len > 0 && (arg_names[0] == 'self' || arg_names[0] == 'cls') {
 				arg_names = arg_names[1..].clone()
 			}
 			break

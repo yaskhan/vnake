@@ -213,6 +213,7 @@ fn (mut l Lexer) scan_number() Token {
 			}
 		}
 	}
+	// ⚡ Bolt: Fast-path for number scanning avoids advance_char() branches.
 	for l.pos < l.source.len {
 		ch := l.source[l.pos]
 		if (ch >= `0` && ch <= `9`) || ch == `_` {
@@ -631,6 +632,7 @@ fn (mut l Lexer) next_token() Token {
 		}
 
 		// Single-char tokens
+		// ⚡ Bolt: Fast-path for single-char tokens avoids advance_char() branches.
 		match ch {
 			`(` {
 				l.grouping_level++

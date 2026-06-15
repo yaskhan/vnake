@@ -15,7 +15,7 @@ fn is_numeric_type(v_type string) bool {
 
 fn is_none_expr(node ast.Expression) bool {
 	return (node is ast.Constant && node.value == 'None')
-		|| (node is ast.Name && node.id in ['None', 'none', 'NoneType'])
+		|| (node is ast.Name && (node.id == 'None' || node.id == 'none' || node.id == 'NoneType'))
 		|| node is ast.NoneExpr
 }
 
