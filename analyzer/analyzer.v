@@ -58,9 +58,9 @@ pub fn (a Analyzer) get_type(name string) ?string {
 		return res
 	}
 
-	if name.contains('.') {
-		cls := name.all_before_last('.')
-		attr := name.all_after_last('.')
+	if dot_idx := name.last_index('.') {
+		cls := name[..dot_idx]
+		attr := name[dot_idx + 1..]
 		camel_attr := to_camel_case(attr)
 		has_camel := camel_attr != attr
 
@@ -181,9 +181,9 @@ pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
 	if sig := a.call_signatures[name] {
 		return sig
 	}
-	if name.contains('.') {
-		cls := name.all_before_last('.')
-		attr := name.all_after_last('.')
+	if dot_idx := name.last_index('.') {
+		cls := name[..dot_idx]
+		attr := name[dot_idx + 1..]
 		camel_attr := to_camel_case(attr)
 		has_camel := camel_attr != attr
 

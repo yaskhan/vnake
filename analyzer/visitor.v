@@ -12,7 +12,7 @@ pub mut:
 	guess_type_handler fn (ast.Expression, models.TypeGuessingContext) string = unsafe { nil }
 }
 
-pub fn new_type_inference_visitor_mixin() TypeInferenceVisitorMixin {
+fn new_type_inference_visitor_mixin() TypeInferenceVisitorMixin {
 	return TypeInferenceVisitorMixin{
 		TypeInferenceUtilsMixin: new_type_inference_utils_mixin()
 	}
@@ -322,13 +322,13 @@ fn (t &TypeInferenceVisitorMixin) expr_to_name_sb(node ast.Expression, mut sb st
 // expr_to_type_string converts AST node to a type string representation.
 // ⚡ Bolt: Using strings.Builder and a recursive helper avoids multiple intermediate
 // string allocations from .map().join() and interpolation.
-fn (mut t TypeInferenceVisitorMixin) expr_to_type_string(node ast.Expression) string {
+pub fn (mut t TypeInferenceVisitorMixin) expr_to_type_string(node ast.Expression) string {
 	mut sb := strings.new_builder(32)
 	t.expr_to_type_string_sb(node, mut sb)
 	return sb.str()
 }
 
-fn (mut t TypeInferenceVisitorMixin) expr_to_type_string_sb(node ast.Expression, mut sb strings.Builder) {
+pub fn (mut t TypeInferenceVisitorMixin) expr_to_type_string_sb(node ast.Expression, mut sb strings.Builder) {
 	match node {
 		ast.Name {
 			sb.write_string(node.id)
@@ -342,32 +342,26 @@ fn (mut t TypeInferenceVisitorMixin) expr_to_type_string_sb(node ast.Expression,
 			sb.write_string(node.attr)
 		}
 		ast.Subscript {
-			mut base_sb := strings.new_builder(16)
-			t.expr_to_type_string_sb(node.value, mut base_sb)
-			base_name := base_sb.str()
-
-			mut slice_sb := strings.new_builder(16)
+			t.expr_to_type_string_sb(node.value, mut sb)
+			old_len := sb.len
 			match node.slice {
 				ast.Tuple {
 					for i, elt in node.slice.elements {
-						if i > 0 {
-							slice_sb.write_string(', ')
+						if i == 0 {
+							sb.write_byte(`[`)
+						} else {
+							sb.write_string(', ')
 						}
-						t.expr_to_type_string_sb(elt, mut slice_sb)
+						t.expr_to_type_string_sb(elt, mut sb)
 					}
 				}
 				else {
-					t.expr_to_type_string_sb(node.slice, mut slice_sb)
+					sb.write_byte(`[`)
+					t.expr_to_type_string_sb(node.slice, mut sb)
 				}
 			}
-			slice_name := slice_sb.str()
-			if slice_name.len > 0 {
-				sb.write_string(base_name)
-				sb.write_byte(`[`)
-				sb.write_string(slice_name)
+			if sb.len > old_len {
 				sb.write_byte(`]`)
-			} else {
-				sb.write_string(base_name)
 			}
 		}
 		ast.Tuple {
@@ -641,7 +635,7 @@ fn (t &TypeInferenceVisitorMixin) render_expr_sb(node ast.Expression, mut sb str
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_stmt(node ast.Statement) {
+fn (mut t TypeInferenceVisitorMixin) visit_stmt(node ast.Statement) {
 	match node {
 		ast.Expr { t.visit_expr_stmt(node) }
 		ast.Assign { t.visit_assign(node) }
@@ -672,7 +666,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_stmt(node ast.Statement) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_expr(node ast.Expression) {
+fn (mut t TypeInferenceVisitorMixin) visit_expr(node ast.Expression) {
 	match node {
 		ast.Name { t.visit_name(node) }
 		ast.Constant { t.visit_constant(node) }
@@ -705,7 +699,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_expr(node ast.Expression) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_module(node ast.Module) {
+fn (mut t TypeInferenceVisitorMixin) visit_module(node ast.Module) {
 	for stmt in node.body {
 		t.visit_stmt(stmt)
 	}
@@ -717,49 +711,49 @@ fn (mut t TypeInferenceVisitorMixin) visit_stmt_list(stmts []ast.Statement) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_expr_stmt(node ast.Expr) {
+fn (mut t TypeInferenceVisitorMixin) visit_expr_stmt(node ast.Expr) {
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_import(node ast.Import) {}
+fn (mut t TypeInferenceVisitorMixin) visit_import(node ast.Import) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_import_from(node ast.ImportFrom) {}
+fn (mut t TypeInferenceVisitorMixin) visit_import_from(node ast.ImportFrom) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_global(node ast.Global) {}
+fn (mut t TypeInferenceVisitorMixin) visit_global(node ast.Global) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_nonlocal(node ast.Nonlocal) {}
+fn (mut t TypeInferenceVisitorMixin) visit_nonlocal(node ast.Nonlocal) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_pass(node ast.Pass) {}
+fn (mut t TypeInferenceVisitorMixin) visit_pass(node ast.Pass) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_break(node ast.Break) {}
+fn (mut t TypeInferenceVisitorMixin) visit_break(node ast.Break) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_continue(node ast.Continue) {}
+fn (mut t TypeInferenceVisitorMixin) visit_continue(node ast.Continue) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_name(node ast.Name) {}
+fn (mut t TypeInferenceVisitorMixin) visit_name(node ast.Name) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_constant(node ast.Constant) {}
+fn (mut t TypeInferenceVisitorMixin) visit_constant(node ast.Constant) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_none_expr(node ast.NoneExpr) {}
+fn (mut t TypeInferenceVisitorMixin) visit_none_expr(node ast.NoneExpr) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_list(node ast.List) {
+fn (mut t TypeInferenceVisitorMixin) visit_list(node ast.List) {
 	for elt in node.elements {
 		t.visit_expr(elt)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_tuple(node ast.Tuple) {
+fn (mut t TypeInferenceVisitorMixin) visit_tuple(node ast.Tuple) {
 	for elt in node.elements {
 		t.visit_expr(elt)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_set(node ast.Set) {
+fn (mut t TypeInferenceVisitorMixin) visit_set(node ast.Set) {
 	for elt in node.elements {
 		t.visit_expr(elt)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_dict(node ast.Dict) {
+fn (mut t TypeInferenceVisitorMixin) visit_dict(node ast.Dict) {
 	for key in node.keys {
 		if key !is ast.NoneExpr {
 			t.visit_expr(key)
@@ -770,27 +764,27 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_dict(node ast.Dict) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_binary_op(node ast.BinaryOp) {
+fn (mut t TypeInferenceVisitorMixin) visit_binary_op(node ast.BinaryOp) {
 	t.visit_expr(node.left)
 	t.visit_expr(node.right)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_unary_op(node ast.UnaryOp) {
+fn (mut t TypeInferenceVisitorMixin) visit_unary_op(node ast.UnaryOp) {
 	t.visit_expr(node.operand)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_compare(node ast.Compare) {
+fn (mut t TypeInferenceVisitorMixin) visit_compare(node ast.Compare) {
 	t.visit_expr(node.left)
 	for comp in node.comparators {
 		t.visit_expr(comp)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_attribute(node ast.Attribute) {
+fn (mut t TypeInferenceVisitorMixin) visit_attribute(node ast.Attribute) {
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
+fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 	if node.ctx == .store {
 		t.mark_mutated_expr(node.value)
 	}
@@ -827,7 +821,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_subscript(node ast.Subscript) {
 	t.visit_expr(node.slice)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_slice(node ast.Slice) {
+fn (mut t TypeInferenceVisitorMixin) visit_slice(node ast.Slice) {
 	if lower := node.lower {
 		t.visit_expr(lower)
 	}
@@ -839,7 +833,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_slice(node ast.Slice) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_lambda(node ast.Lambda) {
+fn (mut t TypeInferenceVisitorMixin) visit_lambda(node ast.Lambda) {
 	for param in node.args.posonlyargs {
 		if annotation := param.annotation {
 			t.visit_expr(annotation)
@@ -877,7 +871,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_lambda(node ast.Lambda) {
 	t.visit_expr(node.body)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_list_comp(node ast.ListComp) {
+fn (mut t TypeInferenceVisitorMixin) visit_list_comp(node ast.ListComp) {
 	for gen in node.generators {
 		t.visit_expr(gen.target)
 		t.visit_expr(gen.iter)
@@ -888,7 +882,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_list_comp(node ast.ListComp) {
 	t.visit_expr(node.elt)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_dict_comp(node ast.DictComp) {
+fn (mut t TypeInferenceVisitorMixin) visit_dict_comp(node ast.DictComp) {
 	for gen in node.generators {
 		t.visit_expr(gen.target)
 		t.visit_expr(gen.iter)
@@ -900,7 +894,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_dict_comp(node ast.DictComp) {
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_set_comp(node ast.SetComp) {
+fn (mut t TypeInferenceVisitorMixin) visit_set_comp(node ast.SetComp) {
 	for gen in node.generators {
 		t.visit_expr(gen.target)
 		t.visit_expr(gen.iter)
@@ -911,7 +905,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_set_comp(node ast.SetComp) {
 	t.visit_expr(node.elt)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_generator(node ast.GeneratorExp) {
+fn (mut t TypeInferenceVisitorMixin) visit_generator(node ast.GeneratorExp) {
 	for gen in node.generators {
 		t.visit_expr(gen.target)
 		t.visit_expr(gen.iter)
@@ -922,62 +916,62 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_generator(node ast.GeneratorExp) 
 	t.visit_expr(node.elt)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_if_exp(node ast.IfExp) {
+fn (mut t TypeInferenceVisitorMixin) visit_if_exp(node ast.IfExp) {
 	t.visit_expr(node.test)
 	t.visit_expr(node.body)
 	t.visit_expr(node.orelse)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_await(node ast.Await) {
+fn (mut t TypeInferenceVisitorMixin) visit_await(node ast.Await) {
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_yield(node ast.Yield) {
+fn (mut t TypeInferenceVisitorMixin) visit_yield(node ast.Yield) {
 	if value := node.value {
 		t.visit_expr(value)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_yield_from(node ast.YieldFrom) {
+fn (mut t TypeInferenceVisitorMixin) visit_yield_from(node ast.YieldFrom) {
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_starred(node ast.Starred) {
+fn (mut t TypeInferenceVisitorMixin) visit_starred(node ast.Starred) {
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_joined_str(node ast.JoinedStr) {
+fn (mut t TypeInferenceVisitorMixin) visit_joined_str(node ast.JoinedStr) {
 	for value in node.values {
 		t.visit_expr(value)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_formatted_value(node ast.FormattedValue) {
+fn (mut t TypeInferenceVisitorMixin) visit_formatted_value(node ast.FormattedValue) {
 	t.visit_expr(node.value)
 	if format_spec := node.format_spec {
 		t.visit_expr(format_spec)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_named_expr(node ast.NamedExpr) {
+fn (mut t TypeInferenceVisitorMixin) visit_named_expr(node ast.NamedExpr) {
 	t.visit_expr(node.target)
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_return(node ast.Return) {
+fn (mut t TypeInferenceVisitorMixin) visit_return(node ast.Return) {
 	if value := node.value {
 		t.visit_expr(value)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_assert(node ast.Assert) {
+fn (mut t TypeInferenceVisitorMixin) visit_assert(node ast.Assert) {
 	t.visit_expr(node.test)
 	if msg := node.msg {
 		t.visit_expr(msg)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_raise(node ast.Raise) {
+fn (mut t TypeInferenceVisitorMixin) visit_raise(node ast.Raise) {
 	if exc := node.exc {
 		t.visit_expr(exc)
 	}
@@ -986,7 +980,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_raise(node ast.Raise) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_delete(node ast.Delete) {
+fn (mut t TypeInferenceVisitorMixin) visit_delete(node ast.Delete) {
 	for target in node.targets {
 		if target is ast.Subscript {
 			t.mark_mutated_expr(t.get_base_node(target))
@@ -995,19 +989,19 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_delete(node ast.Delete) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_if(node ast.If) {
+fn (mut t TypeInferenceVisitorMixin) visit_if(node ast.If) {
 	t.visit_expr(node.test)
 	t.visit_stmt_list(node.body)
 	t.visit_stmt_list(node.orelse)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_while(node ast.While) {
+fn (mut t TypeInferenceVisitorMixin) visit_while(node ast.While) {
 	t.visit_expr(node.test)
 	t.visit_stmt_list(node.body)
 	t.visit_stmt_list(node.orelse)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_for(node ast.For) {
+fn (mut t TypeInferenceVisitorMixin) visit_for(node ast.For) {
 	if node.target is ast.Name {
 		mut literals := []string{}
 		mut all_constants := true
@@ -1042,7 +1036,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_for(node ast.For) {
 	t.visit_stmt_list(node.orelse)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_with(node ast.With) {
+fn (mut t TypeInferenceVisitorMixin) visit_with(node ast.With) {
 	for item in node.items {
 		t.visit_expr(item.context_expr)
 		if optional_vars := item.optional_vars {
@@ -1052,7 +1046,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_with(node ast.With) {
 	t.visit_stmt_list(node.body)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_try(node ast.Try) {
+fn (mut t TypeInferenceVisitorMixin) visit_try(node ast.Try) {
 	t.visit_stmt_list(node.body)
 	for handler in node.handlers {
 		if typ := handler.typ {
@@ -1064,7 +1058,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_try(node ast.Try) {
 	t.visit_stmt_list(node.finalbody)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_try_star(node ast.TryStar) {
+fn (mut t TypeInferenceVisitorMixin) visit_try_star(node ast.TryStar) {
 	t.visit_stmt_list(node.body)
 	for handler in node.handlers {
 		if typ := handler.typ {
@@ -1076,7 +1070,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_try_star(node ast.TryStar) {
 	t.visit_stmt_list(node.finalbody)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match(node ast.Match) {
+fn (mut t TypeInferenceVisitorMixin) visit_match(node ast.Match) {
 	t.visit_expr(node.subject)
 	for case in node.cases {
 		t.visit_pattern(case.pattern)
@@ -1175,7 +1169,7 @@ fn (mut t TypeInferenceVisitorMixin) collect_return_types(stmts []ast.Statement,
 	return has_return_value
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef) {
+fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef) {
 	t.store_type(node.name, 'fn (...Any) Any')
 
 	// ⚡ Bolt: Pre-allocating combined_args array avoids reallocations.
@@ -1358,7 +1352,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_function_def(node ast.FunctionDef
 	t.pop_scope()
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_class_def(node ast.ClassDef) {
+fn (mut t TypeInferenceVisitorMixin) visit_class_def(node ast.ClassDef) {
 	mut bases := []string{}
 	for base in node.bases {
 		base_name := t.expr_to_type_string(base)
@@ -1400,7 +1394,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_class_def(node ast.ClassDef) {
 	t.pop_scope()
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
+fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 	if node.targets.len > 0 && node.targets[0] is ast.Name && node.value is ast.Call {
 		target := node.targets[0] as ast.Name
 		call := node.value as ast.Call
@@ -1580,7 +1574,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_assign(node ast.Assign) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_aug_assign(node ast.AugAssign) {
+fn (mut t TypeInferenceVisitorMixin) visit_aug_assign(node ast.AugAssign) {
 	t.mark_reassigned_expr(node.target)
 	if node.target is ast.Attribute {
 		if node.target.value is ast.Name && node.target.value.id == 'self' {
@@ -1596,7 +1590,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_aug_assign(node ast.AugAssign) {
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
+fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 	annotation_str := t.expr_to_type_string(node.annotation)
 	mut v_type := map_python_type_to_v(annotation_str)
 	if annotation_str == 'LiteralString' || annotation_str == 'typing.LiteralString'
@@ -1679,7 +1673,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_ann_assign(node ast.AnnAssign) {
 	t.visit_expr(node.annotation)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_type_alias(node ast.TypeAlias) {
+fn (mut t TypeInferenceVisitorMixin) visit_type_alias(node ast.TypeAlias) {
 	alias_type := t.expr_to_type_string(node.value)
 	if alias_type.len > 0 {
 		t.store_type(node.name, map_python_type_to_v(alias_type))
@@ -1690,7 +1684,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_type_alias(node ast.TypeAlias) {
 	t.visit_expr(node.value)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_type_param(node ast.TypeParam) {
+fn (mut t TypeInferenceVisitorMixin) visit_type_param(node ast.TypeParam) {
 	if bound := node.bound {
 		t.visit_expr(bound)
 	}
@@ -1699,7 +1693,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_type_param(node ast.TypeParam) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
+fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 	if node.func is ast.Attribute {
 		attr := node.func
 		if is_mutating_method(attr.attr) {
@@ -1773,17 +1767,17 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_call(node ast.Call) {
 	t.visit_expr(node.func)
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match_value(node ast.MatchValue) {}
+fn (mut t TypeInferenceVisitorMixin) visit_match_value(node ast.MatchValue) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match_singleton(node ast.MatchSingleton) {}
+fn (mut t TypeInferenceVisitorMixin) visit_match_singleton(node ast.MatchSingleton) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match_sequence(node ast.MatchSequence) {
+fn (mut t TypeInferenceVisitorMixin) visit_match_sequence(node ast.MatchSequence) {
 	for pattern in node.patterns {
 		t.visit_pattern(pattern)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match_mapping(node ast.MatchMapping) {
+fn (mut t TypeInferenceVisitorMixin) visit_match_mapping(node ast.MatchMapping) {
 	for key in node.keys {
 		t.visit_expr(key)
 	}
@@ -1792,7 +1786,7 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_match_mapping(node ast.MatchMappi
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match_class(node ast.MatchClass) {
+fn (mut t TypeInferenceVisitorMixin) visit_match_class(node ast.MatchClass) {
 	t.visit_expr(node.cls)
 	for pattern in node.patterns {
 		t.visit_pattern(pattern)
@@ -1802,15 +1796,15 @@ pub fn (mut t TypeInferenceVisitorMixin) visit_match_class(node ast.MatchClass) 
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match_star(node ast.MatchStar) {}
+fn (mut t TypeInferenceVisitorMixin) visit_match_star(node ast.MatchStar) {}
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match_as(node ast.MatchAs) {
+fn (mut t TypeInferenceVisitorMixin) visit_match_as(node ast.MatchAs) {
 	if pattern := node.pattern {
 		t.visit_pattern(pattern)
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) visit_match_or(node ast.MatchOr) {
+fn (mut t TypeInferenceVisitorMixin) visit_match_or(node ast.MatchOr) {
 	for pattern in node.patterns {
 		t.visit_pattern(pattern)
 	}
@@ -1830,7 +1824,7 @@ fn (mut t TypeInferenceVisitorMixin) visit_pattern(node ast.Pattern) {
 	}
 }
 
-pub fn (mut t TypeInferenceVisitorMixin) register_lambda_signature(name string, lambda_node ast.Lambda) {
+fn (mut t TypeInferenceVisitorMixin) register_lambda_signature(name string, lambda_node ast.Lambda) {
 	mut args := []string{}
 	mut arg_names := []string{}
 	mut defaults := map[string]string{}
