@@ -375,7 +375,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 		is_capital_rhs := rhs_id.len > 0 && rhs_id[0].is_capital()
 		is_capital_target := id.len > 0 && id[0].is_capital()
 		if (is_capital_rhs && is_capital_target) || rhs_id in t.state.defined_classes
-			|| rhs_id in ['int', 'float', 'str', 'bool', 'Any', 'object', 'dict', 'list', 'set', 'tuple', 'List', 'Dict', 'Set', 'Tuple'] {
+			|| is_basic_type_name(rhs_id) {
 			mut v_type := if res := t.analyzer.get_type(id) {
 				res
 			} else {
@@ -1076,9 +1076,9 @@ fn (mut t Translator) visit_aug_assign(node ast.AugAssign) {
 		t.state.used_builtins['math.pow'] = true
 		target_type := t.guess_type(node.target)
 		value_type := t.guess_type(node.value)
-		rhs := if target_type in ['int', 'i64'] && value_type in ['int', 'i64'] {
+		rhs := if (target_type == 'int' || target_type == 'i64') && (value_type == 'int' || value_type == 'i64') {
 			'int(math.powi(f64(${target_expr}), ${value_expr}))'
-		} else if target_type in ['f64', 'float'] {
+		} else if is_float_type(target_type) {
 			'math.pow(f64(${target_expr}), f64(${value_expr}))'
 		} else {
 			'int(math.pow(f64(${target_expr}), f64(${value_expr})))'
@@ -1088,13 +1088,13 @@ fn (mut t Translator) visit_aug_assign(node ast.AugAssign) {
 		return
 	}
 
-	if node.op.value in ['//', '//='] {
+	if node.op.value == '//' || node.op.value == '//=' {
 		t.state.used_builtins['math.floor'] = true
 		target_type := t.guess_type(node.target)
-		rhs := if target_type in ['f64', 'float'] {
+		rhs := if is_float_type(target_type) {
 			'math.floor(${target_expr} / ${value_expr})'
 		} else {
-			out_type := if target_type in ['i64', 'u64', 'f64'] { target_type } else { 'int' }
+			out_type := if target_type == 'i64' || target_type == 'u64' || target_type == 'f64' { target_type } else { 'int' }
 			'${out_type}(math.floor(f64(${target_expr}) / f64(${value_expr})))'
 		}
 		t.emit_indented('${target_expr} = ${rhs}')
@@ -1119,6 +1119,30 @@ fn (mut t Translator) visit_delete_stmt(node ast.Delete) {
 			t.emit_indented('//##LLM@@ \'del ${t.visit_expr(target)}\' statement ignored')
 		}
 	}
+}
+
+// ⚡ Bolt: Using match expressions for hot-path type name checks in V 0.5.1
+// avoids repeated array literal allocations.
+
+@[inline]
+fn is_basic_type_name(name string) bool {
+	if name.len < 3 || name.len > 6 {
+		return false
+	}
+	return match name {
+		'int', 'float', 'str', 'bool', 'Any', 'object', 'dict', 'list', 'set', 'tuple', 'List',
+		'Dict', 'Set', 'Tuple' {
+			true
+		}
+		else {
+			false
+		}
+	}
+}
+
+@[inline]
+fn is_float_type(t string) bool {
+	return t == 'f64' || t == 'float'
 }
 
 fn (mut t Translator) visit_assert(node ast.Assert) {

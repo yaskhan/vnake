@@ -808,8 +808,7 @@ fn (mut p Parser) parse_try() ?Statement {
 fn (mut p Parser) is_match_stmt() bool {
 	// Simple heuristic for soft keyword 'match':
 	// If it's followed by an assignment operator, it's an identifier.
-	if p.peek_tok.typ == .operator
-		&& p.peek_tok.value in ['=', '+=', '-=', '*=', '/=', '//=', '%=', '**=', '&=', '|=', '^=', '>>=', '<<=', '@='] {
+	if p.peek_tok.typ == .operator && (p.peek_tok.value == '=' || is_aug_assign_op(p.peek_tok.value)) {
 		return false
 	}
 	// Also if it's 'match' followed by ':' immediately? No, match subject:
@@ -1095,22 +1094,7 @@ fn (mut p Parser) parse_expression_stmt() ?Statement {
 
 	// Augmented assignment: x += 1
 	if p.current_is(.operator) {
-		aug_ops := [
-			'+=',
-			'-=',
-			'*=',
-			'/=',
-			'//=',
-			'%=',
-			'**=',
-			'&=',
-			'|=',
-			'^=',
-			'>>=',
-			'<<=',
-			'@=',
-		]
-		if p.current_token.value in aug_ops {
+		if is_aug_assign_op(p.current_token.value) {
 			op := p.current_token
 			p.advance()
 			val := p.parse_expression_list(true, true) or { return none }
@@ -1291,7 +1275,7 @@ fn (mut p Parser) parse_binary_expr(precedence int, allow_in bool, allow_ternary
 		p.advance()
 
 		// Comparisons: a == b == c, a is not b, a not in b
-		if op.value in ['==', '!=', '<', '>', '<=', '>=', 'in', 'is', 'not'] {
+		if is_compare_op(op.value) {
 			// Handle 'is not' and 'not in'
 			if op.value == 'is' && p.current_is_keyword('not') {
 				p.advance()
@@ -1324,7 +1308,7 @@ fn (mut p Parser) parse_binary_expr(precedence int, allow_in bool, allow_ternary
 
 			for {
 				mut next_op := p.current_token
-				if next_op.value in ['==', '!=', '<', '>', '<=', '>=', 'in', 'is', 'not'] {
+				if is_compare_op(next_op.value) {
 					p.advance()
 					if next_op.value == 'is' && p.current_is_keyword('not') {
 						p.advance()
@@ -1368,7 +1352,7 @@ fn (mut p Parser) parse_binary_expr(precedence int, allow_in bool, allow_ternary
 		}
 
 		op_tok := op
-		if op_tok.value in ['and', 'or'] {
+		if is_bool_op(op_tok.value) {
 			right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or { break }
 			mut values := [left]
 			values << right
@@ -1379,7 +1363,7 @@ fn (mut p Parser) parse_binary_expr(precedence int, allow_in bool, allow_ternary
 					break
 				}
 				mut next_op := p.current_token
-				if next_op.value in ['and', 'or'] {
+				if is_bool_op(next_op.value) {
 					p.advance()
 					next_right := p.parse_binary_expr(next_prec, allow_in, allow_ternary) or {
 						break
@@ -1751,7 +1735,7 @@ fn (mut p Parser) parse_primary_expr(allow_in bool, allow_ternary bool) ?Express
 				}
 			}
 		}
-		p.current_is(.keyword) && tok.value in ['True', 'False', 'None'] {
+		p.current_is(.keyword) && is_singleton(tok.value) {
 			p.advance()
 			return Constant{
 				token: tok
@@ -2323,7 +2307,7 @@ fn (mut p Parser) parse_pattern_atom() Pattern {
 	}
 
 	// Singleton None/True/False
-	if p.current_is(.keyword) && tok.value in ['None', 'True', 'False'] {
+	if p.current_is(.keyword) && is_singleton(tok.value) {
 		vtok := tok
 		p.advance()
 		return MatchSingleton{
@@ -2438,4 +2422,44 @@ fn (mut p Parser) parse_pattern_atom() Pattern {
 		pattern: none
 		name:    none
 	}
+}
+
+// ⚡ Bolt: Using match expressions with byte-level dispatch is faster than array literals
+// in V 0.5.1 hot paths.
+
+@[inline]
+fn is_aug_assign_op(op string) bool {
+	if op.len < 2 || op.len > 3 {
+		return false
+	}
+	return match op {
+		'+=', '-=', '*=', '/=', '//=', '%=', '**=', '&=', '|=', '^=', '>>=', '<<=', '@=' { true }
+		else { false }
+	}
+}
+
+@[inline]
+fn is_compare_op(op string) bool {
+	if op.len < 1 || op.len > 2 {
+		return op == 'not'
+	}
+	// Byte-level dispatch for hot comparison operators
+	match op[0] {
+		`=` { return op == '==' }
+		`!` { return op == '!=' }
+		`<` { return op == '<' || op == '<=' }
+		`>` { return op == '>' || op == '>=' }
+		`i` { return op == 'in' || op == 'is' }
+		else { return false }
+	}
+}
+
+@[inline]
+fn is_bool_op(op string) bool {
+	return op == 'and' || op == 'or'
+}
+
+@[inline]
+fn is_singleton(s string) bool {
+	return s == 'True' || s == 'False' || s == 'None'
 }
