@@ -329,7 +329,7 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 			l.advance_char()
 		}
 		prefix_value := prefix
-		q_str := quote.ascii_str()
+		q_str := if quote == `"` { '"' } else { "'" }
 		return Token{
 			typ:      typ
 			value:    '${prefix_value}${q_str}${q_str}${q_str}${value}${q_str}${q_str}${q_str}'
@@ -360,7 +360,7 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 		l.advance_char() // closing quote
 	}
 	prefix_value := prefix
-	q_str := quote.ascii_str()
+	q_str := if quote == `"` { '"' } else { "'" }
 	return Token{
 		typ:      typ
 		value:    '${prefix_value}${q_str}${value}${q_str}'
@@ -372,8 +372,8 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 
 fn (mut l Lexer) scan_operator() Token {
 	// ⚡ Bolt: Byte-level dispatch using match expression avoids array allocations and linear search.
-	// Measured ~90% speedup for this function in micro-benchmarks.
-	// Using l.advance_char() to maintain lexer state correctly (line/column tracking).
+	// ⚡ Bolt: Using string literals and manual increments instead of ascii_str() and advance_char()
+	// avoids redundant heap allocations and line/column branching.
 	start_col := l.column
 	ch := l.peek_char()
 
@@ -383,41 +383,36 @@ fn (mut l Lexer) scan_operator() Token {
 		match ch {
 			`*` {
 				if ch2 == `*` && ch3 == `=` {
-					l.advance_char()
-					l.advance_char()
-					l.advance_char()
+					l.pos += 3
+					l.column += 3
 					return l.make_token(.operator, '**=')
 				}
 			}
 			`/` {
 				if ch2 == `/` && ch3 == `=` {
-					l.advance_char()
-					l.advance_char()
-					l.advance_char()
+					l.pos += 3
+					l.column += 3
 					return l.make_token(.operator, '//=')
 				}
 			}
 			`>` {
 				if ch2 == `>` && ch3 == `=` {
-					l.advance_char()
-					l.advance_char()
-					l.advance_char()
+					l.pos += 3
+					l.column += 3
 					return l.make_token(.operator, '>>=')
 				}
 			}
 			`<` {
 				if ch2 == `<` && ch3 == `=` {
-					l.advance_char()
-					l.advance_char()
-					l.advance_char()
+					l.pos += 3
+					l.column += 3
 					return l.make_token(.operator, '<<=')
 				}
 			}
 			`.` {
 				if ch2 == `.` && ch3 == `.` {
-					l.advance_char()
-					l.advance_char()
-					l.advance_char()
+					l.pos += 3
+					l.column += 3
 					return l.make_token(.ellipsis, '...')
 				}
 			}
@@ -430,90 +425,97 @@ fn (mut l Lexer) scan_operator() Token {
 		match ch {
 			`*` {
 				if ch2 == `*` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '**')
 				}
 				if ch2 == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '*=')
 				}
 			}
 			`/` {
 				if ch2 == `/` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '//')
 				}
 				if ch2 == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '/=')
 				}
 			}
 			`>` {
 				if ch2 == `>` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '>>')
 				}
 				if ch2 == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '>=')
 				}
 			}
 			`<` {
 				if ch2 == `<` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '<<')
 				}
 				if ch2 == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '<=')
 				}
 			}
 			`-` {
 				if ch2 == `>` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.arrow, '->')
 				}
 				if ch2 == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '-=')
 				}
 			}
 			`:` {
 				if ch2 == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.walrus, ':=')
 				}
 			}
 			`!` {
 				if ch2 == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '!=')
 				}
 			}
 			`=` {
 				if ch2 == `=` {
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
 					return l.make_token(.operator, '==')
 				}
 			}
 			`+`, `%`, `&`, `|`, `^`, `@` {
 				if ch2 == `=` {
-					val := ch.ascii_str() + '='
-					l.advance_char()
-					l.advance_char()
+					l.pos += 2
+					l.column += 2
+					val := match ch {
+						`+` { '+=' }
+						`%` { '%=' }
+						`&` { '&=' }
+						`|` { '|=' }
+						`^` { '^=' }
+						else { '@=' }
+					}
 					return l.make_token(.operator, val)
 				}
 			}
@@ -521,14 +523,44 @@ fn (mut l Lexer) scan_operator() Token {
 		}
 	}
 
-	l.advance_char()
+	l.pos++
+	l.column++
 	mut res_typ := TokenType.operator
-	if ch == `@` {
-		res_typ = .at
+	mut val := ''
+	match ch {
+		`+` { val = '+' }
+		`-` { val = '-' }
+		`*` { val = '*' }
+		`/` { val = '/' }
+		`%` { val = '%' }
+		`&` { val = '&' }
+		`|` { val = '|' }
+		`^` { val = '^' }
+		`~` { val = '~' }
+		`<` { val = '<' }
+		`>` { val = '>' }
+		`=` { val = '=' }
+		`@` {
+			res_typ = .at
+			val = '@'
+		}
+		`(` { val = '(' }
+		`)` { val = ')' }
+		`[` { val = '[' }
+		`]` { val = ']' }
+		`{` { val = '{' }
+		`}` { val = '}' }
+		`:` { val = ':' }
+		`,` { val = ',' }
+		`.` { val = '.' }
+		`;` { val = ';' }
+		else {
+			val = ch.ascii_str()
+		}
 	}
 	return Token{
 		typ:      res_typ
-		value:    ch.ascii_str()
+		value:    val
 		line:     l.line
 		column:   start_col
 		filename: l.filename
@@ -598,7 +630,13 @@ fn (mut l Lexer) next_token() Token {
 			&& l.pos + 1 < l.source.len {
 			next := l.source[l.pos + 1]
 			if next == `'` || next == `"` {
-				p := ch.ascii_str()
+				p := match ch {
+					`r` { 'r' }
+					`b` { 'b' }
+					`f` { 'f' }
+					`u` { 'u' }
+					else { 't' }
+				}
 				l.pos++
 				l.column++
 				return l.scan_string(p)
