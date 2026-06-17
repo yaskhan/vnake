@@ -53,3 +53,6 @@
 ## 2025-05-25 - [Single-pass string escaping with strings.Builder]
 **Learning:** Sequential `.replace()` calls in V 0.5.1 are inefficient for multiple escapes as each call performs a full string scan and a heap allocation. A fast-path check for characters needing escaping followed by a single-pass `strings.Builder` transformation reduces complexity from $O(N \cdot K)$ to $O(N)$ and eliminates intermediate allocations. Measured ~1.84x speedup for typical string literals.
 **Action:** Replace multiple sequential `.replace()` calls with a fast-path scan and a single-pass `strings.Builder` loop in high-traffic string processing code.
+## 2025-01-24 - Optimized Lexer Operator and String Scanning
+**Learning:** In V 0.5.1, `u8.ascii_str()` allocates a new string on the heap. Replacing it with string literals in the lexer's hot path significantly reduces memory churn. Additionally, manual `l.pos++` and `l.column++` increments for known non-newline characters avoid the branching overhead of `l.advance_char()`.
+**Action:** Always prefer string literals or `match` expressions returning literals over `ascii_str()` for known characters in hot paths. Use manual position tracking for non-newline ASCII sequences to bypass `advance_char()` branches.
