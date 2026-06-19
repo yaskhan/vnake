@@ -90,9 +90,9 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		ot := guess_type(node.orelse, ctx, use_location)
 		return if bt == ot {
 			bt
-		} else if bt.starts_with('?') && bt.trim_left('?') == ot {
+		} else if is_v_optional_type(bt) && bt.trim_left('?') == ot {
 			bt
-		} else if ot.starts_with('?') && ot.trim_left('?') == bt {
+		} else if is_v_optional_type(ot) && ot.trim_left('?') == bt {
 			ot
 		} else {
 			'Any'
@@ -196,7 +196,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 			'set', 'frozenset' {
 				if node.args.len > 0 {
 					arg_type := guess_type(node.args[0], ctx, true)
-					if arg_type.starts_with('[]') {
+					if is_v_array_type(arg_type) {
 						return 'datatypes.Set[${arg_type[2..]}]'
 					}
 				}
@@ -316,7 +316,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 
 			if attr_name in ctx.type_map {
 				res := ctx.type_map[attr_name]
-				if res.starts_with('fn (') {
+				if is_v_function_type(res) && res.contains(' (') {
 					return res.all_after_last(') ').trim_space()
 				}
 			}
@@ -603,10 +603,10 @@ fn guess_type_subscript(node ast.Subscript, ctx TypeGuessingContext, use_locatio
 		}
 	}
 	val_type := guess_type(node.value, ctx, true)
-	if val_type.starts_with('[]') {
+	if is_v_array_type(val_type) {
 		return val_type[2..]
 	}
-	if val_type.starts_with('map[') && val_type.contains(']') {
+	if is_v_map_type(val_type) && val_type.contains(']') {
 		return val_type.all_after(']')
 	}
 	if node.value is ast.Attribute {
@@ -642,10 +642,10 @@ fn guess_type_binop(node ast.BinaryOp, ctx TypeGuessingContext) string {
 		}
 		return 'f64'
 	}
-	if left.starts_with('[]') {
+	if is_v_array_type(left) {
 		return left
 	}
-	if right.starts_with('[]') {
+	if is_v_array_type(right) {
 		return right
 	}
 	if left == 'LiteralString' && right == 'LiteralString' {

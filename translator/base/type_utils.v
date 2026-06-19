@@ -60,6 +60,30 @@ pub fn is_reserved_python_type(v_type string) bool {
 	}
 }
 
+pub fn is_v_optional_type(v_type string) bool {
+	return v_type.len > 0 && v_type[0] == `?`
+}
+
+pub fn is_v_array_type(v_type string) bool {
+	return v_type.len >= 2 && v_type[0] == `[` && v_type[1] == `]`
+}
+
+pub fn is_v_optional_array_type(v_type string) bool {
+	return v_type.len >= 3 && v_type[0] == `?` && v_type[1] == `[` && v_type[2] == `]`
+}
+
+pub fn is_v_map_type(v_type string) bool {
+	return v_type.len >= 4 && v_type[0] == `m` && v_type[1] == `a` && v_type[2] == `p` && v_type[3] == `[`
+}
+
+pub fn is_v_array_optional_type(v_type string) bool {
+	return v_type.len >= 3 && v_type[0] == `[` && v_type[1] == `]` && v_type[2] == `?`
+}
+
+pub fn is_v_function_type(v_type string) bool {
+	return v_type.len >= 2 && v_type[0] == `f` && v_type[1] == `n`
+}
+
 // fast_trim_space avoids heap allocation in V 0.5.1 if no characters need trimming.
 // ⚡ Bolt: Measured ~5.1x speedup on untrimmed strings (1239ms -> 243ms for 10M calls).
 pub fn fast_trim_space(s string) string {
@@ -100,7 +124,7 @@ pub fn is_clonable_collection(v_type string) bool {
 }
 
 pub fn is_tuple_struct(v_type string) bool {
-	return v_type.starts_with('TupleStruct_')
+	return v_type.len >= 12 && v_type[0] == `T` && v_type[1] == `u` && v_type[2] == `p` && v_type[3] == `l` && v_type[4] == `e` && v_type[5] == `S` && v_type[6] == `t` && v_type[7] == `r` && v_type[8] == `u` && v_type[9] == `c` && v_type[10] == `t` && v_type[11] == `_`
 }
 
 pub fn is_string_type(v_type string) bool {
@@ -124,7 +148,7 @@ pub fn wrap_bool(node ast.Expression, expr string, v_type string, invert bool) s
 		}
 	}
 
-	if v_type.starts_with('?') {
+	if is_v_optional_type(v_type) {
 		inner := v_type[1..]
 		// In V 0.5, we must unwrap for the inner condition if it's not a simple != none check.
 		// We use (expr or { default }) to safely unwrap within the condition.
@@ -182,7 +206,7 @@ fn bool_condition(expr string, v_type string, invert bool) string {
 // This is used for `or`/`and` Expressions to correctly handle None values.
 pub fn build_truthiness_check(expr string, v_type string) string {
 	// Optional types: must check != none first, then check inner value
-	if v_type.starts_with('?') {
+	if is_v_optional_type(v_type) {
 		inner := v_type[1..]
 		inner_check := truthiness_condition(expr, inner)
 		if inner_check.len > 0 {
@@ -201,7 +225,7 @@ pub fn build_truthiness_check(expr string, v_type string) string {
 
 // truthiness_condition returns the condition that checks if a value is truthy for non-optional types.
 fn truthiness_condition(expr string, v_type string) string {
-	if v_type.starts_with('&') {
+	if v_type.len > 0 && v_type[0] == `&` {
 		return ''
 	}
 	if is_collection_type(v_type) {
@@ -303,7 +327,7 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 	}
 
 	if !opts.allow_union && v_type.contains(' | ') {
-		is_opt := v_type.starts_with('?')
+		is_opt := is_v_optional_type(v_type)
 		inner := if is_opt { v_type[1..] } else { v_type }
 		st_name := get_sum_type_name(inner)
 		registrar(st_name, inner)
@@ -324,7 +348,7 @@ pub fn get_v_default_value(v_type string, active_v_generics []string) string {
 			return 'none'
 		}
 		`[` , `m` {
-			if v_type.starts_with('[]') || v_type.starts_with('map[') {
+			if is_v_array_type(v_type) || is_v_map_type(v_type) {
 				return '${v_type}{}'
 			}
 		}

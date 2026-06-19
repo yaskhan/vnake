@@ -49,7 +49,7 @@ pub fn (eg &ExprGen) guess_type_no_loc(node ast.Expression) string {
 pub fn (mut eg ExprGen) wrap_bool(node ast.Expression, invert bool) string {
 	v_type := eg.guess_type(node)
 	expr := eg.visit(node)
-	if v_type == 'Any' || v_type.starts_with('?') {
+	if v_type == 'Any' || base.is_v_optional_type(v_type) {
 		eg.state.used_builtins['py_bool'] = true
 	}
 	return base.wrap_bool(node, expr, v_type, invert)
@@ -187,13 +187,13 @@ pub fn (mut eg ExprGen) visit_name(node ast.Name) string {
 	sanitized := base.sanitize_name(name, false, map[string]bool{}, '', map[string]bool{})
 
 	v_type := eg.guess_type(node)
-	if v_type.starts_with('?') && !eg.state.in_assignment_lhs {
+	if base.is_v_optional_type(v_type) && !eg.state.in_assignment_lhs {
 		// If explicitly narrowed in this scope, or it's a _mut shadow variable, V 0.5 already considers it non-optional
 		if eg.state.narrowed_vars[sanitized] || sanitized.ends_with('_mut') {
 			return sanitized
 		}
 		// Unwrap if the target context requires non-optional type
-		if (!eg.target_type.starts_with('?') && eg.target_type != 'Any' && eg.target_type != '') {
+		if (!base.is_v_optional_type(eg.target_type) && eg.target_type != 'Any' && eg.target_type != '') {
 			return "(${sanitized} or { panic('narrowed var is none') })"
 		}
 	}
@@ -577,7 +577,7 @@ pub fn (mut eg ExprGen) visit_list(node ast.List) string {
 	}
 
 	if values.len == 0 {
-		mut list_type := if eg.target_type.starts_with('[]') {
+		mut list_type := if base.is_v_array_type(eg.target_type) {
 			eg.target_type
 		} else {
 			eg.guess_type(node)
@@ -585,7 +585,7 @@ pub fn (mut eg ExprGen) visit_list(node ast.List) string {
 		if eg.target_type == 'Any' {
 			list_type = '[]Any'
 		}
-		if list_type.starts_with('[]') {
+		if base.is_v_array_type(list_type) {
 			return '${list_type}{}'
 		}
 		return '[]'
@@ -607,7 +607,7 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 
 	mut values := []string{}
 	mut inner_v_type := ''
-	if eg.target_type.starts_with('[]') {
+	if base.is_v_array_type(eg.target_type) {
 		inner_v_type = eg.target_type[2..]
 	}
 
@@ -655,14 +655,14 @@ pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
 		if is_struct {
 			return '${dict_type}{}'
 		}
-		if dict_type.starts_with('map[') {
+		if base.is_v_map_type(dict_type) {
 			return '${dict_type}{}'
 		}
 		return 'map[string]Any{}'
 	}
 	mut items := []string{}
 	mut val_v_type := ''
-	if dict_type.starts_with('map[') {
+	if base.is_v_map_type(dict_type) {
 		bracket_idx := dict_type.index(']') or { -1 }
 		if bracket_idx != -1 {
 			val_v_type = dict_type[bracket_idx + 1..]
@@ -795,7 +795,7 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 	mut ctx_param_types := []string{}
 	mut ctx_ret_type := 'int'
 
-	if eg.state.current_assignment_type.starts_with('fn (') {
+	if base.is_v_function_type(eg.state.current_assignment_type) && eg.state.current_assignment_type.contains(' (') {
 		line := eg.state.current_assignment_type
 		bracket_idx := line.index('(') or { -1 }
 		close_bracket_idx := line.index(')') or { -1 }
@@ -998,7 +998,7 @@ pub fn (mut eg ExprGen) map_type_ext(type_str string, allow_union bool, register
 
 	// Ensure class types are references
 	if eg.state.is_v_class_type(res) && !res.contains('&') && !is_return {
-		if res.starts_with('?') {
+		if base.is_v_optional_type(res) {
 			res = '?&' + res[1..]
 		} else {
 			res = '&' + res

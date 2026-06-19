@@ -43,7 +43,7 @@ pub fn (mut m VariablesModule) visit_name(node ast.Name) string {
 		v_narrowed_type := m.map_python_type(narrowed_type, true, false, false)
 		v_base_type := m.map_python_type(base_type, true, false, false)
 		if v_narrowed_type.len > 0 && v_base_type.len > 0 && v_narrowed_type != v_base_type {
-			if v_base_type.starts_with('fn') || v_base_type.contains('fn(') {
+			if base.is_v_function_type(v_base_type) || v_base_type.contains('fn(') {
 				return res
 			}
 			if v_base_type.starts_with('SumType_') || v_base_type == 'Any' {

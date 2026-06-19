@@ -210,11 +210,11 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 	// interface array logic
 	mut is_interface_array := false
 	mut base_v_type := ''
-	if v_type.starts_with('[]') {
+	if base.is_v_array_type(v_type) {
 		base_v_type = v_type[2..]
-	} else if v_type.starts_with('?[]') {
+	} else if base.is_v_optional_array_type(v_type) {
 		base_v_type = v_type[3..]
-	} else if v_type.starts_with('[]?') {
+	} else if base.is_v_array_optional_type(v_type) {
 		// Already has optional marker
 		base_v_type = v_type[3..]
 	}
@@ -329,7 +329,7 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 
 	is_mut := m.is_mutable_target(target, lhs)
 	// For Optional[SomeClass] assignments with a concrete value, use the optional type
-	if v_type.starts_with('?') && rhs != 'none' && !rhs.contains('unsafe { nil }') {
+	if base.is_v_optional_type(v_type) && rhs != 'none' && !rhs.contains('unsafe { nil }') {
 		if v_type in m.local_vars_in_scope {
 			m.emit('${lhs} = ${v_type}(${rhs})')
 		} else {
@@ -340,13 +340,13 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 	}
 
 	// If variable was already declared with an optional type, wrap the new value
-	if !m.state.in_main && lhs in m.local_vars_in_scope && v_type.starts_with('?') {
+	if !m.state.in_main && lhs in m.local_vars_in_scope && base.is_v_optional_type(v_type) {
 		m.emit('${lhs} = ${v_type}(${rhs})')
 		return
 	}
 
 	if !m.state.in_main && lhs in m.local_vars_in_scope {
-		if lhs in m.state.cond_optional_var_type && rhs != 'none' && !rhs.starts_with('?') {
+		if lhs in m.state.cond_optional_var_type && rhs != 'none' && !base.is_v_optional_type(rhs) {
 			opt_type := m.state.cond_optional_var_type[lhs]
 			rhs = if opt_type == '?Any' { 'Any(${rhs})' } else { '${opt_type}(${rhs})' }
 		}
@@ -403,7 +403,7 @@ fn (mut m VariablesModule) visit_destructuring(target ast.Expression, source_exp
 			}
 		}
 
-		is_tuple := source_type.starts_with('TupleStruct_') || source_type.contains('Tuple')
+		is_tuple := base.is_tuple_struct(source_type) || source_type.contains('Tuple')
 		if starred_idx == -1 {
 			for i, elt in elements {
 				m.visit_destructuring(elt, if is_tuple {
@@ -467,7 +467,7 @@ fn (mut m VariablesModule) visit_destructuring(target ast.Expression, source_exp
 }
 
 fn (m &VariablesModule) is_clonable_collection(v_type string) bool {
-	return v_type.starts_with('[]') || v_type.starts_with('map[')
+	return base.is_v_array_type(v_type) || base.is_v_map_type(v_type)
 }
 
 fn (m &VariablesModule) is_mutable_target(node ast.Expression, name string) bool {

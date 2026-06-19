@@ -58,7 +58,7 @@ pub fn (mut m VariablesModule) visit_aug_assign(node ast.AugAssign) {
 		if node.op.value == '|' {
 			target_type := m.guess_type(node.target, true)
 			value_type := m.guess_type(node.value, true)
-			if target_type.starts_with('map[') && value_type.starts_with('map[') {
+			if base.is_v_map_type(target_type) && base.is_v_map_type(value_type) {
 				m.state.used_dict_merge = true
 				m.emit('${target_expr} = py_dict_merge(${target_expr}, ${value_expr})')
 				return
