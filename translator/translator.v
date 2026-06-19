@@ -364,7 +364,7 @@ fn (mut t Translator) map_annotation_internal(node ast.Expression) string {
 				'Annotated', 'typing.Annotated' {
 					if base_raw.contains('NotRequired') {
 						inner := t.map_annotation(node.slice)
-						if inner.starts_with('?') { inner } else { '?${inner}' }
+						if base.is_v_optional_type(inner) { inner } else { '?${inner}' }
 					} else if node.slice is ast.Tuple {
 						t.map_annotation(node.slice.elements[0])
 					} else {
@@ -526,14 +526,14 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 	pure_v := final_res.trim_left('?&')
 	is_type_var := pure_v in t.state.type_vars || pure_v in t.state.current_class_generics
 
-	if t.state.is_v_class_type(pure_v) && !pure_v.starts_with('[]')
+	if t.state.is_v_class_type(pure_v) && !base.is_v_array_type(pure_v)
 		&& !pure_v.starts_with('datatypes.') && !is_type_var {
 		is_interface := pure_v in t.state.known_interfaces || pure_v in t.state.class_to_impl
 			|| pure_v.ends_with('Protocol')
 		if is_interface {
-			return if final_res.starts_with('?') { '?' + pure_v } else { pure_v }
+			return if base.is_v_optional_type(final_res) { '?' + pure_v } else { pure_v }
 		}
-		if final_res.starts_with('?') {
+		if base.is_v_optional_type(final_res) {
 			final_res = '?&' + pure_v
 		} else {
 			final_res = '&' + pure_v

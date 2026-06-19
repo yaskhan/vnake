@@ -45,7 +45,7 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		}
 
 		if value_expr is ast.List {
-			if (v_type.starts_with('[]') || v_type.starts_with('?[]'))
+			if (base.is_v_array_type(v_type) || base.is_v_optional_array_type(v_type))
 				&& value_expr.elements.len > 0 {
 				prev_type := m.current_assignment_type
 				m.current_assignment_type = v_type
@@ -55,7 +55,7 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 				return
 			}
 		} else if value_expr is ast.Tuple {
-			if (v_type.starts_with('[]') || v_type.starts_with('?[]'))
+			if (base.is_v_array_type(v_type) || base.is_v_optional_array_type(v_type))
 				&& value_expr.elements.len > 0 {
 				prev_type := m.current_assignment_type
 				m.current_assignment_type = v_type
@@ -67,20 +67,20 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		}
 
 		if value_expr is ast.Dict {
-			if value_expr.keys.len == 0 && v_type.starts_with('map[') {
+			if value_expr.keys.len == 0 && base.is_v_map_type(v_type) {
 				m.emit('${target_expr} := ${v_type}{}')
 				return
 			}
 		}
 
-		if value_expr is ast.List && value_expr.elements.len == 0 && v_type.starts_with('[]') {
+		if value_expr is ast.List && value_expr.elements.len == 0 && base.is_v_array_type(v_type) {
 			m.emit('${target_expr} := ${v_type}{}')
 			return
 		}
 
-		is_interface_array := if v_type.starts_with('[]') {
+		is_interface_array := if base.is_v_array_type(v_type) {
 			v_type[2..] in m.state.known_interfaces
-		} else if v_type.starts_with('?[]') {
+		} else if base.is_v_optional_array_type(v_type) {
 			v_type[3..] in m.state.known_interfaces
 		} else {
 			false
@@ -125,11 +125,11 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		}
 
 		if value_expr is ast.Constant && value_expr.value == 'None' {
-			if v_type == 'Any' || (v_type.starts_with('map[') && v_type.ends_with(']Any')) {
+			if v_type == 'Any' || (base.is_v_map_type(v_type) && v_type.ends_with(']Any')) {
 				m.emit('${target_expr} := Any(NoneType{})')
 			} else {
 				mut opt_type := v_type
-				if !opt_type.starts_with('?') {
+				if !base.is_v_optional_type(opt_type) {
 					opt_type = '?${opt_type}'
 				}
 				m.emit('mut ${target_expr} := ${opt_type}(none)')
@@ -151,11 +151,11 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 
 		rhs := m.visit_expr(value_expr)
 		if rhs == 'none' {
-			if v_type == 'Any' || (v_type.starts_with('map[') && v_type.ends_with(']Any')) {
+			if v_type == 'Any' || (base.is_v_map_type(v_type) && v_type.ends_with(']Any')) {
 				m.emit('mut ${target_expr} := Any(NoneType{})')
 			} else {
 				mut opt_type := v_type
-				if !opt_type.starts_with('?') {
+				if !base.is_v_optional_type(opt_type) {
 					opt_type = '?${opt_type}'
 				}
 				m.emit('mut ${target_expr} := ${opt_type}(none)')
@@ -184,7 +184,7 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		}
 
 		// For Optional/union types, declare with the optional type so None can be assigned later
-		is_optional_annotation := v_type.starts_with('?')
+		is_optional_annotation := base.is_v_optional_type(v_type)
 		// Also check raw annotation string for Optional[...]
 		if !is_optional_annotation {
 			is_optional_annotation = annotation_str.starts_with('Optional[')
@@ -192,10 +192,10 @@ pub fn (mut m VariablesModule) visit_ann_assign(node ast.AnnAssign) {
 		}
 
 		if is_optional_annotation {
-			mut opt_type := if v_type.starts_with('?') { v_type } else { '?${v_type}' }
+			mut opt_type := if base.is_v_optional_type(v_type) { v_type } else { '?${v_type}' }
 			mut init_rhs := rhs
 			// Wrap with optional type for non-none values
-			if init_rhs != 'none' && !init_rhs.starts_with('?') {
+			if init_rhs != 'none' && !base.is_v_optional_type(init_rhs) {
 				init_rhs = '${opt_type}(${rhs})'
 			}
 			is_mut := m.is_mutable_target(node.target, target_expr)
@@ -231,10 +231,10 @@ fn (m &VariablesModule) default_value_for_annotation(v_type string) string {
 	if v_type == 'string' {
 		return "''"
 	}
-	if v_type.starts_with('[]') || v_type.starts_with('map[') {
+	if base.is_v_array_type(v_type) || base.is_v_map_type(v_type) {
 		return '${v_type}{}'
 	}
-	if v_type.starts_with('?') {
+	if base.is_v_optional_type(v_type) {
 		return 'none'
 	}
 	return '0'
