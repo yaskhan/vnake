@@ -192,46 +192,55 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Handle Python 3.10+ union types: int | str
-	if clean_type.contains('|') && !clean_type.contains('[') {
-		parts := clean_type.split('|').map(fast_trim_space(it))
-		mut v_parts := []string{}
-		for p in parts {
-			v_parts << map_python_type_to_v(p, self_name, allow_union, generic_map,
-				sum_type_registrar, literal_registrar, tuple_registrar)
-		}
+	// ⚡ Bolt: Single-pass splitting and deduplication of union parts avoids multiple intermediate
+	// array allocations and redundant string scans.
+	if clean_type.contains('|') {
+		parts := split_union_parts(clean_type)
+		if parts.len > 1 {
+			mut unique_v_parts := []string{cap: parts.len}
+			mut seen := map[string]bool{}
+			mut has_any := false
+			mut non_none_count := 0
+			mut last_non_none := ''
 
-		// Deduplicate
-		mut unique_v_parts := []string{}
-		mut seen := map[string]bool{}
-		for p in v_parts {
-			if p !in seen {
-				seen[p] = true
-				unique_v_parts << p
+			for p in parts {
+				v_p := map_python_type_to_v(p, self_name, allow_union, generic_map,
+					sum_type_registrar, literal_registrar, tuple_registrar)
+				if v_p == 'Any' {
+					has_any = true
+					break
+				}
+				if v_p !in seen {
+					seen[v_p] = true
+					unique_v_parts << v_p
+					if v_p != 'none' && v_p != 'NoneType' {
+						non_none_count++
+						last_non_none = v_p
+					}
+				}
 			}
-		}
 
-		if 'Any' in unique_v_parts {
-			return 'Any'
-		}
-
-		mut non_none := []string{}
-		for t in unique_v_parts {
-			if t != 'none' && t != 'NoneType' {
-				non_none << t
+			if has_any {
+				return 'Any'
 			}
-		}
-		if non_none.len == 1 && unique_v_parts.len > 1 {
-			return '?${non_none[0]}'
-		}
 
-		union_str := unique_v_parts.join(' | ')
-		if !allow_union {
-			reg_res := sum_type_registrar('', union_str)
-			if reg_res.len > 0 {
-				return reg_res
+			if non_none_count == 1 && unique_v_parts.len > 1 {
+				return '?${last_non_none}'
 			}
+
+			if unique_v_parts.len == 1 {
+				return unique_v_parts[0]
+			}
+
+			union_str := unique_v_parts.join(' | ')
+			if !allow_union {
+				reg_res := sum_type_registrar('', union_str)
+				if reg_res.len > 0 {
+					return reg_res
+				}
+			}
+			return union_str
 		}
-		return union_str
 	}
 
 	if clean_type in generic_map {
@@ -336,40 +345,46 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 			return res
 		}
 		'Union', 'typing.Union' {
+			// ⚡ Bolt: Single-pass deduplication and Optional detection for typing.Union
+			// avoids multiple intermediate array allocations and redundant scans.
 			if args_str.len == 0 {
 				return 'Any'
 			}
 			parts := split_generic_args(args_str)
-			mut v_parts := []string{}
-			for p in parts {
-				v_parts << map_python_type_to_v(fast_trim_space(p), self_name, allow_union,
-					generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
-			}
-
-			mut unique := []string{}
+			mut unique := []string{cap: parts.len}
 			mut seen := map[string]bool{}
-			for p in v_parts {
-				if p !in seen {
-					seen[p] = true
-					unique << p
+			mut has_any := false
+			mut non_none_count := 0
+			mut last_non_none := ''
+
+			for p in parts {
+				v_p := map_python_type_to_v(p, self_name, allow_union,
+					generic_map, sum_type_registrar, literal_registrar, tuple_registrar)
+				if v_p == 'Any' {
+					has_any = true
+					break
+				}
+				if v_p !in seen {
+					seen[v_p] = true
+					unique << v_p
+					if v_p != 'none' && v_p != 'NoneType' {
+						non_none_count++
+						last_non_none = v_p
+					}
 				}
 			}
 
-			if 'Any' in unique {
+			if has_any {
 				return 'Any'
 			}
 
-			mut non_none := []string{}
-			for t in unique {
-				if t != 'none' {
-					non_none << t
-				}
+			if non_none_count == 1 && unique.len > 1 {
+				return '?${last_non_none}'
 			}
-			if non_none.len == 1 && unique.len > 1 {
-				return '?${non_none[0]}'
+			if unique.len == 1 {
+				return unique[0]
 			}
-			res := unique.join(' | ')
-			return res
+			return unique.join(' | ')
 		}
 		'Literal', 'typing.Literal' {
 			parts := split_generic_args(args_str)
@@ -464,6 +479,55 @@ fn split_generic_args(s string) []string {
 				depth--
 			}
 			`,` {
+				if depth == 0 {
+					mut sub_start := start
+					mut sub_end := i
+					for sub_start < sub_end && s[sub_start].is_space() {
+						sub_start++
+					}
+					for sub_end > sub_start && s[sub_end - 1].is_space() {
+						sub_end--
+					}
+					if sub_start < sub_end {
+						result << s[sub_start..sub_end]
+					}
+					start = i + 1
+				}
+			}
+			else {}
+		}
+	}
+	if start < s.len {
+		mut sub_start := start
+		mut sub_end := s.len
+		for sub_start < sub_end && s[sub_start].is_space() {
+			sub_start++
+		}
+		for sub_end > sub_start && s[sub_end - 1].is_space() {
+			sub_end--
+		}
+		if sub_start < sub_end {
+			result << s[sub_start..sub_end]
+		}
+	}
+	return result
+}
+
+// split_union_parts separates top-level union parts while respecting nested brackets.
+// ⚡ Bolt: Optimized single-pass splitting and trimming avoids redundant heap allocations.
+fn split_union_parts(s string) []string {
+	mut result := []string{}
+	mut depth := 0
+	mut start := 0
+	for i := 0; i < s.len; i++ {
+		match s[i] {
+			`[` {
+				depth++
+			}
+			`]` {
+				depth--
+			}
+			`|` {
 				if depth == 0 {
 					mut sub_start := start
 					mut sub_end := i
