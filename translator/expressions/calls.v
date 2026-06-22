@@ -152,12 +152,22 @@ pub fn (mut eg ExprGen) get_call_signature(func_name_str string, loc_key string)
 	}
 
 	// Try mapping from current scope
+	// ⚡ Bolt: Join scope once and truncate iteratively to avoid O(N^2) string allocations.
 	if eg.state.scope_names.len > 0 {
-		for i := eg.state.scope_names.len; i >= 0; i-- {
-			prefix := eg.state.scope_names[..i].join('.')
+		mut prefix := eg.state.scope_names.join('.')
+		for {
 			qualified := if prefix.len > 0 { '${prefix}.${func_name_str}' } else { func_name_str }
-			if qualified in eg.analyzer.call_signatures {
-				return eg.analyzer.call_signatures[qualified]
+			if sig := eg.analyzer.call_signatures[qualified] {
+				return sig
+			}
+			if prefix.len == 0 {
+				break
+			}
+			idx := prefix.last_index('.') or { -1 }
+			if idx == -1 {
+				prefix = ''
+			} else {
+				prefix = prefix[..idx]
 			}
 		}
 	}
@@ -1110,9 +1120,9 @@ pub fn (mut eg ExprGen) handle_via_mapper(node ast.Call, module_name string, fun
 			}
 		}
 		// Try to keep the receiver if it was visit_attribute
-		if func_name.contains('.') {
-			parts := func_name.split('.')
-			recv := parts[..parts.len - 1].join('.')
+		// ⚡ Bolt: Use last_index and manual slicing instead of split/join.
+		if last_dot := func_name.last_index('.') {
+			recv := func_name[..last_dot]
 			return '${recv}.add_argument(${pos_args.join(', ')})'
 		}
 		return 'parser.add_argument(${pos_args.join(', ')})'
@@ -1130,27 +1140,31 @@ pub fn (mut eg ExprGen) handle_via_mapper(node ast.Call, module_name string, fun
 	}
 
 	// Try submodule matching if module_name is empty but func_name has dots
+	// ⚡ Bolt: Use index-based scanning and manual slicing instead of split/join.
 	if func_name.contains('.') {
-		parts := func_name.split('.')
-		for i := 1; i < parts.len; i++ {
-			m_name := parts[..i].join('.')
-			f_name := parts[i..].join('.')
+		mut dot_idx := func_name.index('.') or { -1 }
+		for dot_idx != -1 {
+			m_name := func_name[..dot_idx]
+			f_name := func_name[dot_idx + 1..]
 			if res := mapper.get_mapping(m_name, f_name, args) {
 				return res
 			}
+			dot_idx = func_name.index_after('.', dot_idx + 1) or { -1 }
 		}
 	}
 
 	// Try with extract_func_info if it returned dots
+	// ⚡ Bolt: Use index-based scanning and manual slicing instead of split/join.
 	func_str, _ := eg.extract_func_info(node)
 	if func_str.contains('.') && func_str != func_name {
-		parts := func_str.split('.')
-		for i := 1; i < parts.len; i++ {
-			m_name := parts[..i].join('.')
-			f_name := parts[i..].join('.')
+		mut dot_idx := func_str.index('.') or { -1 }
+		for dot_idx != -1 {
+			m_name := func_str[..dot_idx]
+			f_name := func_str[dot_idx + 1..]
 			if res := mapper.get_mapping(m_name, f_name, args) {
 				return res
 			}
+			dot_idx = func_str.index_after('.', dot_idx + 1) or { -1 }
 		}
 	}
 
