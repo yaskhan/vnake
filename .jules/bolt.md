@@ -56,3 +56,11 @@
 ## 2025-01-24 - Optimized Lexer Operator and String Scanning
 **Learning:** In V 0.5.1, `u8.ascii_str()` allocates a new string on the heap. Replacing it with string literals in the lexer's hot path significantly reduces memory churn. Additionally, manual `l.pos++` and `l.column++` increments for known non-newline characters avoid the branching overhead of `l.advance_char()`.
 **Action:** Always prefer string literals or `match` expressions returning literals over `ascii_str()` for known characters in hot paths. Use manual position tracking for non-newline ASCII sequences to bypass `advance_char()` branches.
+
+## 2024-05-26 - [V-Lang Preprocessor Pipeline Optimization]
+**Learning:** In V 0.5.1, sequential string transformation passes that each involve `split('\n')` and `join('\n')` create massive heap pressure and redundant (N)$ scans. Combining these into a single line-by-line pass reduces complexity from (K \times N)$ to (N)$ and eliminates multiple intermediate array and string allocations.
+**Action:** Always consolidate multiple line-based transformations into a single pass with a state machine or conditional logic.
+
+## 2024-05-26 - [V-Lang Allocation-Free Case-Insensitive Checks]
+**Learning:** Calling `to_lower()` on every identifier to check for reserved keywords causes significant memory churn. Since most identifiers are already lowercase, a fast-path scan for uppercase bytes (`ch >= 'A' && ch <= 'Z'`) before calling `to_lower()` avoids allocations in the majority of cases.
+**Action:** Use conditional case conversion for identifier validation in hot paths.
