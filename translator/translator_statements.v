@@ -1237,18 +1237,24 @@ fn (mut t Translator) emit_call_save_backs(node ast.Call) {
 		if node.func is ast.Attribute {
 			attr := node.func
 			obj_type := t.guess_type(attr.value)
-			obj_type_clean := obj_type.trim_left('?&')
-			keys := [
-				'${obj_type_clean}.${attr.attr}.self',
-				'${obj_type_clean}.${base.to_camel_case(attr.attr)}.self',
-			]
-			for k in keys {
-				info := t.analyzer.get_mutability(k)
-				if info.is_mutated {
-					if attr.value is ast.Name {
-						t.emit_save_back(attr.value.id)
-					}
-					break
+			// ⚡ Bolt: Fast path for trim_left allocation and short-circuiting mutability checks.
+			// Avoiding the temporary array literal and loop reduces heap pressure in the translator hot path.
+			mut start := 0
+			for start < obj_type.len && (obj_type[start] == `?` || obj_type[start] == `&`) {
+				start++
+			}
+			obj_type_clean_mut := if start > 0 { obj_type[start..] } else { obj_type }
+
+			mut is_mutated := false
+			if t.analyzer.get_mutability('${obj_type_clean_mut}.${attr.attr}.self').is_mutated {
+				is_mutated = true
+			} else if t.analyzer.get_mutability('${obj_type_clean_mut}.${base.to_camel_case(attr.attr)}.self').is_mutated {
+				is_mutated = true
+			}
+
+			if is_mutated {
+				if attr.value is ast.Name {
+					t.emit_save_back(attr.value.id)
 				}
 			}
 		}
