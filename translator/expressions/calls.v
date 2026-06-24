@@ -1446,17 +1446,18 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	// Check if this is a mutable method call that needs a mutable receiver
 	mut is_mut_receiver := false
 	if obj_type_raw != 'Any' && obj_type_raw != '' {
-		obj_type_clean := obj_type_raw.trim_left('?&')
-		keys := [
-			'${obj_type_clean}.${attr}.self',
-			'${obj_type_clean}.${base.to_camel_case(attr)}.self',
-		]
-		for k in keys {
-			info := eg.analyzer.get_mutability(k)
-			if info.is_mutated {
-				is_mut_receiver = true
-				break
-			}
+		// ⚡ Bolt: Fast path for trim_left allocation and short-circuiting mutability checks.
+		// Replacing the temporary array literal and loop avoids heap allocations on every call.
+		mut start := 0
+		for start < obj_type_raw.len && (obj_type_raw[start] == `?` || obj_type_raw[start] == `&`) {
+			start++
+		}
+		obj_type_clean_mut := if start > 0 { obj_type_raw[start..] } else { obj_type_raw }
+
+		if eg.analyzer.get_mutability('${obj_type_clean_mut}.${attr}.self').is_mutated {
+			is_mut_receiver = true
+		} else if eg.analyzer.get_mutability('${obj_type_clean_mut}.${base.to_camel_case(attr)}.self').is_mutated {
+			is_mut_receiver = true
 		}
 	}
 
