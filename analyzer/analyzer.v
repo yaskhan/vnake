@@ -44,7 +44,7 @@ pub fn (mut a Analyzer) analyze(node ast.Module) {
 
 // get_type returns variable type.
 // ⚡ Bolt: Optimized hierarchy traversal with visited map to avoid O(2^N) diamond inheritance recursion.
-pub fn (a Analyzer) get_type(name string) ?string {
+pub fn (a &Analyzer) get_type(name string) ?string {
 	if !name.contains('.') && a.scope_prefixes.len > 0 {
 		for i := a.scope_prefixes.len - 1; i >= 0; i-- {
 			qual := a.scope_prefixes[i] + '.' + name
@@ -70,7 +70,7 @@ pub fn (a Analyzer) get_type(name string) ?string {
 	return none
 }
 
-fn (a Analyzer) get_type_recursive(cls string, attr string, camel_attr string, has_camel bool, mut visited map[string]bool) ?string {
+fn (a &Analyzer) get_type_recursive(cls string, attr string, camel_attr string, has_camel bool, mut visited map[string]bool) ?string {
 	if cls in visited {
 		return none
 	}
@@ -100,7 +100,7 @@ fn (a Analyzer) get_type_recursive(cls string, attr string, camel_attr string, h
 }
 
 // get_mypy_type returns type from mypy store
-pub fn (a Analyzer) get_mypy_type(name string, loc string) ?string {
+pub fn (a &Analyzer) get_mypy_type(name string, loc string) ?string {
 	if name.len > 0 && loc.len > 0 {
 		if res := a.mypy_store.collected_types[name] {
 			if typ := res[loc] {
@@ -124,7 +124,7 @@ pub fn (mut a Analyzer) set_type(name string, typ string) {
 }
 
 // get_raw_type returns raw type string
-pub fn (a Analyzer) get_raw_type(name string) ?string {
+pub fn (a &Analyzer) get_raw_type(name string) ?string {
 	if res := a.raw_type_map[name] {
 		return res
 	}
@@ -137,7 +137,7 @@ pub fn (mut a Analyzer) set_raw_type(name string, typ string) {
 }
 
 // get_mutability returns mutability information
-pub fn (a Analyzer) get_mutability(name string) MutabilityInfo {
+pub fn (a &Analyzer) get_mutability(name string) MutabilityInfo {
 	mut lookup := name
 	if lookup.contains('_Impl.') {
 		lookup = lookup.replace('_Impl.', '.')
@@ -161,7 +161,7 @@ pub fn (mut a Analyzer) set_mutability(name string, info MutabilityInfo) {
 }
 
 // get_class_bases returns base classes
-pub fn (a Analyzer) get_class_bases(class_name string) []string {
+pub fn (a &Analyzer) get_class_bases(class_name string) []string {
 	if class_name in a.class_hierarchy {
 		return a.class_hierarchy[class_name]
 	}
@@ -177,7 +177,7 @@ pub fn (a Analyzer) get_class_bases(class_name string) []string {
 
 // get_call_signature returns the call signature of a function or method.
 // ⚡ Bolt: Optimized hierarchy traversal with visited map to avoid O(2^N) diamond inheritance recursion.
-pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
+pub fn (a &Analyzer) get_call_signature(name string) ?CallSignature {
 	if sig := a.call_signatures[name] {
 		return sig
 	}
@@ -193,7 +193,7 @@ pub fn (a Analyzer) get_call_signature(name string) ?CallSignature {
 	return none
 }
 
-fn (a Analyzer) get_call_signature_recursive(cls string, attr string, camel_attr string, has_camel bool, mut visited map[string]bool) ?CallSignature {
+fn (a &Analyzer) get_call_signature_recursive(cls string, attr string, camel_attr string, has_camel bool, mut visited map[string]bool) ?CallSignature {
 	if cls in visited {
 		return none
 	}
