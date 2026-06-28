@@ -14,13 +14,26 @@ fn is_numeric_type(v_type string) bool {
 }
 
 fn is_none_expr(node ast.Expression) bool {
-	return (node is ast.Constant && node.value == 'None')
-		|| (node is ast.Name && (node.id == 'None' || node.id == 'none' || node.id == 'NoneType'))
-		|| node is ast.NoneExpr
+	// ⚡ Bolt: Reordering type checks to prioritize ast.NoneExpr and adding length-based
+	// guards for ast.Name reduces string comparison overhead in comparison hot paths.
+	if node is ast.NoneExpr {
+		return true
+	}
+	if node is ast.Constant {
+		return node.value == 'None'
+	}
+	if node is ast.Name {
+		id := node.id
+		if id.len == 4 || id.len == 8 {
+			return id == 'None' || id == 'none' || id == 'NoneType'
+		}
+	}
+	return false
 }
 
 fn (eg &ExprGen) is_explicit_any(node ast.Expression, typ string) bool {
-	if typ != 'Any' {
+	// ⚡ Bolt: Length-based guard reduces string comparison overhead.
+	if typ.len != 3 || typ != 'Any' {
 		return false
 	}
 	token := node.get_token()
