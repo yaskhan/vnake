@@ -3,6 +3,7 @@ module expressions
 import analyzer
 import ast
 import base
+import models
 import stdlib_map
 
 pub fn (mut eg ExprGen) visit_call(node ast.Call) string {
@@ -1417,8 +1418,9 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 			// Try to infer from interface method signatures
 			// If original type is a union including interfaces, check if method belongs to one of them
 			if original_type_raw.contains('|') {
-				mut parts := original_type_raw.split('|').map(it.trim_space())
-				mut matched_types := []string{}
+				// ⚡ Bolt: Single-pass splitting and trimming avoids multiple intermediate array allocations.
+				parts := models.split_union_parts(original_type_raw)
+				mut matched_types := []string{cap: parts.len}
 				for part in parts {
 					clean_part := part.trim_left('?&')
 					if clean_part in eg.state.known_interfaces

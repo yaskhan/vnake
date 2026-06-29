@@ -1,6 +1,7 @@
 module variables
 
 import ast
+import models
 
 pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 	if node.targets.len == 0 {
@@ -45,7 +46,8 @@ pub fn (mut m VariablesModule) visit_assign(node ast.Assign) {
 								false, false)
 							if bound_type.len > 0 {
 								if bound_type.contains('|') {
-									constraints << bound_type.split('|').map(it.trim_space())
+									// ⚡ Bolt: Single-pass splitting and trimming avoids multiple intermediate allocations.
+									constraints << models.split_union_parts(bound_type)
 								} else {
 									constraints << bound_type
 								}

@@ -84,7 +84,8 @@ pub fn register_literal_enum(nodes []ast.Expression, mut generated_literal_enums
 
 // register_sum_type generates a named V sum type and returns its use-site type.
 pub fn register_sum_type(v_union_type string, active_v_generics []string, include_all_symbols bool, mut generated_sum_types map[string]string, mut emitter HelperEmitter) string {
-	mut parts := v_union_type.split('|').map(it.trim_space())
+	// ⚡ Bolt: Single-pass splitting and trimming avoids multiple intermediate allocations.
+	mut parts := models.split_union_parts(v_union_type)
 	if parts.len <= 1 {
 		return v_union_type
 	}

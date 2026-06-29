@@ -4,6 +4,7 @@ import ast
 import base
 import expressions
 import analyzer
+import models
 
 fn (mut t Translator) emit_block(stmts []ast.Statement) {
 	for stmt in stmts {
@@ -620,9 +621,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 							for k, v_def in t.state.generated_sum_types {
 								if v_def == '' && k.contains('|') {
 									// Potentially the definition
-									mut parts := k.split('|').map(it.trim_space())
+									// ⚡ Bolt: Single-pass splitting and trimming avoids redundant allocations.
+									mut parts := models.split_union_parts(k)
 									parts.sort()
-									mut name_parts := []string{}
+									mut name_parts := []string{cap: parts.len}
 									for p in parts {
 										mut pn := p.capitalize()
 										if pn == 'Str' {
