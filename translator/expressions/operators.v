@@ -14,6 +14,8 @@ fn is_numeric_type(v_type string) bool {
 }
 
 fn is_none_expr(node ast.Expression) bool {
+	// ⚡ Bolt: Reordering type checks to prioritize ast.NoneExpr and adding length-based
+	// guards for ast.Name reduces string comparison overhead in comparison hot paths.
 	if node is ast.NoneExpr {
 		return true
 	}
@@ -31,6 +33,7 @@ fn is_none_expr(node ast.Expression) bool {
 }
 
 fn (eg &ExprGen) is_explicit_any(node ast.Expression, typ string) bool {
+	// ⚡ Bolt: Length-based guard reduces string comparison overhead.
 	if typ.len != 3 || typ != 'Any' {
 		return false
 	}

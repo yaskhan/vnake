@@ -97,7 +97,8 @@ pub fn fast_trim_space(s string) string {
 }
 
 pub fn is_collection_type(v_type string) bool {
-	// ⚡ Bolt: Fast path using first character match avoids redundant starts_with calls.
+	// ⚡ Bolt: Fast path using first character match and length-based guards
+	// avoids redundant starts_with calls and string comparisons.
 	// Measured ~2.4x speedup (4.1s -> 1.7s for 10M iterations).
 	if v_type.len < 2 {
 		return false
@@ -128,6 +129,10 @@ pub fn is_tuple_struct(v_type string) bool {
 }
 
 pub fn is_string_type(v_type string) bool {
+	// ⚡ Bolt: Length-based guard reduces string comparison overhead.
+	if v_type.len != 6 && v_type.len != 13 {
+		return false
+	}
 	return v_type == 'string' || v_type == 'LiteralString'
 }
 
