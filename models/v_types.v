@@ -515,7 +515,7 @@ fn split_generic_args(s string) []string {
 
 // split_union_parts separates top-level union parts while respecting nested brackets.
 // ⚡ Bolt: Optimized single-pass splitting and trimming avoids redundant heap allocations.
-fn split_union_parts(s string) []string {
+pub fn split_union_parts(s string) []string {
 	mut result := []string{}
 	mut depth := 0
 	mut start := 0

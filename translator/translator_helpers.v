@@ -2,6 +2,7 @@ module translator
 
 import ast
 import base
+import models
 
 fn (mut t Translator) capture_expr(node ast.Expression) (string, []string) {
 	if node is ast.Name || node is ast.Constant {
@@ -271,9 +272,10 @@ fn (mut t Translator) append_helpers() {
 	for name, def in t.state.generated_sum_types {
 		if name.contains('|') {
 			// Derive SumType name from the union string itself to be safe
-			mut parts := name.split('|').map(it.trim_space())
+			// ⚡ Bolt: Single-pass splitting and trimming avoids multiple intermediate allocations.
+			mut parts := models.split_union_parts(name)
 			parts.sort()
-			mut name_parts := []string{}
+			mut name_parts := []string{cap: parts.len}
 			for p in parts {
 				mut pn := p.capitalize()
 				if pn == 'Str' {
@@ -288,8 +290,9 @@ fn (mut t Translator) append_helpers() {
 		}
 	}
 	for name, vals_str in t.state.generated_literal_enums {
-		vals := vals_str.split('|').map(it.trim_space())
-		mut enum_fields := []string{}
+		// ⚡ Bolt: Single-pass splitting and trimming avoids multiple intermediate allocations.
+		vals := models.split_union_parts(vals_str)
+		mut enum_fields := []string{cap: vals.len}
 		for v in vals {
 			enum_fields << '    py_${v.trim('\'"')}'
 		}
