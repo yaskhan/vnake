@@ -24,9 +24,10 @@ fn is_none_expr(node ast.Expression) bool {
 	}
 	if node is ast.Name {
 		id := node.id
-		if id.len == 4 || id.len == 8 {
-			return id == 'None' || id == 'none' || id == 'NoneType'
+		if id.len != 4 && id.len != 8 {
+			return false
 		}
+		return id == 'None' || id == 'none' || id == 'NoneType'
 	}
 	return false
 }

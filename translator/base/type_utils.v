@@ -104,24 +104,12 @@ pub fn is_collection_type(v_type string) bool {
 		return false
 	}
 	return match v_type[0] {
-		`[` {
-			v_type[1] == `]`
-		}
-		`m` {
-			v_type.len >= 4 && v_type[1] == `a` && v_type[2] == `p` && v_type[3] == `[`
-		}
-		`d` {
-			v_type.len >= 15 && v_type.starts_with('datatypes.Set[')
-		}
-		`s` {
-			v_type.len == 6 && v_type == 'string'
-		}
-		`L` {
-			v_type.len == 13 && v_type == 'LiteralString'
-		}
-		else {
-			false
-		}
+		`[` { v_type[1] == `]` }
+		`m` { v_type.len >= 4 && v_type[1] == `a` && v_type[2] == `p` && v_type[3] == `[` }
+		`d` { v_type.len >= 15 && v_type.starts_with('datatypes.Set[') }
+		`s` { v_type == 'string' }
+		`L` { v_type == 'LiteralString' }
+		else { false }
 	}
 }
 
@@ -149,8 +137,8 @@ pub fn is_string_type(v_type string) bool {
 }
 
 pub fn is_numeric_type(v_type string) bool {
-	// ⚡ Bolt: Length-based guard avoids complex matching for mismatched identifiers.
-	// Numeric types (int, f64, i64, etc.) are 2-3 characters long.
+	// ⚡ Bolt: Fast path for identifiers that cannot be numeric types based on length.
+	// Numeric types are 2-3 chars long.
 	if v_type.len < 2 || v_type.len > 3 {
 		return false
 	}
