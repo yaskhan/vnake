@@ -390,11 +390,11 @@ fn (mut m VariablesModule) visit_destructuring(target ast.Expression, source_exp
 		m.state.zip_counter++
 		m.emit('${tmp_var} := ${source_expr}')
 
-		mut elements := []ast.Expression{}
-		if target is ast.Tuple {
-			elements = target.elements.clone()
-		} else if target is ast.List {
-			elements = target.elements.clone()
+		// ⚡ Bolt: Using direct references to target.elements via match avoids redundant .clone() allocations.
+		elements := match target {
+			ast.Tuple { target.elements }
+			ast.List { target.elements }
+			else { []ast.Expression{} }
 		}
 
 		mut starred_idx := -1

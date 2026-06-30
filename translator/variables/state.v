@@ -199,16 +199,25 @@ pub fn (m &VariablesModule) is_compile_time_evaluable(node ast.Expression) bool 
 	if node is ast.BinaryOp {
 		return m.is_compile_time_evaluable(node.left) && m.is_compile_time_evaluable(node.right)
 	}
-	if node is ast.List || node is ast.Tuple || node is ast.Set {
-		mut elements := []ast.Expression{}
-		if node is ast.List {
-			elements = node.elements.clone()
-		} else if node is ast.Tuple {
-			elements = node.elements.clone()
-		} else if node is ast.Set {
-			elements = node.elements.clone()
+	// ⚡ Bolt: Direct iteration over collection elements avoids redundant .clone() allocations.
+	if node is ast.List {
+		for elt in node.elements {
+			if !m.is_compile_time_evaluable(elt) {
+				return false
+			}
 		}
-		for elt in elements {
+		return true
+	}
+	if node is ast.Tuple {
+		for elt in node.elements {
+			if !m.is_compile_time_evaluable(elt) {
+				return false
+			}
+		}
+		return true
+	}
+	if node is ast.Set {
+		for elt in node.elements {
 			if !m.is_compile_time_evaluable(elt) {
 				return false
 			}

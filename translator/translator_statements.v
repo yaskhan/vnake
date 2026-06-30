@@ -126,11 +126,11 @@ fn (mut t Translator) visit_destructuring(target ast.Expression, source_expr str
 		t.state.unique_id_counter++
 		t.emit_indented('${tmp_var} := ${source_expr}')
 
-		mut elements := []ast.Expression{}
-		if target is ast.Tuple {
-			elements = target.elements.clone()
-		} else if target is ast.List {
-			elements = target.elements.clone()
+		// ⚡ Bolt: Using direct references to target.elements via match avoids redundant .clone() allocations.
+		elements := match target {
+			ast.Tuple { target.elements }
+			ast.List { target.elements }
+			else { []ast.Expression{} }
 		}
 
 		mut starred_idx := -1
@@ -443,11 +443,10 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 	}
 
 	if target is ast.List || target is ast.Tuple {
-		mut elements := []ast.Expression{}
-		if target is ast.List {
-			elements = target.elements.clone()
-		} else if target is ast.Tuple {
-			elements = target.elements.clone()
+		elements := match target {
+			ast.List { target.elements }
+			ast.Tuple { target.elements }
+			else { []ast.Expression{} }
 		}
 
 		mut all_simple := true
@@ -458,13 +457,11 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 			}
 		}
 
-		mut val_elements := []ast.Expression{}
-		if node.value is ast.List {
-			it_list := node.value
-			val_elements = it_list.elements.clone()
-		} else if node.value is ast.Tuple {
-			it_tuple := node.value
-			val_elements = it_tuple.elements.clone()
+		// ⚡ Bolt: Using direct references to node.value.elements via match avoids redundant .clone() allocations.
+		val_elements := match node.value {
+			ast.List { node.value.elements }
+			ast.Tuple { node.value.elements }
+			else { []ast.Expression{} }
 		}
 
 		if all_simple && val_elements.len == elements.len {
