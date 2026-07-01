@@ -140,7 +140,7 @@ pub fn register_tuple_struct(tuple_types_str string, include_all_symbols bool, m
 		return struct_name
 	}
 
-	field_types := tuple_types_str.split(',').map(it.trim_space())
+	field_types := models.split_generic_args(tuple_types_str)
 	mut fields := []string{}
 	for i, t in field_types {
 		v_type := map_type_fn(t)

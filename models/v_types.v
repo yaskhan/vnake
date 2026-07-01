@@ -466,7 +466,7 @@ fn map_complex_type(py_type string, self_name string, allow_union bool, generic_
 // split_generic_args separates top-level generic arguments while respecting nested brackets.
 // Optimization: Uses manual index-based trimming to avoid heap allocations in V 0.5.1.
 // Measured ~35% speedup on complex type strings (407ms -> 261ms for 1M iterations).
-fn split_generic_args(s string) []string {
+pub fn split_generic_args(s string) []string {
 	mut result := []string{}
 	mut depth := 0
 	mut start := 0

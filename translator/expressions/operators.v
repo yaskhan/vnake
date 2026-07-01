@@ -3,6 +3,7 @@ module expressions
 import ast
 import strings
 import base
+import models
 
 // Local wrappers for base module functions
 fn is_collection_type(v_type string) bool {
@@ -207,7 +208,7 @@ pub fn (mut eg ExprGen) visit_bin_op(node ast.BinaryOp) string {
 		mut raw_op_type := eg.analyzer.location_map[loc_key]
 		// Sanitize union types like 'int | int' to 'int'
 		if raw_op_type.contains(' | ') {
-			mut parts := raw_op_type.split(' | ').map(it.trim_space())
+			mut parts := models.split_union_parts(raw_op_type)
 			parts.sort()
 			mut unique_parts := []string{}
 			for p in parts {
@@ -570,7 +571,7 @@ pub fn (mut eg ExprGen) visit_unary_op(node ast.UnaryOp) string {
 	if loc_key in eg.analyzer.location_map {
 		mut raw_op_type := eg.analyzer.location_map[loc_key]
 		if raw_op_type.contains(' | ') {
-			mut parts := raw_op_type.split(' | ').map(it.trim_space())
+			mut parts := models.split_union_parts(raw_op_type)
 			parts.sort()
 			mut unique_parts := []string{}
 			for p in parts {
