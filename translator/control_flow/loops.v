@@ -1,6 +1,7 @@
 module control_flow
 
 import ast
+import models
 
 fn (m &ControlFlowModule) has_break(nodes []ast.Statement) bool {
 	for node in nodes {
@@ -344,7 +345,7 @@ pub fn (mut m ControlFlowModule) visit_for(node ast.For) {
 
 	if is_string_iter {
 		if is_enumerate && target.contains(',') {
-			parts := target.split(',').map(it.trim_space())
+			parts := models.split_generic_args(target)
 			if parts.len >= 2 {
 				idx_var := parts[0]
 				val_var := parts[1]

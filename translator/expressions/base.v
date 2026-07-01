@@ -856,7 +856,7 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 		if bracket_idx != -1 && close_bracket_idx != -1 {
 			params_str := line[bracket_idx + 1..close_bracket_idx].trim_space()
 			if params_str.len > 0 {
-				ctx_param_types = params_str.split(',').map(it.trim_space())
+				ctx_param_types = models.split_generic_args(params_str)
 			}
 			ret_part := line[close_bracket_idx + 1..].trim_space()
 			if ret_part.len > 0 {

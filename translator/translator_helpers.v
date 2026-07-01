@@ -299,7 +299,7 @@ fn (mut t Translator) append_helpers() {
 		t.emit_helper_struct_code('enum ${name} {\n${enum_fields.join('\n')}\n}')
 	}
 	for name, types_str in t.state.generated_tuple_structs {
-		parts := types_str.split(',').map(it.trim_space())
+		parts := models.split_generic_args(types_str)
 		mut struct_fields := []string{}
 		for i, pt in parts {
 			struct_fields << '    v${i} ${pt}'
