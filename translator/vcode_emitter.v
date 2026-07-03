@@ -72,9 +72,10 @@ pub fn (mut e VCodeEmitter) add_helper_import(module_name string) {
 }
 
 pub fn (mut e VCodeEmitter) add_global(global_def string) {
-	mut name := global_def.trim_space()
+	// ⚡ Bolt: fast_trim_space reduces allocation churn in hot emitter paths.
+	mut name := base.fast_trim_space(global_def)
 	if name.starts_with('__global ') {
-		name = name['__global '.len..].trim_space()
+		name = base.fast_trim_space(name['__global '.len..])
 	}
 	if name.contains(' ') {
 		name = name.all_before(' ')
@@ -88,20 +89,21 @@ pub fn (mut e VCodeEmitter) add_global(global_def string) {
 }
 
 pub fn (mut e VCodeEmitter) add_constant(const_def string) {
+	// ⚡ Bolt: fast_trim_space avoids redundant allocations when formatting constants.
 	mut updated := const_def
 	if const_def.starts_with('pub const ') {
 		name_part := const_def[10..]
 		if idx := name_part.index('=') {
-			name := name_part[..idx].trim_space()
+			name := base.fast_trim_space(name_part[..idx])
 			rest := name_part[idx..]
-			updated = 'pub const ${to_snake_case(name)} ${rest.trim_space()}'
+			updated = 'pub const ${to_snake_case(name)} ${base.fast_trim_space(rest)}'
 		}
 	} else if const_def.starts_with('const ') {
 		name_part := const_def[6..]
 		if idx := name_part.index('=') {
-			name := name_part[..idx].trim_space()
+			name := base.fast_trim_space(name_part[..idx])
 			rest := name_part[idx..]
-			updated = 'const ${to_snake_case(name)} ${rest.trim_space()}'
+			updated = 'const ${to_snake_case(name)} ${base.fast_trim_space(rest)}'
 		}
 	}
 	e.constants << updated
