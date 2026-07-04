@@ -851,9 +851,10 @@ fn main() { richards() }
 	mut potential_imports := []string{}
 
 	for line in t.state.output {
-		trimmed := line.trim_space()
+		// ⚡ Bolt: Fast-path for trim_space avoids redundant heap allocations in the final emission pass.
+		trimmed := base.fast_trim_space(line)
 		if trimmed.starts_with('import ') {
-			potential_imports << trimmed[7..].trim_space()
+			potential_imports << base.fast_trim_space(trimmed[7..])
 			continue
 		}
 

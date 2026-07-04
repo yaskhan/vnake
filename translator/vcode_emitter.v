@@ -72,9 +72,10 @@ pub fn (mut e VCodeEmitter) add_helper_import(module_name string) {
 }
 
 pub fn (mut e VCodeEmitter) add_global(global_def string) {
-	mut name := global_def.trim_space()
+	// ⚡ Bolt: Fast-path for trim_space avoids redundant heap allocations in V 0.5.1.
+	mut name := base.fast_trim_space(global_def)
 	if name.starts_with('__global ') {
-		name = name['__global '.len..].trim_space()
+		name = base.fast_trim_space(name['__global '.len..])
 	}
 	if name.contains(' ') {
 		name = name.all_before(' ')
@@ -92,16 +93,18 @@ pub fn (mut e VCodeEmitter) add_constant(const_def string) {
 	if const_def.starts_with('pub const ') {
 		name_part := const_def[10..]
 		if idx := name_part.index('=') {
-			name := name_part[..idx].trim_space()
+			// ⚡ Bolt: Fast-path for trim_space avoids redundant heap allocations.
+			name := base.fast_trim_space(name_part[..idx])
 			rest := name_part[idx..]
-			updated = 'pub const ${to_snake_case(name)} ${rest.trim_space()}'
+			updated = 'pub const ${to_snake_case(name)} ${base.fast_trim_space(rest)}'
 		}
 	} else if const_def.starts_with('const ') {
 		name_part := const_def[6..]
 		if idx := name_part.index('=') {
-			name := name_part[..idx].trim_space()
+			// ⚡ Bolt: Fast-path for trim_space avoids redundant heap allocations.
+			name := base.fast_trim_space(name_part[..idx])
 			rest := name_part[idx..]
-			updated = 'const ${to_snake_case(name)} ${rest.trim_space()}'
+			updated = 'const ${to_snake_case(name)} ${base.fast_trim_space(rest)}'
 		}
 	}
 	e.constants << updated
@@ -138,8 +141,14 @@ pub fn (e &VCodeEmitter) emit() string {
 
 	if e.imports.len > 0 || e.helper_imports.len > 0 {
 		mut all_imports := e.imports.clone()
+		// ⚡ Bolt: Using a temporary map for O(1) deduplication of helper imports.
+		mut seen := map[string]bool{}
+		for imp in all_imports {
+			seen[imp] = true
+		}
 		for imp in e.helper_imports {
-			if imp !in all_imports {
+			if imp !in seen {
+				seen[imp] = true
 				all_imports << imp
 			}
 		}
@@ -310,7 +319,7 @@ pub fn (e &VCodeEmitter) raw_emit() string {
 			lines << m
 		}
 	}
-	res := lines.join('\n').trim_space()
+	res := base.fast_trim_space(lines.join('\n'))
 	if res.len == 0 && (e.structs.len > 0 || e.functions.len > 0 || e.constants.len > 0) {
 		eprintln('BUG: raw_emit returning empty while collections populated! structs=${e.structs.len} funcs=${e.functions.len} consts=${e.constants.len}')
 	}
