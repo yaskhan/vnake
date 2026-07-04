@@ -89,6 +89,7 @@ pub fn (mut e VCodeEmitter) add_global(global_def string) {
 }
 
 pub fn (mut e VCodeEmitter) add_constant(const_def string) {
+	// ⚡ Bolt: fast_trim_space avoids redundant allocations when formatting constants.
 	mut updated := const_def
 	if const_def.starts_with('pub const ') {
 		name_part := const_def[10..]
