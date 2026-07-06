@@ -61,6 +61,10 @@
 **Learning:** In V 0.5.1, sequential string transformation passes that each involve `split('\n')` and `join('\n')` create massive heap pressure and redundant (N)$ scans. Combining these into a single line-by-line pass reduces complexity from (K \times N)$ to (N)$ and eliminates multiple intermediate array and string allocations.
 **Action:** Always consolidate multiple line-based transformations into a single pass with a state machine or conditional logic.
 
+## 2025-02-15 - [Recursive Descent Parser Dispatch Optimization]
+**Learning:** In V 0.5.1, using `match true` with sequential `current_is(.type)` or `current_is_keyword('name')` calls in a recursive descent parser is significantly slower than a single `match tok.typ` with a nested `match tok.value` for keywords. The latter allows the V compiler to generate more efficient branch structures (like jump tables for the enum) and avoids redundant method calls and property accesses per token.
+**Action:** Always prefer `match enum_val` for primary dispatch in parsers and lexers to leverage compiler-level optimizations.
+
 ## 2024-05-26 - [V-Lang Allocation-Free Case-Insensitive Checks]
 **Learning:** Calling `to_lower()` on every identifier to check for reserved keywords causes significant memory churn. Since most identifiers are already lowercase, a fast-path scan for uppercase bytes (`ch >= 'A' && ch <= 'Z'`) before calling `to_lower()` avoids allocations in the majority of cases.
 **Action:** Use conditional case conversion for identifier validation in hot paths.
