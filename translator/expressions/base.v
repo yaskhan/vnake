@@ -698,7 +698,9 @@ pub fn (mut eg ExprGen) visit_tuple(node ast.Tuple) string {
 
 pub fn (mut eg ExprGen) visit_dict(node ast.Dict) string {
 	mut dict_type := if eg.target_type.len > 0 { eg.target_type } else { 'Any' }
-	mut pure_dict_type := dict_type.trim_left('?&')
+	// Optimization: Using analyzer.clean_v_type instead of trim_left('?&') avoids
+	// redundant heap allocations in V 0.5.1 hot paths.
+	mut pure_dict_type := analyzer.clean_v_type(dict_type)
 	is_struct := pure_dict_type in eg.state.defined_classes
 		|| pure_dict_type in eg.state.typed_dicts
 	if is_struct {
@@ -854,11 +856,12 @@ pub fn (mut eg ExprGen) visit_lambda(node ast.Lambda) string {
 		bracket_idx := line.index('(') or { -1 }
 		close_bracket_idx := line.index(')') or { -1 }
 		if bracket_idx != -1 && close_bracket_idx != -1 {
-			params_str := line[bracket_idx + 1..close_bracket_idx].trim_space()
+			// Optimization: fast_trim_space avoids redundant heap allocations in V 0.5.1.
+			params_str := base.fast_trim_space(line[bracket_idx + 1..close_bracket_idx])
 			if params_str.len > 0 {
 				ctx_param_types = models.split_generic_args(params_str)
 			}
-			ret_part := line[close_bracket_idx + 1..].trim_space()
+			ret_part := base.fast_trim_space(line[close_bracket_idx + 1..])
 			if ret_part.len > 0 {
 				ctx_ret_type = ret_part
 			}

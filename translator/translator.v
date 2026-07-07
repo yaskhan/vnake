@@ -513,7 +513,9 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 		return struct_name_tuple
 	})
 
-	pure_res := res.trim_left('?&')
+	// Optimization: Using analyzer.clean_v_type instead of trim_left('?&') avoids
+	// redundant heap allocations in V 0.5.1 hot paths.
+	pure_res := analyzer.clean_v_type(res)
 	if pure_res in t.state.known_interfaces || pure_res in t.state.class_to_impl {
 		return res.replace('&', '')
 	}
@@ -523,7 +525,7 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 	}
 
 	mut final_res := res
-	pure_v := final_res.trim_left('?&')
+	pure_v := analyzer.clean_v_type(final_res)
 	is_type_var := pure_v in t.state.type_vars || pure_v in t.state.current_class_generics
 
 	if t.state.is_v_class_type(pure_v) && !base.is_v_array_type(pure_v)
