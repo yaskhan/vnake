@@ -90,9 +90,11 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 		ot := guess_type(node.orelse, ctx, use_location)
 		return if bt == ot {
 			bt
-		} else if is_v_optional_type(bt) && bt.trim_left('?') == ot {
+		} else if is_v_optional_type(bt) && bt[1..] == ot {
+			// Optimization: Using manual slicing bt[1..] instead of trim_left('?') avoids allocation.
 			bt
-		} else if is_v_optional_type(ot) && ot.trim_left('?') == bt {
+		} else if is_v_optional_type(ot) && ot[1..] == bt {
+			// Optimization: Using manual slicing ot[1..] instead of trim_left('?') avoids allocation.
 			ot
 		} else {
 			'Any'
@@ -568,12 +570,9 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 	}
 
 	val_type := guess_type(node.value, ctx, false)
-	// ⚡ Bolt: Fast-path for trim_left allocation.
-	base_type := if val_type.len > 0 && (val_type[0] == `?` || val_type[0] == `&`) {
-		val_type.trim_left('?&')
-	} else {
-		val_type
-	}
+	// Optimization: clean_v_type provides a fast-path for v_type.trim_left('?&')
+	// avoiding redundant heap allocations in V 0.5.1.
+	base_type := analyzer.clean_v_type(val_type)
 	if base_type != 'Any' && base_type != 'int' {
 		mut attr_name := '${base_type}.${node.attr}'
 		if res := ctx.type_map[attr_name] {

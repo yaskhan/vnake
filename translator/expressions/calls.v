@@ -1775,7 +1775,8 @@ pub fn (mut eg ExprGen) process_mutated_args(func_name_str string, args []string
 			}
 		}
 
-		mut sanitized_arg := arg.trim('()').trim_space()
+		// Optimization: Using fast_trim_space avoids redundant heap allocations in V 0.5.1.
+		mut sanitized_arg := base.fast_trim_space(arg.trim('()'))
 		mut is_narrowed := eg.state.narrowed_vars[sanitized_arg]
 		if !is_narrowed {
 			for k, v in eg.state.name_remap {
