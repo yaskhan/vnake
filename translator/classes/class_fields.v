@@ -176,7 +176,7 @@ fn (h ClassFieldsHandler) should_strip_init(_ string, default_val string) bool {
 }
 
 fn (h ClassFieldsHandler) is_field_mutated(struct_name string, field_name string, orig_name string, env &ClassVisitEnv) bool {
-	base_struct_name := struct_name.replace('_Impl', '')
+	base_struct_name := strip_impl_suffix(struct_name)
 	mut candidates := [field_name]
 	if orig_name.len > 0 && orig_name != field_name {
 		candidates << orig_name
@@ -345,7 +345,7 @@ fn (h ClassFieldsHandler) walk_init_expr(target ast.Expression, self_name string
 			}
 			env.analyzer.type_map['${struct_name}.${orig_name}'] = f_type
 			if struct_name.ends_with('_Impl') {
-				base_struct_name := struct_name.replace('_Impl', '')
+				base_struct_name := strip_impl_suffix(struct_name)
 				env.analyzer.type_map['${base_struct_name}.${orig_name}'] = f_type
 			} else {
 				env.analyzer.type_map['${struct_name}_Impl.${orig_name}'] = f_type
@@ -443,7 +443,7 @@ fn (h ClassFieldsHandler) process_class_attributes(body []ast.Statement, struct_
 					// Register for lookups
 					env.analyzer.type_map['${struct_name}.${orig_name}'] = field_type
 					if struct_name.ends_with('_Impl') {
-						base_struct_name := struct_name.replace('_Impl', '')
+						base_struct_name := strip_impl_suffix(struct_name)
 						env.analyzer.type_map['${base_struct_name}.${orig_name}'] = field_type
 					}
 				}
