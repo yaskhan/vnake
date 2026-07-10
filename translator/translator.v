@@ -793,6 +793,24 @@ fn main() { richards() }
 
 	t.append_helpers()
 
+	// Optimization: Single-pass scan of used_builtins to detect binary usage and collect prefixes.
+	// ⚡ Bolt: Consolidating builtin checks into a single loop avoids O(K * B) complexity.
+	mut used_builtin_prefixes := map[string]bool{}
+	mut uses_binary := false
+	for k, v in t.state.used_builtins {
+		if !v {
+			continue
+		}
+		if k.starts_with('py_struct_') {
+			uses_binary = true
+		}
+		mut dot_idx := k.index('.') or { -1 }
+		for dot_idx != -1 {
+			used_builtin_prefixes[k[..dot_idx]] = true
+			dot_idx = k.index_after('.', dot_idx + 1) or { -1 }
+		}
+	}
+
 	if t.state.used_builtins['regex'] {
 		e.add_import('regex')
 	}
@@ -823,38 +841,23 @@ fn main() { richards() }
 	if t.state.used_builtins['vexc'] {
 		e.add_import('div72.vexc')
 	}
-
-	mut uses_os := false
-	for line in t.state.output {
-		if line.contains('os.') {
-			uses_os = true
-			break
-		}
-	}
-	if uses_os {
-		e.add_import('os')
-	}
-
-	mut uses_binary := false
-	for k, v in t.state.used_builtins {
-		if k.starts_with('py_struct_') && v {
-			uses_binary = true
-			break
-		}
-	}
 	if uses_binary {
 		e.add_import('binary')
 	}
 
-	// Cleanup unused imports
-	// ⚡ Bolt: Single-pass collection of non-import lines into a search buffer avoids O(N*M) nested loops.
-	// This reduces complexity from O(M * N) to O(M + N) where M is imports and N is code lines.
-	mut search_buffer := strings.new_builder(t.state.output.len * 32)
+	// Optimization: Single-pass emission and used symbol collection.
+	// ⚡ Bolt: Combining statement categorization, os. detection, and used-prefix collection
+	// avoids multiple O(N) passes and eliminates the O(M * N) search buffer complexity.
 	mut potential_imports := []string{}
+	mut seen_prefixes := map[string]bool{}
+	mut uses_os := false
 
 	for line in t.state.output {
-		// ⚡ Bolt: Fast-path for trim_space avoids redundant heap allocations in the final emission pass.
 		trimmed := base.fast_trim_space(line)
+		if trimmed.len == 0 {
+			continue
+		}
+
 		if trimmed.starts_with('import ') {
 			potential_imports << base.fast_trim_space(trimmed[7..])
 			continue
@@ -866,36 +869,57 @@ fn main() { richards() }
 			e.add_global(trimmed)
 		} else if trimmed.starts_with('type ') || trimmed.starts_with('pub type ') {
 			e.add_struct(trimmed)
-		} else if trimmed.len > 0 {
+		} else {
 			e.add_main_statement(line)
 		}
 
-		// Add to search buffer if it might contain a module reference (usually has a dot)
-		if line.contains('.') {
-			search_buffer.write_string(line)
-			search_buffer.write_byte(`\n`)
+		// Fast identifier-dot scanner to collect used module prefixes.
+		// ⚡ Bolt: Using is_alnum() to support identifiers ending in digits (e.g. sha256).
+		// We ensure the prefix does not start with a digit to correctly ignore numeric literals.
+		for i := 0; i < line.len; i++ {
+			if line[i] == `.` {
+				if i > 0 && (line[i - 1].is_alnum() || line[i - 1] == `_`) {
+					// 1. Extract full qualified prefix (e.g. pkg.mod)
+					mut k := i - 1
+					for k >= 0 && (line[k].is_alnum() || line[k] == `_` || line[k] == `.`) {
+						k--
+					}
+					prefix_full := line[k + 1..i]
+					if prefix_full.len > 0 && !prefix_full[0].is_digit() {
+						if prefix_full == 'os' {
+							uses_os = true
+						}
+						seen_prefixes[prefix_full] = true
+					}
+
+					// 2. Also extract immediate prefix (e.g. mod)
+					mut m := i - 1
+					for m >= 0 && (line[m].is_alnum() || line[m] == `_`) {
+						m--
+					}
+					prefix_short := line[m + 1..i]
+					if prefix_short.len > 0 && !prefix_short[0].is_digit() {
+						seen_prefixes[prefix_short] = true
+					}
+				}
+			}
 		}
 	}
 
-	search_str := search_buffer.str()
+	if uses_os {
+		e.add_import('os')
+	}
+
+	// Decide which potential imports to keep using O(1) lookups
 	for imp_name in potential_imports {
-		mut is_used := false
-		// Check if any used_builtins starts with this module name
-		for k, v in t.state.used_builtins {
-			if v && k.starts_with(imp_name + '.') {
-				is_used = true
-				break
-			}
-		}
-		// Also check if the module name appears in output code
+		mut is_used := imp_name in seen_prefixes || imp_name in used_builtin_prefixes
 		if !is_used {
 			short_name := if idx := imp_name.last_index('.') {
 				imp_name[idx + 1..]
 			} else {
 				imp_name
 			}
-			// Search for 'module.' or 'short_name.' patterns
-			if search_str.contains(imp_name + '.') || search_str.contains(short_name + '.') {
+			if short_name in seen_prefixes {
 				is_used = true
 			}
 		}
