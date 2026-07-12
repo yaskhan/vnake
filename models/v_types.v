@@ -39,9 +39,8 @@ pub fn get_tuple_struct_name(types_str string) string {
 	mut sb := strings.new_builder(types_str.len + 12)
 	sb.write_string('TupleStruct_')
 
-	parts := types_str.split(',')
-	for p in parts {
-		t := fast_trim_space(p)
+	parts := split_generic_args(types_str)
+	for t in parts {
 		if t.len == 0 {
 			sb.write_string('Any')
 			continue
@@ -61,7 +60,7 @@ pub fn get_tuple_struct_name(types_str string) string {
 				continue
 			}
 			ch := t[i]
-			if ch != `[` && ch != `]` && ch != `.` {
+			if ch != `[` && ch != `]` && ch != `.` && ch != `,` && ch != ` ` {
 				clean_res << ch
 			}
 		}
