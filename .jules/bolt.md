@@ -53,6 +53,10 @@
 ## 2025-05-25 - [Single-pass string escaping with strings.Builder]
 **Learning:** Sequential `.replace()` calls in V 0.5.1 are inefficient for multiple escapes as each call performs a full string scan and a heap allocation. A fast-path check for characters needing escaping followed by a single-pass `strings.Builder` transformation reduces complexity from $O(N \cdot K)$ to $O(N)$ and eliminates intermediate allocations. Measured ~1.84x speedup for typical string literals.
 **Action:** Replace multiple sequential `.replace()` calls with a fast-path scan and a single-pass `strings.Builder` loop in high-traffic string processing code.
+
+## 2025-05-27 - [Optimized Keyword Identification with Byte-Level Dispatch]
+**Learning:** In V 0.5.1, a single large `match` expression for string set membership (e.g., 35+ keywords) is less efficient than a two-stage dispatch: first on string length, then on the first character (`s[0]`). This reduces the number of full string comparisons in the hot path. Benchmarks showed a ~2x speedup (2343ms vs 1047ms for 200M calls) in production mode.
+**Action:** Use byte-level dispatch on `s[0]` for large constant string set lookups in performance-critical code like lexers.
 ## 2025-01-24 - Optimized Lexer Operator and String Scanning
 **Learning:** In V 0.5.1, `u8.ascii_str()` allocates a new string on the heap. Replacing it with string literals in the lexer's hot path significantly reduces memory churn. Additionally, manual `l.pos++` and `l.column++` increments for known non-newline characters avoid the branching overhead of `l.advance_char()`.
 **Action:** Always prefer string literals or `match` expressions returning literals over `ascii_str()` for known characters in hot paths. Use manual position tracking for non-newline ASCII sequences to bypass `advance_char()` branches.
