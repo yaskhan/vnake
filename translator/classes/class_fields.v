@@ -1,6 +1,7 @@
 module classes
 
 import ast
+import models
 
 pub struct FieldDefInfo {
 pub mut:
@@ -25,8 +26,9 @@ fn (h ClassFieldsHandler) field_usage_parts(v_type string) []string {
 	if v_type.len == 0 || v_type in ['Any', 'unknown'] {
 		return parts
 	}
-	for raw_part in v_type.split(' | ') {
-		part := raw_part.trim_space()
+	// ⚡ Bolt: Single-pass splitting and trimming avoids multiple intermediate allocations.
+	union_parts := models.split_union_parts(v_type)
+	for part in union_parts {
 		if part.len == 0 || part in ['Any', 'unknown'] {
 			continue
 		}
@@ -212,7 +214,6 @@ fn (h ClassFieldsHandler) get_field_def_info(name string, field_type string, str
 		}
 	}
 
-	clean := final_type.trim_left('?!')
 	mut def := '    ${name} ${final_type}'
 	if default_val.len > 0 && !h.should_strip_init(field_type, default_val) {
 		def += ' = ${default_val}'
