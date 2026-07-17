@@ -929,7 +929,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				is_mutated = m_info.is_mutated
 
 				// Detect if it's a struct/class type or mutated
-				c_type := t.state.current_assignment_type.trim_left('?&')
+				c_type := if t.state.current_assignment_type.len > 0 && (t.state.current_assignment_type[0] == `?` || t.state.current_assignment_type[0] == `&`) { t.state.current_assignment_type.trim_left('?&') } else { t.state.current_assignment_type }
 				is_t_struct := c_type.len > 0 && c_type[0].is_capital()
 					&& c_type !in ['Any', 'LiteralString', 'Self', 'NoneType']
 				is_rhs_ptr := rhs_text.contains('&') || rhs_text.contains('new_')
@@ -959,7 +959,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			v_type := t.state.current_assignment_type
 			if t.is_declared_local(lhs) {
 				if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
-					pure := v_type.trim_left('?&')
+					pure := if v_type.len > 0 && (v_type[0] == `?` || v_type[0] == `&`) { v_type.trim_left('?&') } else { v_type }
 					is_interface := pure in t.state.known_interfaces
 						|| pure in t.state.class_to_impl
 					if is_interface {
@@ -973,7 +973,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 			} else {
 				if lhs in t.mutable_locals || is_opt {
 					if is_opt && !rhs_text.starts_with('?') && rhs_text != 'none' {
-						pure := v_type.trim_left('?&')
+						pure := if v_type.len > 0 && (v_type[0] == `?` || v_type[0] == `&`) { v_type.trim_left('?&') } else { v_type }
 						is_interface := pure in t.state.known_interfaces
 							|| pure in t.state.class_to_impl
 						if is_interface {
