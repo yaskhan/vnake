@@ -281,7 +281,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		}
 		rec_type := guess_type(f.value, ctx, false)
 		if rec_type != 'Any' {
-			pure_rec := rec_type.trim_left('?&')
+			pure_rec := if rec_type.len > 0 && (rec_type[0] == `?` || rec_type[0] == `&`) { rec_type.trim_left('?&') } else { rec_type }
 			mut attr_name := pure_rec + '.' + to_snake_case(f.attr).to_lower()
 
 			if ctx.analyzer != unsafe { nil } {
