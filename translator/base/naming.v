@@ -288,12 +288,14 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 		return name
 	}
 
-	mut clean_name := name[prefix_count..]
+	// ⚡ Bolt: Avoiding string slicing and underscore repetition when prefix_count == 0
+	// eliminates slow string/allocation overhead for the most common identifier case.
+	mut clean_name := if prefix_count > 0 { name[prefix_count..] } else { name }
 
 	if is_type {
 		// ⚡ Bolt: Fast path for type names already in PascalCase.
 		if !clean_name.contains('_') && clean_name.len > 0 && clean_name[0].is_capital() {
-			mut res := clean_name + '_'.repeat(prefix_count)
+			mut res := if prefix_count > 0 { clean_name + '_'.repeat(prefix_count) } else { clean_name }
 			if res in reserved_words || is_v_reserved_keyword(res) {
 				return 'Py${res}'
 			}
@@ -321,7 +323,9 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 			}
 		}
 		mut res := res_bytes.bytestr()
-		res += '_'.repeat(prefix_count)
+		if prefix_count > 0 {
+			res += '_'.repeat(prefix_count)
+		}
 
 		if res in reserved_words || is_v_reserved_keyword(res) {
 			return 'Py${res}'
@@ -331,7 +335,9 @@ pub fn sanitize_name(name string, is_type bool, reserved_words map[string]bool, 
 
 	// Others: snake_case
 	mut sanitized := to_snake_case(clean_name)
-	sanitized += '_'.repeat(prefix_count)
+	if prefix_count > 0 {
+		sanitized += '_'.repeat(prefix_count)
+	}
 
 	if sanitized in reserved_words || is_v_reserved_keyword(sanitized) {
 		return 'py_${sanitized}'
