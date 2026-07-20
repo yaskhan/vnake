@@ -59,6 +59,11 @@ pub fn (c CompatibilityLayer) preprocess_source(source string) string {
 	// ⚡ Bolt: First pass for t-strings using strings.Builder.
 	mut t_processed := c.preprocess_tstrings(source)
 
+	// ⚡ Bolt: If the source doesn't contain 'except' or 'case', we can skip the expensive line-by-line parsing.
+	if !t_processed.contains('except') && !t_processed.contains('case') {
+		return t_processed
+	}
+
 	// ⚡ Bolt: Combined pass for except and match to avoid multiple split/join cycles.
 	// This reduces complexity from O(3*N) string scans to O(2*N).
 	lines := t_processed.split('\n')
@@ -209,17 +214,22 @@ fn (c CompatibilityLayer) match_except_header(line string) ExceptHeader {
 		i++
 	}
 	// ⚡ Bolt: Defer indent extraction until a match is confirmed.
-	if i + 6 > line.len {
+	if i + 7 > line.len {
 		return ExceptHeader{}
 	}
-	if line[i..].starts_with('except* ') {
+	// Byte-level check for 'except* '
+	if i + 8 <= line.len && line[i] == `e` && line[i + 1] == `x` && line[i + 2] == `c`
+		&& line[i + 3] == `e` && line[i + 4] == `p` && line[i + 5] == `t` && line[i + 6] == `*`
+		&& line[i + 7] == ` ` {
 		return ExceptHeader{
 			indent: line[..i]
 			kind:   'except* '
 			rest:   line[i + 8..]
 		}
 	}
-	if line[i..].starts_with('except ') {
+	// Byte-level check for 'except '
+	if line[i] == `e` && line[i + 1] == `x` && line[i + 2] == `c` && line[i + 3] == `e`
+		&& line[i + 4] == `p` && line[i + 5] == `t` && line[i + 6] == ` ` {
 		return ExceptHeader{
 			indent: line[..i]
 			kind:   'except '
@@ -332,14 +342,19 @@ fn (c CompatibilityLayer) match_case_header(line string) CaseHeader {
 		i++
 	}
 	// ⚡ Bolt: Defer indent extraction until a match is confirmed.
-	if i + 5 > line.len || !line[i..].starts_with('case ') {
+	if i + 5 > line.len {
 		return CaseHeader{}
 	}
-	return CaseHeader{
-		indent: line[..i]
-		kind:   'case '
-		rest:   line[i + 5..]
+	// Byte-level check for 'case '
+	if line[i] == `c` && line[i + 1] == `a` && line[i + 2] == `s` && line[i + 3] == `e`
+		&& line[i + 4] == ` ` {
+		return CaseHeader{
+			indent: line[..i]
+			kind:   'case '
+			rest:   line[i + 5..]
+		}
 	}
+	return CaseHeader{}
 }
 
 fn (c CompatibilityLayer) mangle_recursive(text string) string {

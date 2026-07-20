@@ -72,3 +72,7 @@
 ## 2024-05-26 - [V-Lang Allocation-Free Case-Insensitive Checks]
 **Learning:** Calling `to_lower()` on every identifier to check for reserved keywords causes significant memory churn. Since most identifiers are already lowercase, a fast-path scan for uppercase bytes (`ch >= 'A' && ch <= 'Z'`) before calling `to_lower()` avoids allocations in the majority of cases.
 **Action:** Use conditional case conversion for identifier validation in hot paths.
+
+## 2025-05-28 - [Optimized Python Compatibility Preprocessing]
+**Learning:** In V 0.5.1, splitting a source file line-by-line to match exceptions and match-case patterns always incurs high overhead even when no such elements exist. Adding a simple substring check (e.g., `contains('except') || contains('case')`) at the start of `preprocess_source` allows bypassing the line processing loop for the vast majority of files. Furthermore, slicing strings (e.g., `line[i..].starts_with(...)`) within lines during character scanning allocates memory on the heap. Replacing string slicing with index-based, byte-by-byte direct comparisons completely avoids heap allocation.
+**Action:** Implement fast-path checks for early returns on entire strings, and use direct index-based byte matching rather than slicing + starts_with in parser/lexing hot paths.
