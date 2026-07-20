@@ -1482,18 +1482,20 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 			parts << fparts
 		} else {
 			prefix := if p.current_is(.tstring_tok) { 't' } else { '' }
-			if p.current_token.value.starts_with("b'") || p.current_token.value.starts_with('b"') {
+			v_tok_val := p.current_token.value
+			// ⚡ Bolt: Fast-path index/byte checks avoid starts_with string allocations
+			if v_tok_val.len >= 3 && v_tok_val[0] == `b` && (v_tok_val[1] == `'` || v_tok_val[1] == `"`) {
 				has_bytes = true
 				parts << Constant{
 					token: p.current_token
-					value: p.current_token.value
+					value: v_tok_val
 				}
 				p.advance()
 				continue
 			}
 			parts << Constant{
 				token: p.current_token
-				value: '${prefix}${p.current_token.value}'
+				value: '${prefix}${v_tok_val}'
 			}
 			p.advance()
 		}
@@ -1505,7 +1507,8 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 			for part in parts {
 				if part is Constant {
 					v := part.value
-					if v.starts_with("b'") || v.starts_with('b"') {
+					// ⚡ Bolt: Fast-path index/byte checks avoid starts_with string allocations
+					if v.len >= 3 && v[0] == `b` && (v[1] == `'` || v[1] == `"`) {
 						sb.write_string(v[2..v.len - 1])
 					} else {
 						sb.write_string(v)
@@ -1524,7 +1527,8 @@ fn (mut p Parser) parse_string_literal() ?Expression {
 			if part is Constant {
 				v := part.value
 				mut start_idx := 1
-				if v.starts_with('t') {
+				// ⚡ Bolt: Fast-path index/byte checks avoid starts_with string allocations
+				if v.len > 0 && v[0] == `t` {
 					is_t = true
 					start_idx = 2
 				}
