@@ -24,19 +24,70 @@ pub fn (c CompatibilityLayer) is_v_reserved(name string) bool {
 }
 
 // is_v_reserved_keyword checks if the name is a V reserved keyword.
-// This is optimized to use a match Expression for faster lookup.
+// This is optimized to use a two-stage dispatch (first on length, then on first character)
+// which reduces full string comparisons in the hot path.
 fn is_v_reserved_keyword(name string) bool {
-	// ⚡ Bolt: Fast path for identifiers that cannot be keywords based on length.
-	// Reserved keywords are 2-9 chars long.
 	if name.len < 2 || name.len > 9 {
 		return false
 	}
-	return match name {
-		'fn', 'type', 'struct', 'mut', 'if', 'else', 'for', 'return', 'match', 'interface', 'enum',
-		'pub', 'import', 'module', 'const', 'unsafe', 'defer', 'go', 'chan', 'shared', 'spawn',
-		'assert', 'sizeof', 'typeof', '__global', 'as', 'in', 'is', 'none', 'map', 'array',
-		'string', 'bool', 'any', 'Any', 'union' {
-			true
+	return match name.len {
+		2 {
+			match name[0] {
+				`f` { name == 'fn' }
+				`i` { name == 'if' || name == 'in' || name == 'is' }
+				`g` { name == 'go' }
+				`a` { name == 'as' }
+				else { false }
+			}
+		}
+		3 {
+			match name[0] {
+				`m` { name == 'mut' || name == 'map' }
+				`f` { name == 'for' }
+				`p` { name == 'pub' }
+				`a` { name == 'any' }
+				`A` { name == 'Any' }
+				else { false }
+			}
+		}
+		4 {
+			match name[0] {
+				`t` { name == 'type' }
+				`e` { name == 'else' || name == 'enum' }
+				`c` { name == 'chan' }
+				`n` { name == 'none' }
+				`b` { name == 'bool' }
+				else { false }
+			}
+		}
+		5 {
+			match name[0] {
+				`m` { name == 'match' }
+				`c` { name == 'const' }
+				`d` { name == 'defer' }
+				`s` { name == 'spawn' }
+				`a` { name == 'array' }
+				`u` { name == 'union' }
+				else { false }
+			}
+		}
+		6 {
+			match name[0] {
+				`s` { name == 'struct' || name == 'shared' || name == 'sizeof' || name == 'string' }
+				`r` { name == 'return' }
+				`i` { name == 'import' }
+				`m` { name == 'module' }
+				`u` { name == 'unsafe' }
+				`a` { name == 'assert' }
+				`t` { name == 'typeof' }
+				else { false }
+			}
+		}
+		8 {
+			name == '__global'
+		}
+		9 {
+			name == 'interface'
 		}
 		else {
 			false
@@ -306,7 +357,7 @@ fn (c CompatibilityLayer) split_except_alias(clause string) (string, string) {
 			if depth > 0 {
 				depth--
 			}
-		} else if depth == 0 && idx + 4 <= clause.len && clause[idx..idx + 4] == ' as ' {
+		} else if depth == 0 && idx + 4 <= clause.len && clause[idx] == ` ` && clause[idx + 1] == `a` && clause[idx + 2] == `s` && clause[idx + 3] == ` ` {
 			return clause[..idx], clause[idx..]
 		}
 		idx++
