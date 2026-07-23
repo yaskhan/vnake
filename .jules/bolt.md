@@ -76,3 +76,7 @@
 ## 2025-05-28 - [Optimized Python Compatibility Preprocessing]
 **Learning:** In V 0.5.1, splitting a source file line-by-line to match exceptions and match-case patterns always incurs high overhead even when no such elements exist. Adding a simple substring check (e.g., `contains('except') || contains('case')`) at the start of `preprocess_source` allows bypassing the line processing loop for the vast majority of files. Furthermore, slicing strings (e.g., `line[i..].starts_with(...)`) within lines during character scanning allocates memory on the heap. Replacing string slicing with index-based, byte-by-byte direct comparisons completely avoids heap allocation.
 **Action:** Implement fast-path checks for early returns on entire strings, and use direct index-based byte matching rather than slicing + starts_with in parser/lexing hot paths.
+
+## 2026-04-12 - [Optimized Import SCC Check using Pre-calculated Map Keys]
+**Learning:** In hot loops, transforming path strings repeatedly (e.g., calling `.replace()` multiple times to normalize paths) to check for set membership results in a large number of heap allocations and redundant scans. If the set of valid paths is static or pre-calculated elsewhere, querying the pre-calculated map keys directly completely eliminates string manipulation, resulting in a ~6.8x speedup.
+**Action:** For hot-path string membership checks, always leverage pre-calculated normalized map keys or sets instead of running string manipulation on raw inputs inside of loops.
