@@ -657,7 +657,7 @@ fn (mut t Translator) visit_assign(node ast.Assign) {
 
 		if t.state.indent_level == 0 && base.is_compile_time_evaluable(node.value)
 			&& id !in t.state.global_vars {
-			mut v_id := base.to_snake_case(id).to_lower()
+			mut v_id := base.to_snake_case(id)
 			if base.is_v_reserved_keyword(v_id) {
 				v_id = 'g_${v_id}'
 			}
@@ -1016,7 +1016,7 @@ fn (mut t Translator) visit_ann_assign(node ast.AnnAssign) {
 				mut v_id := if id_inv in t.state.global_vars {
 					id_inv.to_lower()
 				} else {
-					base.to_snake_case(id_inv).to_lower()
+					base.to_snake_case(id_inv)
 				}
 				if base.is_v_reserved_keyword(v_id) {
 					v_id = 'g_${v_id}'

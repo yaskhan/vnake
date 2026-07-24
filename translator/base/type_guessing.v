@@ -282,7 +282,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		rec_type := guess_type(f.value, ctx, false)
 		if rec_type != 'Any' {
 			pure_rec := if rec_type.len > 0 && (rec_type[0] == `?` || rec_type[0] == `&`) { rec_type.trim_left('?&') } else { rec_type }
-			mut attr_name := pure_rec + '.' + to_snake_case(f.attr).to_lower()
+			mut attr_name := pure_rec + '.' + to_snake_case(f.attr)
 
 			if ctx.analyzer != unsafe { nil } {
 				a := unsafe { &analyzer.Analyzer(ctx.analyzer) }
@@ -301,7 +301,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 				// Note: a.mypy_store.collected_signatures is map[class]map[method]Signature
 				if class_sigs := a.mypy_store.collected_signatures[pure_rec] {
 					for actual_py_name, _ in class_sigs {
-						if to_snake_case(actual_py_name).to_lower() == py_name {
+						if to_snake_case(actual_py_name) == py_name {
 							if sig := a.get_call_signature(pure_rec + '.' + actual_py_name) {
 								return sig.return_type
 							}
@@ -579,7 +579,7 @@ fn guess_type_attribute(node ast.Attribute, ctx TypeGuessingContext, use_locatio
 			return res
 		}
 		// Try sanitized name
-		attr_name = '${base_type}.${to_snake_case(node.attr).to_lower()}'
+		attr_name = '${base_type}.${to_snake_case(node.attr)}'
 		if res := ctx.type_map[attr_name] {
 			return res
 		}

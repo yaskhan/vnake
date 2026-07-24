@@ -119,7 +119,7 @@ pub fn (mut eg ExprGen) visit_attribute(node ast.Attribute) string {
 
 		// Handle Enum members
 		if eg.state.defined_classes[target_class]['is_enum'] {
-			return '${target_class}.${base.to_snake_case(node.attr).to_lower()}'
+			return '${target_class}.${base.to_snake_case(node.attr)}'
 		}
 
 		// Check for class variables first (meta singleton)

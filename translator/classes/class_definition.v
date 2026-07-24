@@ -454,7 +454,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 						anno_parts << "'${arg_name}': '${v_type}'"
 					}
 
-					mut mangled_factory := 'new_${base.to_snake_case(struct_name).to_lower()}'
+					mut mangled_factory := 'new_${base.to_snake_case(struct_name)}'
 					if mangled_factory.ends_with('_impl') {
 						mangled_factory = mangled_factory[..mangled_factory.len - 5]
 					}
@@ -555,7 +555,7 @@ pub fn (mut h ClassDefinitionHandler) visit_class_def(node &ast.ClassDef, mut en
 					// Avoid creating getters for fields that already have matching methods
 					mut already_has_method := false
 					for m in methods {
-						if base.to_snake_case(m.name).to_lower() == f.name {
+						if base.to_snake_case(m.name) == f.name {
 							already_has_method = true
 							break
 						}
