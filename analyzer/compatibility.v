@@ -261,7 +261,7 @@ fn (c CompatibilityLayer) split_except_alias(clause string) (string, string) {
 			if depth > 0 {
 				depth--
 			}
-		} else if depth == 0 && idx + 4 <= clause.len && clause[idx..idx + 4] == ' as ' {
+		} else if depth == 0 && idx + 4 <= clause.len && clause[idx] == ` ` && clause[idx + 1] == `a` && clause[idx + 2] == `s` && clause[idx + 3] == ` ` {
 			return clause[..idx], clause[idx..]
 		}
 		idx++
