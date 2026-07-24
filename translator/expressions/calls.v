@@ -1660,7 +1660,7 @@ pub fn (mut eg ExprGen) handle_object_method_call(node ast.Call, func_node ast.E
 	mut actual_attr := attr
 	if !actual_attr.starts_with('_') && actual_attr != 'items' && actual_attr != 'keys'
 		&& actual_attr != 'values' {
-		actual_attr = base.to_snake_case(attr).to_lower()
+		actual_attr = base.to_snake_case(attr)
 	}
 	sanitized_attr := base.sanitize_name(actual_attr, false, map[string]bool{}, '', map[string]bool{})
 	attr_pure := obj_type_raw.trim_left('?&')

@@ -31,7 +31,7 @@ pub fn (h SpecialClassesHandler) process_enum_body(node ast.ClassDef, is_flag bo
 		if item is ast.Assign {
 			for target in item.targets {
 				if target is ast.Name {
-					name := base.to_snake_case(target.id).to_lower()
+					name := base.to_snake_case(target.id)
 					val_expr := item.value
 					mut is_auto := false
 					if val_expr is ast.Call {
@@ -59,7 +59,7 @@ pub fn (h SpecialClassesHandler) process_enum_body(node ast.ClassDef, is_flag bo
 		} else if item is ast.AnnAssign {
 			target_expr := item.target
 			if target_expr is ast.Name {
-				name := base.to_snake_case(target_expr.id).to_lower()
+				name := base.to_snake_case(target_expr.id)
 				if value := item.value {
 					fields << '    ${name} = ${env.visit_expr_fn(value)}'
 				} else {

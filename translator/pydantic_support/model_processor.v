@@ -223,7 +223,7 @@ pub fn (p PydanticModelProcessor) process_model(node ast.ClassDef, mut env Pydan
 					call_args << arg_name
 				}
 
-				mut mangled_factory := 'new_${base.to_snake_case(struct_name).to_lower()}'
+				mut mangled_factory := 'new_${base.to_snake_case(struct_name)}'
 				if type_suffix_parts.len > 0 {
 					mangled_factory = '${mangled_factory}_${type_suffix_parts.join('_')}'
 				} else {
