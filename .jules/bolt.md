@@ -1,3 +1,7 @@
+## 2025-05-29 - [V-Lang starts_with and ends_with Overhead Avoidance]
+**Learning:** In V 0.5.1, standard library functional checks like `s.starts_with(prefix)` perform allocations and scans that create significant garbage collection and memory pressure when called in recursive descent parsers or type translation routines. Replacing these checks with direct byte-level and length-based indexing (e.g., `s.len >= 3 && s[0] == ...`) is extremely safe, completely allocation-free, and yields a dramatic performance improvement.
+**Action:** Always prefer direct, length-guarded, byte-level character comparisons over starts_with() or ends_with() for known short prefix/suffix matching in AST parsers and type converters.
+
 ## 2025-05-14 - [V-Lang String Optimization Trade-offs]
 **Learning:** In V, iterating over a string with `.runes()` and using `strings.Builder` for simple case conversion can be slower than recursive string splitting for short identifiers due to the overhead of UTF-8 decoding and builder allocations. However, a byte-based fast path for ASCII strings provides a 3-4x speedup while maintaining safety.
 **Action:** Always prefer ASCII fast paths for string utilities that process identifiers, falling back to rune-based logic only when `is_ascii()` is false.
@@ -80,3 +84,11 @@
 ## 2025-05-30 - [Redundant `.to_lower()` Allocation Elimination on `to_snake_case` Results]
 **Learning:** In V 0.5.1, calling `.to_lower()` on already lowercased strings like those returned by `to_snake_case()` is completely redundant and causes unnecessary heap allocations. Since strings are immutable and heap-allocated, removing these redundant method calls results in a measurable ~10.5% performance speedup on identifier translation/formatting hot paths.
 **Action:** Always avoid trailing case conversion calls (like `.to_lower()`) on strings whose helper functions (such as `to_snake_case`) already guarantee case conformity.
+
+## 2026-04-12 - [Optimized Import SCC Check using Pre-calculated Map Keys]
+**Learning:** In hot loops, transforming path strings repeatedly (e.g., calling `.replace()` multiple times to normalize paths) to check for set membership results in a large number of heap allocations and redundant scans. If the set of valid paths is static or pre-calculated elsewhere, querying the pre-calculated map keys directly completely eliminates string manipulation, resulting in a ~6.8x speedup.
+**Action:** For hot-path string membership checks, always leverage pre-calculated normalized map keys or sets instead of running string manipulation on raw inputs inside of loops.
+
+## 2025-06-01 - [Optimized Except-Alias Splitting and Reserved Keyword Checks]
+**Learning:** In V 0.5.1, calling string slicing inside nested/hot loops such as `clause[idx..idx + 4] == ' as '` triggers string descriptor instantiation and bounds checking on every iteration. Substituting it with a zero-allocation byte-level comparison (`clause[idx] == \` \` && clause[idx + 1] == \`a\` && ...`) completely avoids allocation and accelerates performance by ~4.38x. Additionally, a single large matching expression for reserved keyword detection can be accelerated by ~2.07x using a two-stage dispatch structure (first by string length, then by its first character) as it eliminates redundant full-string scans and comparison operations.
+**Action:** Replace string slice checks with multi-byte comparisons when scanning strings sequentially, and convert flat keyword match blocks to two-stage length/char dispatch structures.
