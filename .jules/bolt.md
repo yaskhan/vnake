@@ -1,3 +1,7 @@
+## 2025-05-29 - [V-Lang starts_with and ends_with Overhead Avoidance]
+**Learning:** In V 0.5.1, standard library functional checks like `s.starts_with(prefix)` perform allocations and scans that create significant garbage collection and memory pressure when called in recursive descent parsers or type translation routines. Replacing these checks with direct byte-level and length-based indexing (e.g., `s.len >= 3 && s[0] == ...`) is extremely safe, completely allocation-free, and yields a dramatic performance improvement.
+**Action:** Always prefer direct, length-guarded, byte-level character comparisons over starts_with() or ends_with() for known short prefix/suffix matching in AST parsers and type converters.
+
 ## 2025-05-14 - [V-Lang String Optimization Trade-offs]
 **Learning:** In V, iterating over a string with `.runes()` and using `strings.Builder` for simple case conversion can be slower than recursive string splitting for short identifiers due to the overhead of UTF-8 decoding and builder allocations. However, a byte-based fast path for ASCII strings provides a 3-4x speedup while maintaining safety.
 **Action:** Always prefer ASCII fast paths for string utilities that process identifiers, falling back to rune-based logic only when `is_ascii()` is false.
