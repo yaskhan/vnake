@@ -109,9 +109,13 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	mut receiver_str := ''
 	mut receiver_name := 'self'
 
-	mut args := node.args.posonlyargs.clone()
+	// ⚡ Bolt: Pre-allocate args slice using total capacity instead of multiple cloning/appending overheads.
+	mut args := []ast.Parameter{cap: node.args.posonlyargs.len + node.args.args.len + node.args.kwonlyargs.len}
+	args << node.args.posonlyargs
 	args << node.args.args
 	args << node.args.kwonlyargs
+
+	mut start_idx := 0
 
 	// Receiver handling
 	if is_method && node.name != '__new__' && args.len > 0 {
@@ -187,11 +191,12 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 			receiver_str = '(${m_pfx}${args[0].arg} ${s_pfx}${struct_name}${gen_s}) '
 			receiver_name = args[0].arg
 		}
-		args = args[1..].clone()
+		// ⚡ Bolt: Instead of doing heap-allocated clone(), use start_idx offset.
+		start_idx = 1
 	} else if node.name == '__new__' && args.len > 0 && args[0].arg == 'cls' {
-		args = args[1..].clone()
+		start_idx = 1
 	} else if env.state.current_class_is_unittest && args.len > 0 && args[0].arg == 'self' {
-		args = args[1..].clone()
+		start_idx = 1
 	}
 
 	// Generics handling
@@ -276,17 +281,29 @@ pub fn (h FunctionsGenerationHandler) generate_function(node &ast.FunctionDef,
 	}
 
 	// Default arguments map
+	// ⚡ Bolt: Populating defaults_map with direct sequential iteration over parameter slices
+	// completely avoids creating and cloning a temporary array.
 	mut defaults_map := map[string]ast.Expression{}
-	mut all_params_for_defaults := node.args.posonlyargs.clone()
-	all_params_for_defaults << node.args.args
-	all_params_for_defaults << node.args.kwonlyargs
-	for p in all_params_for_defaults {
-		d := p.default_ or { continue }
-		defaults_map[p.arg] = d
+	for p in node.args.posonlyargs {
+		if d := p.default_ {
+			defaults_map[p.arg] = d
+		}
+	}
+	for p in node.args.args {
+		if d := p.default_ {
+			defaults_map[p.arg] = d
+		}
+	}
+	for p in node.args.kwonlyargs {
+		if d := p.default_ {
+			defaults_map[p.arg] = d
+		}
 	}
 
 	mut local_mut_copies := [][]string{}
-	for arg in args {
+	// ⚡ Bolt: Iterate over args from start_idx to avoid receiver element.
+	for i := start_idx; i < args.len; i++ {
+		arg := args[i]
 		arg_name := sanitize_name(arg.arg, false)
 		mut arg_type := 'int'
 		mut has_none_default := false
