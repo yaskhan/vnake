@@ -334,16 +334,26 @@ fn (c CompatibilityLayer) collect_multiline_header(lines []string, start_index i
 	return full_header_parts.join(''), j
 }
 
+// fast_trim_space avoids heap allocation in V 0.5.1 if no characters need trimming.
+@[inline]
+fn fast_trim_space(s string) string {
+	if s.len > 0 && (s[0].is_space() || s[s.len - 1].is_space()) {
+		return s.trim_space()
+	}
+	return s
+}
+
 fn (c CompatibilityLayer) wrap_bracketless_except_clause(clause string) string {
-	stripped := clause.trim_space()
-	if stripped.len == 0 || stripped.starts_with('(') {
+	// ⚡ Bolt: Using non-allocating fast_trim_space and direct indexing instead of starts_with()
+	stripped := fast_trim_space(clause)
+	if stripped.len == 0 || stripped[0] == `(` {
 		return clause
 	}
 	head, as_clause := c.split_except_alias(clause)
 	if !c.has_top_level_comma(head) {
 		return clause
 	}
-	return '(${head.trim_space()})${as_clause}'
+	return '(${fast_trim_space(head)})${as_clause}'
 }
 
 fn (c CompatibilityLayer) split_except_alias(clause string) (string, string) {
@@ -367,7 +377,9 @@ fn (c CompatibilityLayer) split_except_alias(clause string) (string, string) {
 
 fn (c CompatibilityLayer) has_top_level_comma(text string) bool {
 	mut depth := 0
-	for ch in text {
+	// ⚡ Bolt: Using byte-level index iteration instead of slower UTF-8 rune decoding
+	for i := 0; i < text.len; i++ {
+		ch := text[i]
 		if ch == `(` || ch == `[` || ch == `{` {
 			depth++
 		} else if ch == `)` || ch == `]` || ch == `}` {
