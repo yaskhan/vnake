@@ -371,7 +371,7 @@ pub fn sanitize_name_helper(name string, is_type bool) string {
 
 // mangle_name implements Python name mangling rules for private attributes
 pub fn mangle_name(name string, class_name string) string {
-	if class_name.len > 0 && name.starts_with('__') && !name.ends_with('__') {
+	if class_name.len > 0 && name.len >= 3 && name[0] == `_` && name[1] == `_` && !(name[name.len - 1] == `_` && name[name.len - 2] == `_`) {
 		s_class := sanitize_name(class_name, true, map[string]bool{}, '', map[string]bool{}).trim_right('_')
 		s_name := sanitize_name(name, false, map[string]bool{}, '', map[string]bool{})
 		return '${s_class}_${s_name}'

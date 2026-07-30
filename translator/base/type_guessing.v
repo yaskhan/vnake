@@ -106,13 +106,15 @@ pub fn guess_type(node ast.Expression, ctx TypeGuessingContext, use_location boo
 fn guess_constant_type(node ast.Constant) string {
 	tok := node.token
 	if tok.typ == .string_tok || tok.typ == .fstring_tok || tok.typ == .tstring_tok {
-		if node.value.starts_with("b'") || node.value.starts_with('b"') {
+		val := node.value
+		if val.len >= 3 && val[0] == `b` && (val[1] == `'` || val[1] == `"`) {
 			return '[]u8'
 		}
 		return 'string'
 	}
 	if tok.typ == .number {
-		if node.value.ends_with('j') {
+		val := node.value
+		if val.len > 0 && val[val.len - 1] == `j` {
 			return 'PyComplex'
 		}
 		if node.value.contains('.') || node.value.contains('e') || node.value.contains('E') {
@@ -163,7 +165,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 				return 'map[string]Any'
 			}
 		}
-		if fid.starts_with('new_') {
+		if fid.len >= 4 && fid[0] == `n` && fid[1] == `e` && fid[2] == `w` && fid[3] == `_` {
 			return '&' + sanitize_name(fid[4..], true, map[string]bool{}, '', map[string]bool{})
 		}
 		match fid {
@@ -281,7 +283,11 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 		}
 		rec_type := guess_type(f.value, ctx, false)
 		if rec_type != 'Any' {
-			pure_rec := if rec_type.len > 0 && (rec_type[0] == `?` || rec_type[0] == `&`) { rec_type.trim_left('?&') } else { rec_type }
+			mut start_idx := 0
+			for start_idx < rec_type.len && (rec_type[start_idx] == `?` || rec_type[start_idx] == `&`) {
+				start_idx++
+			}
+			pure_rec := if start_idx > 0 { rec_type[start_idx..] } else { rec_type }
 			mut attr_name := pure_rec + '.' + to_snake_case(f.attr)
 
 			if ctx.analyzer != unsafe { nil } {
@@ -293,7 +299,7 @@ fn guess_type_call(node ast.Call, ctx TypeGuessingContext, use_location bool) st
 
 				// Try mapping V name to Python name (e.g., run_task -> runTask)
 				mut py_name := f.attr
-				if py_name.starts_with('py_') {
+				if py_name.len >= 3 && py_name[0] == `p` && py_name[1] == `y` && py_name[2] == `_` {
 					py_name = py_name[3..]
 				}
 
@@ -478,7 +484,7 @@ fn guess_type_name(node ast.Name, ctx TypeGuessingContext, use_location bool) st
 	}
 	if node.id == 't' {
 	}
-	if actual_name.starts_with('(') && actual_name.contains(' as ') {
+	if actual_name.len > 0 && actual_name[0] == `(` && actual_name.contains(' as ') {
 		return actual_name.all_after(' as ').all_before(')').trim_space()
 	}
 	if actual_name in ctx.explicit_any_types || node.id in ctx.explicit_any_types {
