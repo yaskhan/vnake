@@ -1,3 +1,7 @@
+## 2026-04-14 - [Zero-Allocation Keyword and Prefix Scanning in Lexer]
+**Learning:** Slicing substrings from the source code (e.g., `l.source[start..l.pos]`) to identify keywords or string literal prefixes (e.g., `rb`, `rf`) always incurs heap-allocation overhead in V 0.5.1. Resolving keywords directly using substring coordinates (`get_keyword(s, start, len)`) to static string constants completely eliminates these heap allocations on hot lexer paths.
+**Action:** Always resolve fixed sequences (like keywords and string prefixes) directly using start/length coordinates to static compile-time literals instead of slicing the input source.
+
 ## 2025-05-29 - [V-Lang starts_with and ends_with Overhead Avoidance]
 **Learning:** In V 0.5.1, standard library functional checks like `s.starts_with(prefix)` perform allocations and scans that create significant garbage collection and memory pressure when called in recursive descent parsers or type translation routines. Replacing these checks with direct byte-level and length-based indexing (e.g., `s.len >= 3 && s[0] == ...`) is extremely safe, completely allocation-free, and yields a dramatic performance improvement.
 **Action:** Always prefer direct, length-guarded, byte-level character comparisons over starts_with() or ends_with() for known short prefix/suffix matching in AST parsers and type converters.
