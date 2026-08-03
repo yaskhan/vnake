@@ -238,9 +238,9 @@ fn (c CompatibilityLayer) collect_multiline_header(lines []string, start_index i
 	return full_header_parts.join(''), j
 }
 
-// fast_trim_space avoids heap allocation in V 0.5.1 if no characters need trimming.
+// fast_trim_space_compat avoids heap allocation in V 0.5.1 if no characters need trimming.
 @[inline]
-fn fast_trim_space(s string) string {
+fn fast_trim_space_compat(s string) string {
 	if s.len > 0 && (s[0].is_space() || s[s.len - 1].is_space()) {
 		return s.trim_space()
 	}
@@ -248,8 +248,8 @@ fn fast_trim_space(s string) string {
 }
 
 fn (c CompatibilityLayer) wrap_bracketless_except_clause(clause string) string {
-	// ⚡ Bolt: Using non-allocating fast_trim_space and direct indexing instead of starts_with()
-	stripped := fast_trim_space(clause)
+	// ⚡ Bolt: Using non-allocating fast_trim_space_compat and direct indexing instead of starts_with()
+	stripped := fast_trim_space_compat(clause)
 	if stripped.len == 0 || stripped[0] == `(` {
 		return clause
 	}

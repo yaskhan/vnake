@@ -165,10 +165,10 @@ fn (mut l Lexer) scan_identifier() Token {
 		}
 	}
 	value := l.source[start..l.pos]
-	if is_keyword(value) {
+	if kw_val := get_keyword(value) {
 		return Token{
 			typ:      .keyword
-			value:    value
+			value:    kw_val
 			line:     l.line
 			column:   start_col
 			filename: l.filename
