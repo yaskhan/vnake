@@ -1,6 +1,7 @@
 module analyzer
 
 import time
+import ast
 
 fn test_bench_find_lcs() {
 	mut t := new_type_inference_utils_mixin()
