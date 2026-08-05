@@ -42,3 +42,16 @@ fn test_map_union_types() {
 	assert map_python_type_to_v('Union[int, Any]', '', true, map[string]string{}, empty_fn, empty_lit, empty_tup) == 'Any'
 	assert map_python_type_to_v('Optional[int]', '', true, map[string]string{}, empty_fn, empty_lit, empty_tup) == '?int'
 }
+
+fn test_get_tuple_struct_name() {
+	// Single part paths (should hit the fast path without any comma)
+	assert get_tuple_struct_name('int') == 'TupleStruct_Int'
+	assert get_tuple_struct_name('builtins.str') == 'TupleStruct_String'
+	assert get_tuple_struct_name('typing.List') == 'TupleStruct_List'
+	assert get_tuple_struct_name('') == 'TupleStruct_'
+
+	// Multi-part paths (with commas)
+	assert get_tuple_struct_name('int, str') == 'TupleStruct_IntString'
+	assert get_tuple_struct_name('int, builtins.str, typing.List') == 'TupleStruct_IntStringList'
+	assert get_tuple_struct_name('int, [int]') == 'TupleStruct_IntInt'
+}

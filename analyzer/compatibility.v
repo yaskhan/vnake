@@ -257,7 +257,7 @@ fn (c CompatibilityLayer) wrap_bracketless_except_clause(clause string) string {
 	if !c.has_top_level_comma(head) {
 		return clause
 	}
-	return '(${fast_trim_space(head)})${as_clause}'
+	return '(${fast_trim_space_compat(head)})${as_clause}'
 }
 
 fn (c CompatibilityLayer) split_except_alias(clause string) (string, string) {
