@@ -92,111 +92,130 @@ const keywords = [
 	'yield',
 ]
 
-// is_keyword checks if the string is a Python keyword.
-// ⚡ Bolt: Using a match expression with a length-based fast path is faster than
-// linear search in an array literal in V 0.5.1.
-fn is_keyword(s string) bool {
-	// ⚡ Bolt: Optimized string set membership check using two-stage dispatch.
-	// First matching on the first character of the identifier, then matching on its length,
-	// drastically minimizes full string comparisons and branching, bringing a measured speedup of ~13%.
+// get_keyword returns the static string literal for a Python keyword, or none if s is not a keyword.
+// ⚡ Bolt: Returning a static string literal instead of the sliced string eliminates heap allocations for keywords.
+pub fn get_keyword(s string) ?string {
 	if s.len < 2 || s.len > 8 {
-		return false
+		return none
 	}
 	match s[0] {
 		`a` {
 			match s.len {
-				2 { return s == 'as' }
-				3 { return s == 'and' }
-				5 { return s == 'async' || s == 'await' }
-				6 { return s == 'assert' }
-				else { return false }
+				2 { if s == 'as' { return 'as' } }
+				3 { if s == 'and' { return 'and' } }
+				5 {
+					if s == 'async' { return 'async' }
+					if s == 'await' { return 'await' }
+				}
+				6 { if s == 'assert' { return 'assert' } }
+				else {}
 			}
 		}
 		`b` {
-			return s.len == 5 && s == 'break'
+			if s.len == 5 && s == 'break' { return 'break' }
 		}
 		`c` {
 			match s.len {
-				5 { return s == 'class' }
-				8 { return s == 'continue' }
-				else { return false }
+				5 { if s == 'class' { return 'class' } }
+				8 { if s == 'continue' { return 'continue' } }
+				else {}
 			}
 		}
 		`d` {
-			return s.len == 3 && (s == 'def' || s == 'del')
+			if s.len == 3 {
+				if s == 'def' { return 'def' }
+				if s == 'del' { return 'del' }
+			}
 		}
 		`e` {
 			match s.len {
-				4 { return s == 'elif' || s == 'else' }
-				6 { return s == 'except' }
-				else { return false }
+				4 {
+					if s == 'elif' { return 'elif' }
+					if s == 'else' { return 'else' }
+				}
+				6 { if s == 'except' { return 'except' } }
+				else {}
 			}
 		}
 		`f` {
 			match s.len {
-				3 { return s == 'for' }
-				4 { return s == 'from' }
-				7 { return s == 'finally' }
-				else { return false }
+				3 { if s == 'for' { return 'for' } }
+				4 { if s == 'from' { return 'from' } }
+				7 { if s == 'finally' { return 'finally' } }
+				else {}
 			}
 		}
 		`F` {
-			return s.len == 5 && s == 'False'
+			if s.len == 5 && s == 'False' { return 'False' }
 		}
 		`g` {
-			return s.len == 6 && s == 'global'
+			if s.len == 6 && s == 'global' { return 'global' }
 		}
 		`i` {
 			match s.len {
-				2 { return s == 'if' || s == 'in' || s == 'is' }
-				6 { return s == 'import' }
-				else { return false }
+				2 {
+					if s == 'if' { return 'if' }
+					if s == 'in' { return 'in' }
+					if s == 'is' { return 'is' }
+				}
+				6 { if s == 'import' { return 'import' } }
+				else {}
 			}
 		}
 		`l` {
-			return s.len == 6 && s == 'lambda'
+			if s.len == 6 && s == 'lambda' { return 'lambda' }
 		}
 		`n` {
 			match s.len {
-				3 { return s == 'not' }
-				8 { return s == 'nonlocal' }
-				else { return false }
+				3 { if s == 'not' { return 'not' } }
+				8 { if s == 'nonlocal' { return 'nonlocal' } }
+				else {}
 			}
 		}
 		`N` {
-			return s.len == 4 && s == 'None'
+			if s.len == 4 && s == 'None' { return 'None' }
 		}
 		`o` {
-			return s.len == 2 && s == 'or'
+			if s.len == 2 && s == 'or' { return 'or' }
 		}
 		`p` {
-			return s.len == 4 && s == 'pass'
+			if s.len == 4 && s == 'pass' { return 'pass' }
 		}
 		`r` {
 			match s.len {
-				5 { return s == 'raise' }
-				6 { return s == 'return' }
-				else { return false }
+				5 { if s == 'raise' { return 'raise' } }
+				6 { if s == 'return' { return 'return' } }
+				else {}
 			}
 		}
 		`t` {
-			return s.len == 3 && s == 'try'
+			if s.len == 3 && s == 'try' { return 'try' }
 		}
 		`T` {
-			return s.len == 4 && s == 'True'
+			if s.len == 4 && s == 'True' { return 'True' }
 		}
 		`w` {
 			match s.len {
-				4 { return s == 'with' }
-				5 { return s == 'while' }
-				else { return false }
+				4 { if s == 'with' { return 'with' } }
+				5 { if s == 'while' { return 'while' } }
+				else {}
 			}
 		}
 		`y` {
-			return s.len == 5 && s == 'yield'
+			if s.len == 5 && s == 'yield' { return 'yield' }
 		}
-		else { return false }
+		else {}
 	}
+	return none
+}
+
+// is_keyword checks if the string is a Python keyword.
+// ⚡ Bolt: Optimized string set membership check using two-stage dispatch via get_keyword.
+fn is_keyword(s string) bool {
+	if _ := get_keyword(s) {
+		return true
+	}
+	return false
 }
 
 // get_keyword maps a slice of the source string directly to a static keyword literal.
