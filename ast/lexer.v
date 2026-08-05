@@ -164,11 +164,13 @@ fn (mut l Lexer) scan_identifier() Token {
 			break
 		}
 	}
-	value := l.source[start..l.pos]
-	if is_keyword(value) {
+	len := l.pos - start
+	// ⚡ Bolt: Avoid string slicing and heap allocations for keywords by resolving them
+	// directly to static, compile-time string constants.
+	if kw := get_keyword(l.source, start, len) {
 		return Token{
 			typ:      .keyword
-			value:    value
+			value:    kw
 			line:     l.line
 			column:   start_col
 			filename: l.filename
@@ -176,7 +178,7 @@ fn (mut l Lexer) scan_identifier() Token {
 	}
 	return Token{
 		typ:      .identifier
-		value:    value
+		value:    l.source[start..l.pos]
 		line:     l.line
 		column:   start_col
 		filename: l.filename
@@ -645,7 +647,14 @@ fn (mut l Lexer) next_token() Token {
 				&& l.pos + 2 < l.source.len {
 				next2 := l.source[l.pos + 2]
 				if next2 == `'` || next2 == `"` {
-					p := l.source[l.pos..l.pos + 2]
+					// ⚡ Bolt: Avoid string slicing of source here to eliminate heap allocations.
+					// Since string prefixes are short static sequences, map them directly to literals.
+					p := match ch {
+						`r` { if next == `b` { 'rb' } else if next == `f` { 'rf' } else { 'r' } }
+						`b` { if next == `r` { 'br' } else if next == `f` { 'bf' } else { 'b' } }
+						`f` { if next == `r` { 'fr' } else if next == `b` { 'fb' } else { 'f' } }
+						else { '' }
+					}
 					l.pos += 2
 					l.column += 2
 					return l.scan_string(p)
