@@ -32,7 +32,8 @@ pub fn (mut a NamedTupleAnalyzer) analyze_namedtuple_classdef(mut defn ClassDef,
 	for mut base_expr in defn.base_type_exprs {
 		if base_expr is NameExpr {
 			unsafe {
-				a.api.accept(mut Node(base_expr))
+				mut base_node := Node(base_expr)
+				a.api.accept(mut base_node)
 			}
 			if (base_expr as NameExpr).fullname in typed_namedtuple_names {
 				items, types, default_items, statements := a.check_namedtuple_classdef(mut defn,

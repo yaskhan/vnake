@@ -30,10 +30,19 @@ fn fast_trim_space(s string) string {
 // get_tuple_struct_name generates struct name for Python Tuple.
 // ⚡ Bolt: Using strings.Builder and a single-pass byte transformation avoids multiple
 // intermediate string allocations from .replace(), .trim_space(), and .capitalize() calls.
-// Measured ~2.2x speedup on this hot path (1189ms -> 536ms for 100k calls).
+// ⚡ Bolt: Added a fast-path for single-part type strings (no comma) to completely bypass
+// split_generic_args allocation and slice overhead.
 pub fn get_tuple_struct_name(types_str string) string {
 	if types_str.len == 0 {
 		return 'TupleStruct_'
+	}
+
+	if !types_str.contains(',') {
+		t := fast_trim_space(types_str)
+		mut sb := strings.new_builder(t.len + 12)
+		sb.write_string('TupleStruct_')
+		clean_and_write_part(t, mut sb)
+		return sb.str()
 	}
 
 	mut sb := strings.new_builder(types_str.len + 12)
@@ -41,48 +50,54 @@ pub fn get_tuple_struct_name(types_str string) string {
 
 	parts := split_generic_args(types_str)
 	for t in parts {
-		if t.len == 0 {
-			sb.write_string('Any')
+		clean_and_write_part(t, mut sb)
+	}
+	return sb.str()
+}
+
+// clean_and_write_part processes a single type string part for the tuple struct name.
+// ⚡ Bolt: Extracted to a helper to keep the single-part and multi-part paths completely DRY.
+fn clean_and_write_part(t string, mut sb strings.Builder) {
+	if t.len == 0 {
+		sb.write_string('Any')
+		return
+	}
+
+	mut clean_res := []u8{cap: t.len}
+	for i := 0; i < t.len; i++ {
+		if i + 9 <= t.len && t[i] == `b` && t[i + 1] == `u` && t[i + 2] == `i`
+			&& t[i + 3] == `l` && t[i + 4] == `t` && t[i + 5] == `i` && t[i + 6] == `n`
+			&& t[i + 7] == `s` && t[i + 8] == `.` {
+			i += 8
 			continue
 		}
+		if i + 7 <= t.len && t[i] == `t` && t[i + 1] == `y` && t[i + 2] == `p`
+			&& t[i + 3] == `i` && t[i + 4] == `n` && t[i + 5] == `g` && t[i + 6] == `.` {
+			i += 6
+			continue
+		}
+		ch := t[i]
+		if ch != `[` && ch != `]` && ch != `.` && ch != `,` && ch != ` ` {
+			clean_res << ch
+		}
+	}
 
-		mut clean_res := []u8{cap: t.len}
-		for i := 0; i < t.len; i++ {
-			if i + 9 <= t.len && t[i] == `b` && t[i + 1] == `u` && t[i + 2] == `i`
-				&& t[i + 3] == `l` && t[i + 4] == `t` && t[i + 5] == `i` && t[i + 6] == `n`
-				&& t[i + 7] == `s` && t[i + 8] == `.` {
-				i += 8
-				continue
-			}
-			if i + 7 <= t.len && t[i] == `t` && t[i + 1] == `y` && t[i + 2] == `p`
-				&& t[i + 3] == `i` && t[i + 4] == `n` && t[i + 5] == `g` && t[i + 6] == `.` {
-				i += 6
-				continue
-			}
-			ch := t[i]
-			if ch != `[` && ch != `]` && ch != `.` && ch != `,` && ch != ` ` {
-				clean_res << ch
-			}
+	if clean_res.len == 0 {
+		sb.write_string('Any')
+	} else {
+		if clean_res[0] >= `a` && clean_res[0] <= `z` {
+			clean_res[0] -= 32
 		}
 
-		if clean_res.len == 0 {
-			sb.write_string('Any')
+		if clean_res.len == 3 && clean_res[0] == `S` && clean_res[1] == `t`
+			&& clean_res[2] == `r` {
+			sb.write_string('String')
 		} else {
-			if clean_res[0] >= `a` && clean_res[0] <= `z` {
-				clean_res[0] -= 32
-			}
-
-			if clean_res.len == 3 && clean_res[0] == `S` && clean_res[1] == `t`
-				&& clean_res[2] == `r` {
-				sb.write_string('String')
-			} else {
-				for b in clean_res {
-					sb.write_byte(b)
-				}
+			for b in clean_res {
+				sb.write_byte(b)
 			}
 		}
 	}
-	return sb.str()
 }
 
 // map_python_type_to_v maps Python type to V type
