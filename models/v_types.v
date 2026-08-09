@@ -57,12 +57,57 @@ pub fn get_tuple_struct_name(types_str string) string {
 
 // clean_and_write_part processes a single type string part for the tuple struct name.
 // ⚡ Bolt: Extracted to a helper to keep the single-part and multi-part paths completely DRY.
+// Optimization: Uses stack buffer of size 128 to avoid heap allocation overhead.
 fn clean_and_write_part(t string, mut sb strings.Builder) {
 	if t.len == 0 {
 		sb.write_string('Any')
 		return
 	}
 
+	if t.len <= 128 {
+		mut buf := [128]u8{}
+		mut clean_len := 0
+
+		for i := 0; i < t.len; i++ {
+			if i + 9 <= t.len && t[i] == `b` && t[i + 1] == `u` && t[i + 2] == `i`
+				&& t[i + 3] == `l` && t[i + 4] == `t` && t[i + 5] == `i` && t[i + 6] == `n`
+				&& t[i + 7] == `s` && t[i + 8] == `.` {
+				i += 8
+				continue
+			}
+			if i + 7 <= t.len && t[i] == `t` && t[i + 1] == `y` && t[i + 2] == `p`
+				&& t[i + 3] == `i` && t[i + 4] == `n` && t[i + 5] == `g` && t[i + 6] == `.` {
+				i += 6
+				continue
+			}
+			ch := t[i]
+			if ch != `[` && ch != `]` && ch != `.` && ch != `,` && ch != ` ` {
+				buf[clean_len] = ch
+				clean_len++
+			}
+		}
+
+		if clean_len == 0 {
+			sb.write_string('Any')
+		} else {
+			mut first := buf[0]
+			if first >= `a` && first <= `z` {
+				first -= 32
+			}
+
+			if clean_len == 3 && first == `S` && buf[1] == `t` && buf[2] == `r` {
+				sb.write_string('String')
+			} else {
+				sb.write_byte(first)
+				for i := 1; i < clean_len; i++ {
+					sb.write_byte(buf[i])
+				}
+			}
+		}
+		return
+	}
+
+	// Fallback to heap allocation for extremely long strings (virtually never happens)
 	mut clean_res := []u8{cap: t.len}
 	for i := 0; i < t.len; i++ {
 		if i + 9 <= t.len && t[i] == `b` && t[i + 1] == `u` && t[i + 2] == `i`
@@ -156,7 +201,8 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Handle Mypy specific: tuple[int, int, fallback=Point]
-	if clean_type.contains('fallback=') {
+	// Optimization: Guard with length check to avoid costly string scans for short type names.
+	if clean_type.len >= 14 && clean_type.contains('fallback=') {
 		mut fb_type := ''
 		parts := clean_type.split('fallback=')
 		if parts.len > 1 {

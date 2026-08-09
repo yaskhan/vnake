@@ -1,3 +1,7 @@
+## 2025-06-03 - [V-Lang Stack Buffers and Length-Guarded Substring Scanning]
+**Learning:** In V 0.5.2/0.5.1, allocating heap-backed dynamic arrays (like `[]u8`) inside functions called during recursive AST or type-processing traversals generates significant GC pressure and overhead. Replacing these arrays with a stack-allocated buffer (e.g. `[128]u8`) completely avoids heap allocation overhead. Furthermore, executing unconditional string scans (like `.contains()`) on hot paths of clean, short strings is wasteful. Pre-filtering string operations with simple length-based guards (e.g., `s.len >= 14`) prevents linear scanning on almost all common inputs.
+**Action:** Always prefer stack-allocated arrays/buffers (`[N]u8`) over dynamic arrays (`[]u8`) for temporary buffers on hot paths, and guard string scan functions with length-based constraints.
+
 ## 2026-04-14 - [Zero-Allocation Keyword and Prefix Scanning in Lexer]
 **Learning:** Slicing substrings from the source code (e.g., `l.source[start..l.pos]`) to identify keywords or string literal prefixes (e.g., `rb`, `rf`) always incurs heap-allocation overhead in V 0.5.1. Resolving keywords directly using substring coordinates (`get_keyword(s, start, len)`) to static string constants completely eliminates these heap allocations on hot lexer paths.
 **Action:** Always resolve fixed sequences (like keywords and string prefixes) directly using start/length coordinates to static compile-time literals instead of slicing the input source.
