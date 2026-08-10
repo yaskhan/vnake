@@ -55,15 +55,9 @@ pub fn get_tuple_struct_name(types_str string) string {
 	return sb.str()
 }
 
-// clean_and_write_part processes a single type string part for the tuple struct name.
-// ⚡ Bolt: Extracted to a helper to keep the single-part and multi-part paths completely DRY.
-fn clean_and_write_part(t string, mut sb strings.Builder) {
-	if t.len == 0 {
-		sb.write_string('Any')
-		return
-	}
-
-	mut clean_res := []u8{cap: t.len}
+// clean_type_string_to_bytes filters out prefix packages and characters from type string and writes to the destination pointer.
+fn clean_type_string_to_bytes(t string, dest &u8, max_len int) int {
+	mut write_len := 0
 	for i := 0; i < t.len; i++ {
 		if i + 9 <= t.len && t[i] == `b` && t[i + 1] == `u` && t[i + 2] == `i`
 			&& t[i + 3] == `l` && t[i + 4] == `t` && t[i + 5] == `i` && t[i + 6] == `n`
@@ -78,25 +72,57 @@ fn clean_and_write_part(t string, mut sb strings.Builder) {
 		}
 		ch := t[i]
 		if ch != `[` && ch != `]` && ch != `.` && ch != `,` && ch != ` ` {
-			clean_res << ch
-		}
-	}
-
-	if clean_res.len == 0 {
-		sb.write_string('Any')
-	} else {
-		if clean_res[0] >= `a` && clean_res[0] <= `z` {
-			clean_res[0] -= 32
-		}
-
-		if clean_res.len == 3 && clean_res[0] == `S` && clean_res[1] == `t`
-			&& clean_res[2] == `r` {
-			sb.write_string('String')
-		} else {
-			for b in clean_res {
-				sb.write_byte(b)
+			if write_len < max_len {
+				unsafe {
+					mut p := dest + write_len
+					*p = ch
+				}
+				write_len++
 			}
 		}
+	}
+	return write_len
+}
+
+// clean_and_write_part_bytes formats and writes a sanitized type name to the strings.Builder.
+fn clean_and_write_part_bytes(bytes &u8, len int, mut sb strings.Builder) {
+	if len == 0 {
+		sb.write_string('Any')
+		return
+	}
+
+	first := unsafe { bytes[0] }
+	mut first_capitalized := first
+	if first >= `a` && first <= `z` {
+		first_capitalized = first - 32
+	}
+
+	if len == 3 && first_capitalized == `S` && unsafe { bytes[1] == `t` && bytes[2] == `r` } {
+		sb.write_string('String')
+	} else {
+		sb.write_byte(first_capitalized)
+		for i := 1; i < len; i++ {
+			sb.write_byte(unsafe { bytes[i] })
+		}
+	}
+}
+
+// clean_and_write_part processes a single type string part for the tuple struct name.
+// ⚡ Bolt: Extracted to a helper to keep the single-part and multi-part paths completely DRY.
+fn clean_and_write_part(t string, mut sb strings.Builder) {
+	if t.len == 0 {
+		sb.write_string('Any')
+		return
+	}
+
+	if t.len <= 128 {
+		mut buf := [128]u8{}
+		write_len := clean_type_string_to_bytes(t, &buf[0], 128)
+		clean_and_write_part_bytes(&buf[0], write_len, mut sb)
+	} else {
+		mut clean_res := []u8{len: t.len}
+		write_len := unsafe { clean_type_string_to_bytes(t, &clean_res[0], t.len) }
+		unsafe { clean_and_write_part_bytes(&clean_res[0], write_len, mut sb) }
 	}
 }
 
@@ -156,7 +182,7 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Handle Mypy specific: tuple[int, int, fallback=Point]
-	if clean_type.contains('fallback=') {
+	if clean_type.len >= 9 && clean_type.contains('fallback=') {
 		mut fb_type := ''
 		parts := clean_type.split('fallback=')
 		if parts.len > 1 {
