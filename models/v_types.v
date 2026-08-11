@@ -156,7 +156,7 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Handle Mypy specific: tuple[int, int, fallback=Point]
-	if clean_type.contains('fallback=') {
+	if clean_type.len >= 9 && clean_type.contains('fallback=') {
 		mut fb_type := ''
 		parts := clean_type.split('fallback=')
 		if parts.len > 1 {
