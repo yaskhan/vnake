@@ -265,7 +265,7 @@ pub fn compute_scc_prefixes(scc_files map[string]bool) map[string]string {
 
 // map_type is a centralized Python-to-V type mapper with post-processing.
 pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, sum_type_registrar fn (string, string) string, literal_registrar fn ([]string) string, tuple_registrar fn (string) string) string {
-	if type_str.contains('TypeForm') {
+	if type_str.len >= 8 && type_str.contains('TypeForm') {
 		ctx.warnings << "Experimental feature 'TypeForm' is used."
 	}
 

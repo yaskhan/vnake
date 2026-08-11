@@ -517,7 +517,10 @@ pub fn (mut t Translator) map_annotation_str(type_str string, struct_name string
 	// redundant heap allocations in V 0.5.1 hot paths.
 	pure_res := analyzer.clean_v_type(res)
 	if pure_res in t.state.known_interfaces || pure_res in t.state.class_to_impl {
-		return res.replace('&', '')
+		if res.contains('&') {
+			return res.replace('&', '')
+		}
+		return res
 	}
 
 	if res.len == 0 {
