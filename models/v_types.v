@@ -57,13 +57,19 @@ pub fn get_tuple_struct_name(types_str string) string {
 
 // clean_and_write_part processes a single type string part for the tuple struct name.
 // ⚡ Bolt: Extracted to a helper to keep the single-part and multi-part paths completely DRY.
+// ⚡ Bolt: Using a stack-allocated fixed array buf := [128]u8{} completely avoids heap allocations
+// for standard type names, while safely falling back to dynamic allocation for extremely long names.
 fn clean_and_write_part(t string, mut sb strings.Builder) {
 	if t.len == 0 {
 		sb.write_string('Any')
 		return
 	}
 
-	mut clean_res := []u8{cap: t.len}
+	mut use_heap := t.len > 128
+	mut heap_buf := if use_heap { []u8{cap: t.len} } else { []u8{} }
+	mut buf := [128]u8{}
+	mut clean_len := 0
+
 	for i := 0; i < t.len; i++ {
 		if i + 9 <= t.len && t[i] == `b` && t[i + 1] == `u` && t[i + 2] == `i`
 			&& t[i + 3] == `l` && t[i + 4] == `t` && t[i + 5] == `i` && t[i + 6] == `n`
@@ -78,23 +84,56 @@ fn clean_and_write_part(t string, mut sb strings.Builder) {
 		}
 		ch := t[i]
 		if ch != `[` && ch != `]` && ch != `.` && ch != `,` && ch != ` ` {
-			clean_res << ch
+			if use_heap {
+				heap_buf << ch
+			} else {
+				if clean_len < 128 {
+					buf[clean_len] = ch
+					clean_len++
+				} else {
+					use_heap = true
+					heap_buf = []u8{cap: t.len}
+					for idx := 0; idx < clean_len; idx++ {
+						heap_buf << buf[idx]
+					}
+					heap_buf << ch
+				}
+			}
 		}
 	}
 
-	if clean_res.len == 0 {
-		sb.write_string('Any')
-	} else {
-		if clean_res[0] >= `a` && clean_res[0] <= `z` {
-			clean_res[0] -= 32
-		}
-
-		if clean_res.len == 3 && clean_res[0] == `S` && clean_res[1] == `t`
-			&& clean_res[2] == `r` {
-			sb.write_string('String')
+	if use_heap {
+		if heap_buf.len == 0 {
+			sb.write_string('Any')
 		} else {
-			for b in clean_res {
-				sb.write_byte(b)
+			mut first := heap_buf[0]
+			if first >= `a` && first <= `z` {
+				first -= 32
+			}
+			if heap_buf.len == 3 && first == `S` && heap_buf[1] == `t` && heap_buf[2] == `r` {
+				sb.write_string('String')
+			} else {
+				sb.write_byte(first)
+				for idx := 1; idx < heap_buf.len; idx++ {
+					sb.write_byte(heap_buf[idx])
+				}
+			}
+		}
+	} else {
+		if clean_len == 0 {
+			sb.write_string('Any')
+		} else {
+			mut first := buf[0]
+			if first >= `a` && first <= `z` {
+				first -= 32
+			}
+			if clean_len == 3 && first == `S` && buf[1] == `t` && buf[2] == `r` {
+				sb.write_string('String')
+			} else {
+				sb.write_byte(first)
+				for idx := 1; idx < clean_len; idx++ {
+					sb.write_byte(buf[idx])
+				}
 			}
 		}
 	}
@@ -156,7 +195,9 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Handle Mypy specific: tuple[int, int, fallback=Point]
-	if clean_type.contains('fallback=') {
+	// ⚡ Bolt: Adding a length-based guard clean_type.len >= 9 before .contains('fallback=')
+	// avoids redundant full-string scans for short, common types like 'int', 'str', 'Any'.
+	if clean_type.len >= 9 && clean_type.contains('fallback=') {
 		mut fb_type := ''
 		parts := clean_type.split('fallback=')
 		if parts.len > 1 {
