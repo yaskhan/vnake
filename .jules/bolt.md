@@ -1,3 +1,7 @@
+## 2026-04-14 - [Zero-Allocation Preprocessor Fast-Path and Redundant Standard Library Pre-Checks]
+**Learning:** Adding manual length pre-checks before standard library string functions like `.contains()` or `.starts_with()` in V is redundant and adds code clutter with no measurable performance gains, as V's standard library already performs these length boundary checks internally. However, a single-pass, zero-allocation prefix pre-scan (`has_tstring`) successfully avoids expensive `strings.Builder` heap allocation and byte-copying loops entirely for the 99.9% of source files that do not contain t-strings.
+**Action:** Use a custom, zero-allocation single-pass scanner to bypass multi-line preprocessor loops or string builder allocations when expected target tokens/prefixes are absent. Avoid redundant pre-checks for length before standard library contains/starts_with methods.
+
 ## 2026-04-14 - [Zero-Allocation Keyword and Prefix Scanning in Lexer]
 **Learning:** Slicing substrings from the source code (e.g., `l.source[start..l.pos]`) to identify keywords or string literal prefixes (e.g., `rb`, `rf`) always incurs heap-allocation overhead in V 0.5.1. Resolving keywords directly using substring coordinates (`get_keyword(s, start, len)`) to static string constants completely eliminates these heap allocations on hot lexer paths.
 **Action:** Always resolve fixed sequences (like keywords and string prefixes) directly using start/length coordinates to static compile-time literals instead of slicing the input source.

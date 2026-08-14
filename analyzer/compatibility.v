@@ -69,10 +69,42 @@ pub fn (c CompatibilityLayer) preprocess_source(source string) string {
 	return result.join('\n')
 }
 
+// has_tstring checks if the source string contains any potential t-string prefix.
+// This is used for a zero-allocation fast-path to bypass t-string preprocessing.
+fn (c CompatibilityLayer) has_tstring(source string) bool {
+	if source.len < 2 {
+		return false
+	}
+	for i := 0; i < source.len - 1; i++ {
+		ch := source[i]
+		if ch == `t` || ch == `T` {
+			next := source[i + 1]
+			if next == `\'` || next == `"` {
+				return true
+			}
+			if (next == `r` || next == `R`) && i + 2 < source.len {
+				next2 := source[i + 2]
+				if next2 == `\'` || next2 == `"` {
+					return true
+				}
+			}
+		} else if ch == `r` || ch == `R` {
+			next := source[i + 1]
+			if (next == `t` || next == `T`) && i + 2 < source.len {
+				next2 := source[i + 2]
+				if next2 == `\'` || next2 == `"` {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 fn (c CompatibilityLayer) preprocess_tstrings(source string) string {
-	// ⚡ Bolt: Fast path for source without potential t-string prefixes.
-	if !source.contains('t') && !source.contains('T') && !source.contains('r')
-		&& !source.contains('R') {
+	// ⚡ Bolt: Fast path for source without actual t-string prefixes.
+	// This avoids allocating strings.Builder and duplicating the entire source string for files without t-strings.
+	if !c.has_tstring(source) {
 		return source
 	}
 
