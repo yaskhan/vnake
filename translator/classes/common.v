@@ -122,7 +122,12 @@ fn map_python_type(type_str string, struct_name string, is_return bool, mut env 
 	}
 	pure_final := final_v.trim_left('?&')
 	if pure_final in env.state.known_interfaces || pure_final in env.state.class_to_impl {
-		return final_v.replace('&', '')
+		// ⚡ Bolt: Guarding replace('&', '') with contains('&') check avoids string allocations
+		// when class references do not contain '&'.
+		if final_v.contains('&') {
+			return final_v.replace('&', '')
+		}
+		return final_v
 	}
 	return final_v
 }

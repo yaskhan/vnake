@@ -319,9 +319,13 @@ pub fn map_type(type_str string, opts TypeMapOptions, mut ctx TypeUtilsContext, 
 		typename := v_type[last_dot_idx + 1..]
 
 		// Handle Nested Classes: Outer.Inner -> Outer_Inner
-		nested_name := v_type.replace('.', '_')
-		if nested_name in ctx.defined_classes {
-			return nested_name
+		// ⚡ Bolt: Guarding replace('.', '_') with defined_classes.len > 0 avoids heap allocations
+		// when no defined classes exist.
+		if ctx.defined_classes.len > 0 {
+			nested_name := v_type.replace('.', '_')
+			if nested_name in ctx.defined_classes {
+				return nested_name
+			}
 		}
 
 		// ⚡ Bolt: Using pre-calculated scc_prefixes map with suffix-based lookup
