@@ -42,35 +42,35 @@ pub fn new_module_emitter() ModuleEmitter {
 }
 
 fn extract_symbol_name(code string, keywords []string) string {
-	mut s := code.trim_space()
-	// Skip attributes like @[heap]
-	for s.starts_with('@') {
-		if s.contains(']') {
-			s = s.all_after(']').trim_space()
+	// ⚡ Bolt: Fast-path trim_space avoids unnecessary heap allocations
+	mut s := base.fast_trim_space(code)
+	// Skip attributes like @[heap] without heap allocations
+	for s.len > 0 && s[0] == `@` {
+		if idx := s.index(']') {
+			s = base.fast_trim_space(s[idx + 1..])
 		} else {
 			break
 		}
 	}
 
+	// Keyword stripping without string concatenation allocation (`kw + ' '` avoidance)
 	for kw in keywords {
-		if s.starts_with(kw + ' ') {
-			s = s[kw.len..].trim_space()
+		if s.len > kw.len && s[0..kw.len] == kw && s[kw.len] == ` ` {
+			s = base.fast_trim_space(s[kw.len + 1..])
 		}
 	}
 
-	if s.contains(' ') {
-		s = s.all_before(' ')
+	// Find early terminator: space, {, (, or [
+	mut end := s.len
+	for i := 0; i < s.len; i++ {
+		ch := s[i]
+		if ch == ` ` || ch == `{` || ch == `(` || ch == `[` {
+			end = i
+			break
+		}
 	}
-	if s.contains('{') {
-		s = s.all_before('{')
-	}
-	if s.contains('(') {
-		s = s.all_before('(')
-	}
-	if s.contains('[') {
-		s = s.all_before('[')
-	}
-	return s.trim_space()
+
+	return base.fast_trim_space(s[..end])
 }
 
 pub fn (mut e ModuleEmitter) add_helper_struct(code string) {
