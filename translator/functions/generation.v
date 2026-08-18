@@ -993,6 +993,11 @@ fn (h FunctionsGenerationHandler) get_decorator_info(node &ast.FunctionDef, stru
 }
 
 fn double_quote(s string) string {
+	// ⚡ Bolt: Fast path avoids two full string scans and heap allocations from replace()
+	// when no escape characters (\ or ") are present.
+	if !s.contains('\\') && !s.contains('"') {
+		return '"${s}"'
+	}
 	mut result := s.replace('\\', '\\\\')
 	result = result.replace('"', '\\"')
 	return '"${result}"'
