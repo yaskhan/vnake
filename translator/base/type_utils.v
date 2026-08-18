@@ -423,6 +423,15 @@ pub fn get_sum_type_name(union_str string) string {
 		if p.len == 0 {
 			return 'SumType_'
 		}
+		// Fast-path for already capitalized clean name (most common case).
+		// Bypasses strings.Builder allocation entirely.
+		first := p[0]
+		if first >= `A` && first <= `Z` {
+			if !(p.len == 3 && p[1] == `t` && p[2] == `r`) {
+				return 'SumType_' + p
+			}
+		}
+
 		mut start := 0
 		for start < p.len && (p[start] == `?` || p[start] == `&`) {
 			start++
@@ -439,11 +448,11 @@ pub fn get_sum_type_name(union_str string) string {
 			&& p[start + 2] == `r` {
 			sb.write_string('String')
 		} else {
-			first := p[start]
-			if first >= `a` && first <= `z` {
-				sb.write_byte(first - 32)
+			f := p[start]
+			if f >= `a` && f <= `z` {
+				sb.write_byte(f - 32)
 			} else {
-				sb.write_byte(first)
+				sb.write_byte(f)
 			}
 			if p.len > start + 1 {
 				sb.write_string(p[start + 1..])
