@@ -1938,21 +1938,22 @@ pub fn (mut m ModuleTranslator) visit_module(node ast.Module) string {
 		ve.constants.clear()
 
 		for line in m.state.output {
+			// ⚡ Bolt: Bind fast_trim_space result once per output line to eliminate redundant heap allocations.
+			trimmed := base.fast_trim_space(line)
 			if stmt is ast.If && m.is_name_main(stmt) {
-				m.emitter.add_main_statement(line.trim_space())
-			} else if line.trim_space().starts_with('import ') {
-				m.emitter.add_import(line.trim_space()['import '.len..].trim_space())
+				m.emitter.add_main_statement(trimmed)
+			} else if trimmed.starts_with('import ') {
+				m.emitter.add_import(base.fast_trim_space(trimmed['import '.len..]))
 			} else if stmt is ast.FunctionDef {
 				m.emitter.add_helper_function(line)
 			} else if stmt is ast.ClassDef {
 				m.emitter.add_helper_struct(line) // For now, handle as block
-			} else if line.trim_space().starts_with('const ')
-				|| line.trim_space().starts_with('pub const ') {
-				m.emitter.add_constant(line.trim_space())
-			} else if line.trim_space().contains('__global ') {
-				m.emitter.add_global(line.trim_space())
+			} else if trimmed.starts_with('const ') || trimmed.starts_with('pub const ') {
+				m.emitter.add_constant(trimmed)
+			} else if trimmed.contains('__global ') {
+				m.emitter.add_global(trimmed)
 			} else {
-				m.emitter.add_init_statement(line.trim_space())
+				m.emitter.add_init_statement(trimmed)
 			}
 		}
 	}
