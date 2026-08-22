@@ -156,7 +156,8 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Handle Mypy specific: tuple[int, int, fallback=Point]
-	if clean_type.contains('fallback=') {
+	// ⚡ Bolt: Length-based guard (fallback= is 9 chars) avoids redundant substring scans on short type strings.
+	if clean_type.len >= 9 && clean_type.contains('fallback=') {
 		mut fb_type := ''
 		parts := clean_type.split('fallback=')
 		if parts.len > 1 {
@@ -266,7 +267,8 @@ pub fn map_python_type_to_v(py_type string, self_name string, allow_union bool, 
 	}
 
 	// Parse complex types
-	if clean_type.contains('[') {
+	// ⚡ Bolt: Length-based guard reduces substring scan overhead on short types.
+	if clean_type.len >= 3 && clean_type.contains('[') {
 		return map_complex_type(clean_type, self_name, allow_union, generic_map,
 			sum_type_registrar, literal_registrar, tuple_registrar)
 	}
