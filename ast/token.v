@@ -93,120 +93,9 @@ const keywords = [
 ]
 
 // get_keyword returns the static string literal for a Python keyword, or none if s is not a keyword.
-// ⚡ Bolt: Returning a static string literal instead of the sliced string eliminates heap allocations for keywords.
+// ⚡ Bolt: Delegating to get_keyword_slice avoids code duplication while preserving the public API.
 pub fn get_keyword(s string) ?string {
-	if s.len < 2 || s.len > 8 {
-		return none
-	}
-	match s[0] {
-		`a` {
-			match s.len {
-				2 { if s == 'as' { return 'as' } }
-				3 { if s == 'and' { return 'and' } }
-				5 {
-					if s == 'async' { return 'async' }
-					if s == 'await' { return 'await' }
-				}
-				6 { if s == 'assert' { return 'assert' } }
-				else {}
-			}
-		}
-		`b` {
-			if s.len == 5 && s == 'break' { return 'break' }
-		}
-		`c` {
-			match s.len {
-				5 { if s == 'class' { return 'class' } }
-				8 { if s == 'continue' { return 'continue' } }
-				else {}
-			}
-		}
-		`d` {
-			if s.len == 3 {
-				if s == 'def' { return 'def' }
-				if s == 'del' { return 'del' }
-			}
-		}
-		`e` {
-			match s.len {
-				4 {
-					if s == 'elif' { return 'elif' }
-					if s == 'else' { return 'else' }
-				}
-				6 { if s == 'except' { return 'except' } }
-				else {}
-			}
-		}
-		`f` {
-			match s.len {
-				3 { if s == 'for' { return 'for' } }
-				4 { if s == 'from' { return 'from' } }
-				7 { if s == 'finally' { return 'finally' } }
-				else {}
-			}
-		}
-		`F` {
-			if s.len == 5 && s == 'False' { return 'False' }
-		}
-		`g` {
-			if s.len == 6 && s == 'global' { return 'global' }
-		}
-		`i` {
-			match s.len {
-				2 {
-					if s == 'if' { return 'if' }
-					if s == 'in' { return 'in' }
-					if s == 'is' { return 'is' }
-				}
-				6 { if s == 'import' { return 'import' } }
-				else {}
-			}
-		}
-		`l` {
-			if s.len == 6 && s == 'lambda' { return 'lambda' }
-		}
-		`n` {
-			match s.len {
-				3 { if s == 'not' { return 'not' } }
-				8 { if s == 'nonlocal' { return 'nonlocal' } }
-				else {}
-			}
-		}
-		`N` {
-			if s.len == 4 && s == 'None' { return 'None' }
-		}
-		`o` {
-			if s.len == 2 && s == 'or' { return 'or' }
-		}
-		`p` {
-			if s.len == 4 && s == 'pass' { return 'pass' }
-		}
-		`r` {
-			match s.len {
-				5 { if s == 'raise' { return 'raise' } }
-				6 { if s == 'return' { return 'return' } }
-				else {}
-			}
-		}
-		`t` {
-			if s.len == 3 && s == 'try' { return 'try' }
-		}
-		`T` {
-			if s.len == 4 && s == 'True' { return 'True' }
-		}
-		`w` {
-			match s.len {
-				4 { if s == 'with' { return 'with' } }
-				5 { if s == 'while' { return 'while' } }
-				else {}
-			}
-		}
-		`y` {
-			if s.len == 5 && s == 'yield' { return 'yield' }
-		}
-		else {}
-	}
-	return none
+	return get_keyword_slice(s, 0, s.len)
 }
 
 // is_keyword checks if the string is a Python keyword.
@@ -218,10 +107,10 @@ fn is_keyword(s string) bool {
 	return false
 }
 
-// get_keyword maps a slice of the source string directly to a static keyword literal.
+// get_keyword_slice maps a slice of the source string directly to a static keyword literal.
 // This allows lexing keywords with zero heap allocations or string slicing.
 // ⚡ Bolt: Using two-stage dispatch matching the first character and length for O(1) matching.
-pub fn get_keyword(s string, start int, len int) ?string {
+pub fn get_keyword_slice(s string, start int, len int) ?string {
 	if len < 2 || len > 8 {
 		return none
 	}
