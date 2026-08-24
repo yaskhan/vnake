@@ -167,7 +167,7 @@ fn (mut l Lexer) scan_identifier() Token {
 	len := l.pos - start
 	// ⚡ Bolt: Avoid string slicing and heap allocations for keywords by resolving them
 	// directly to static, compile-time string constants.
-	if kw := get_keyword(l.source, start, len) {
+	if kw := get_keyword_slice(l.source, start, len) {
 		return Token{
 			typ:      .keyword
 			value:    kw
@@ -283,6 +283,7 @@ fn (mut l Lexer) scan_number() Token {
 }
 
 fn (mut l Lexer) scan_string(prefix string) Token {
+	token_start := l.pos - prefix.len
 	start_col := l.column - prefix.len
 	quote := l.peek_char()
 
@@ -314,7 +315,6 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 		l.advance_char()
 		l.advance_char()
 		l.advance_char()
-		start := l.pos
 		for l.pos < l.source.len {
 			if l.peek_char() == quote && l.peek_char_at(1) == quote && l.peek_char_at(2) == quote {
 				break
@@ -324,17 +324,22 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 			}
 			l.advance_char()
 		}
-		value := l.source[start..l.pos]
-		if l.pos < l.source.len {
+		mut is_closed := false
+		if l.pos + 2 < l.source.len && l.peek_char() == quote && l.peek_char_at(1) == quote && l.peek_char_at(2) == quote {
 			l.advance_char()
 			l.advance_char()
 			l.advance_char()
+			is_closed = true
 		}
-		prefix_value := prefix
-		q_str := if quote == `"` { '"' } else { "'" }
+		// ⚡ Bolt: Slicing the full string token directly from l.source eliminates intermediate value slicing and string interpolation allocations.
+		mut tok_val := l.source[token_start..l.pos]
+		if !is_closed {
+			q_str := if quote == `"` { '"""' } else { "'''" }
+			tok_val += q_str
+		}
 		return Token{
 			typ:      typ
-			value:    '${prefix_value}${q_str}${q_str}${q_str}${value}${q_str}${q_str}${q_str}'
+			value:    tok_val
 			line:     l.line
 			column:   start_col
 			filename: l.filename
@@ -342,7 +347,6 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 	}
 	// Single quoted
 	l.advance_char()
-	start := l.pos
 	for l.pos < l.source.len {
 		ch := l.peek_char()
 		if ch == quote {
@@ -357,15 +361,20 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 		}
 		l.advance_char()
 	}
-	value := l.source[start..l.pos]
-	if l.pos < l.source.len {
+	mut is_closed := false
+	if l.pos < l.source.len && l.peek_char() == quote {
 		l.advance_char() // closing quote
+		is_closed = true
 	}
-	prefix_value := prefix
-	q_str := if quote == `"` { '"' } else { "'" }
+	// ⚡ Bolt: Slicing the full string token directly from l.source eliminates intermediate value slicing and string interpolation allocations.
+	mut tok_val := l.source[token_start..l.pos]
+	if !is_closed {
+		q_str := if quote == `"` { '"' } else { "'" }
+		tok_val += q_str
+	}
 	return Token{
 		typ:      typ
-		value:    '${prefix_value}${q_str}${value}${q_str}'
+		value:    tok_val
 		line:     l.line
 		column:   start_col
 		filename: l.filename
