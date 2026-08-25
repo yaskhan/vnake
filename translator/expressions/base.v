@@ -330,15 +330,21 @@ pub fn (mut eg ExprGen) visit_joined_str(node ast.JoinedStr) string {
 	for val_node in node.values {
 		if val_node is ast.Constant {
 			mut content := eg.extract_string_content(val_node.value)
-			content = content.replace('$', '\\$')
-			content = content.replace('"', '\\"')
+			// ⚡ Bolt: Fast-path check for characters requiring escaping avoids redundant full-string scans
+			// and heap allocations when neither '$' nor '"' are present in the string literal.
+			if content.contains('$') || content.contains('"') {
+				content = content.replace('$', '\\$')
+				content = content.replace('"', '\\"')
+			}
 			res.write_string(content)
 		} else if val_node is ast.FormattedValue {
 			if is_literal_goal && val_node.value is ast.Constant {
 				// Flatten literal interpolation
 				mut inner_c := eg.extract_string_content(val_node.value.value)
-				inner_c = inner_c.replace('$', '\\$')
-				inner_c = inner_c.replace('"', '\\"')
+				if inner_c.contains('$') || inner_c.contains('"') {
+					inner_c = inner_c.replace('$', '\\$')
+					inner_c = inner_c.replace('"', '\\"')
+				}
 				res.write_string(inner_c)
 			} else {
 				mut inner := eg.visit(val_node.value)
