@@ -1,5 +1,9 @@
+## 2026-04-14 - [Avoiding Function Name Overloading Collisions in V]
+**Learning:** V 0.5.1 does not support function overloading. Having two functions with the same name (even with different parameters, e.g. `get_keyword(s string)` and `get_keyword(s string, start int, len int)`) causes compile-time errors. Renaming slice-based functions to `get_keyword_slice` explicitly resolves overload collisions cleanly.
+**Action:** Always give distinct, descriptive names to functions operating on string slice/coordinate pairs versus full string objects (e.g., `get_keyword` vs `get_keyword_slice`).
+
 ## 2026-04-14 - [Zero-Allocation Keyword and Prefix Scanning in Lexer]
-**Learning:** Slicing substrings from the source code (e.g., `l.source[start..l.pos]`) to identify keywords or string literal prefixes (e.g., `rb`, `rf`) always incurs heap-allocation overhead in V 0.5.1. Resolving keywords directly using substring coordinates (`get_keyword(s, start, len)`) to static string constants completely eliminates these heap allocations on hot lexer paths.
+**Learning:** Slicing substrings from the source code (e.g., `l.source[start..l.pos]`) to identify keywords or string literal prefixes (e.g., `rb`, `rf`) always incurs heap-allocation overhead in V 0.5.1. Resolving keywords directly using substring coordinates (`get_keyword_slice(s, start, len)`) to static string constants completely eliminates these heap allocations on hot lexer paths.
 **Action:** Always resolve fixed sequences (like keywords and string prefixes) directly using start/length coordinates to static compile-time literals instead of slicing the input source.
 
 ## 2025-05-29 - [V-Lang starts_with and ends_with Overhead Avoidance]
