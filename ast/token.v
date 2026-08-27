@@ -221,7 +221,7 @@ fn is_keyword(s string) bool {
 // get_keyword maps a slice of the source string directly to a static keyword literal.
 // This allows lexing keywords with zero heap allocations or string slicing.
 // ⚡ Bolt: Using two-stage dispatch matching the first character and length for O(1) matching.
-pub fn get_keyword(s string, start int, len int) ?string {
+pub fn get_keyword_slice(s string, start int, len int) ?string {
 	if len < 2 || len > 8 {
 		return none
 	}
