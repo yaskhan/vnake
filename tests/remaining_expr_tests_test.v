@@ -4,7 +4,7 @@ import analyzer
 import ast
 import models
 import translator.base
-import translator.Expressions as exprs
+import translator.expressions as exprs
 
 fn translate_expr(source string, type_map map[string]string) string {
 	mut lexer := ast.new_lexer(source, 'test.py')
