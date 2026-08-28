@@ -1,3 +1,7 @@
+## 2026-04-15 - [Direct String Literal Slicing in AST Lexer]
+**Learning:** In V 0.5.1, assembling string literal tokens using sub-slice extraction and string interpolation (`'${prefix}${quote}${val}${quote}'`) incurs redundant string object creations and heap allocations. Slicing the full raw token directly from source (`l.source[token_start..l.pos]`) for properly closed string literals bypasses intermediate allocations entirely in hot lexer paths.
+**Action:** Always slice complete string literal tokens directly from the input buffer when start and end coordinates are known, reserving string formatting strictly for fallback/unclosed edge cases.
+
 ## 2026-04-14 - [Zero-Allocation Keyword and Prefix Scanning in Lexer]
 **Learning:** Slicing substrings from the source code (e.g., `l.source[start..l.pos]`) to identify keywords or string literal prefixes (e.g., `rb`, `rf`) always incurs heap-allocation overhead in V 0.5.1. Resolving keywords directly using substring coordinates (`get_keyword(s, start, len)`) to static string constants completely eliminates these heap allocations on hot lexer paths.
 **Action:** Always resolve fixed sequences (like keywords and string prefixes) directly using start/length coordinates to static compile-time literals instead of slicing the input source.

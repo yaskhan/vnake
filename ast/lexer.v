@@ -167,7 +167,7 @@ fn (mut l Lexer) scan_identifier() Token {
 	len := l.pos - start
 	// ⚡ Bolt: Avoid string slicing and heap allocations for keywords by resolving them
 	// directly to static, compile-time string constants.
-	if kw := get_keyword(l.source, start, len) {
+	if kw := get_keyword_slice(l.source, start, len) {
 		return Token{
 			typ:      .keyword
 			value:    kw
@@ -284,6 +284,7 @@ fn (mut l Lexer) scan_number() Token {
 
 fn (mut l Lexer) scan_string(prefix string) Token {
 	start_col := l.column - prefix.len
+	token_start := l.pos - prefix.len
 	quote := l.peek_char()
 
 	// ⚡ Bolt: Pre-calculating token type and newline allowance using byte-level prefix checks
@@ -314,7 +315,6 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 		l.advance_char()
 		l.advance_char()
 		l.advance_char()
-		start := l.pos
 		for l.pos < l.source.len {
 			if l.peek_char() == quote && l.peek_char_at(1) == quote && l.peek_char_at(2) == quote {
 				break
@@ -324,17 +324,23 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 			}
 			l.advance_char()
 		}
-		value := l.source[start..l.pos]
+		mut has_closing := false
 		if l.pos < l.source.len {
 			l.advance_char()
 			l.advance_char()
 			l.advance_char()
+			has_closing = true
 		}
-		prefix_value := prefix
-		q_str := if quote == `"` { '"' } else { "'" }
+		tok_val := if has_closing {
+			l.source[token_start..l.pos]
+		} else {
+			prefix_value := prefix
+			q_str := if quote == `"` { '"' } else { "'" }
+			'${prefix_value}${q_str}${q_str}${q_str}${l.source[token_start + prefix.len + 3..l.pos]}${q_str}${q_str}${q_str}'
+		}
 		return Token{
 			typ:      typ
-			value:    '${prefix_value}${q_str}${q_str}${q_str}${value}${q_str}${q_str}${q_str}'
+			value:    tok_val
 			line:     l.line
 			column:   start_col
 			filename: l.filename
@@ -342,7 +348,6 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 	}
 	// Single quoted
 	l.advance_char()
-	start := l.pos
 	for l.pos < l.source.len {
 		ch := l.peek_char()
 		if ch == quote {
@@ -352,20 +357,25 @@ fn (mut l Lexer) scan_string(prefix string) Token {
 			l.advance_char()
 		}
 		if ch == `\n` && !allows_newline {
-			// Actually Python strings can't have raw newlines unless triple quoted
 			break
 		}
 		l.advance_char()
 	}
-	value := l.source[start..l.pos]
-	if l.pos < l.source.len {
+	mut has_closing := false
+	if l.pos < l.source.len && l.peek_char() == quote {
 		l.advance_char() // closing quote
+		has_closing = true
 	}
-	prefix_value := prefix
-	q_str := if quote == `"` { '"' } else { "'" }
+	tok_val := if has_closing {
+		l.source[token_start..l.pos]
+	} else {
+		prefix_value := prefix
+		q_str := if quote == `"` { '"' } else { "'" }
+		'${prefix_value}${q_str}${l.source[token_start + prefix.len + 1..l.pos]}${q_str}'
+	}
 	return Token{
 		typ:      typ
-		value:    '${prefix_value}${q_str}${value}${q_str}'
+		value:    tok_val
 		line:     l.line
 		column:   start_col
 		filename: l.filename
