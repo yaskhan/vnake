@@ -167,7 +167,7 @@ fn (mut l Lexer) scan_identifier() Token {
 	len := l.pos - start
 	// ⚡ Bolt: Avoid string slicing and heap allocations for keywords by resolving them
 	// directly to static, compile-time string constants.
-	if kw := get_keyword(l.source, start, len) {
+	if kw := get_keyword_slice(l.source, start, len) {
 		return Token{
 			typ:      .keyword
 			value:    kw
